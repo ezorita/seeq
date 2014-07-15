@@ -1,5 +1,9 @@
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
+#include <execinfo.h>
+#include <signal.h>
 
 #define INITIAL_LINE_SIZE 10
 #define INITIAL_STACK_SIZE 256
@@ -14,7 +18,6 @@ struct nfa_t {
    int      * act;
    nstack_t * stack;
    nstack_t * temp;
-   mbuf_t   * mbuf;
 };
 
 struct nstack_t {
@@ -23,7 +26,11 @@ struct nstack_t {
    int val[];
 };
 
-struct mbuf_t {
-   int p;
-   int m[];
-};
+
+int parse(char *, char **);
+void proc_match(int *, int, int *, int *);
+int update(nfa_t *, char, int);
+void setactive(nfa_t *, int, int);
+nstack_t * new_stack(int);
+void stack_add(nstack_t **, int);
+
