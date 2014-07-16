@@ -51,19 +51,24 @@ int main(int argc, char *argv[])
 
    // Read and update
    char * line = malloc(INITIAL_LINE_SIZE*sizeof(char));
-   size_t size = INITIAL_LINE_SIZE;
-   int start_dist = tau+1, start_pos = 0, start_offset = tau + 1;
+   size_t bsize = INITIAL_LINE_SIZE;
+   ssize_t size;
    int status = 1, lines = 0;
    int align  = (nnfa - ((wlen-tau)%nnfa)) % nnfa;
-   while (getline(&line, &size, in) != -1) {
+   while ((size = getline(&line, &bsize, in)) != -1) {
       lines++;
       line[size] = 0;
+      if (size < wlen - tau) continue;
       int dist, offset, post_match = 0;
+      int start_dist = tau+1, start_pos = 0, start_offset = tau + 1;
       for (int i = 0; i < size; i++) {
          // Activate NFA.
          setactive(nfa + i%nnfa, 0, status++);
          // Update automatas.
-         for (int j = 0; j < nnfa; j++) mbuffer[(i+1-j+align)%nnfa] = update(nfa + j, line[i], status);
+         for (int j = 0; j < nnfa; j++) {
+            int d = update(nfa + j, line[i], status);
+            mbuffer[(i+1-j+align)%nnfa] = d;
+         }
          /*
          // DEBUG MACHINES
          fprintf(stdout, "-- character %d: %c\n", i, line[i]);
@@ -89,8 +94,11 @@ int main(int argc, char *argv[])
                start_offset = offset;
             } else {
                fprintf(stdout, "%d,%d:%d+%d (%d)\n", lines, start_pos-wlen+1-start_offset, start_pos, i-1-start_pos, start_dist);
+               // break if only first match is desired
+               //break;
                post_match = 1;
                start_offset = tau + 1;
+               
             }
             
          } else if (start_dist == dist && dist <= tau) {
@@ -105,7 +113,7 @@ int main(int argc, char *argv[])
             start_offset = offset;
             post_match   = 0;
          }
-         //fprintf(stdout, "start_i = %d\tstart_d = %d\tstart_o = %d\n", start_pos, start_dist, start_offset);
+         //printf(stdout, "start_i = %d\tstart_d = %d\tstart_o = %d\n", start_pos, start_dist, start_offset);
       }
 
       // Report last match if start_dist == dist.
@@ -198,6 +206,7 @@ update
    else if (value == 'G' || value == 'g') value = 0x04;
    else if (value == 'T' || value == 't') value = 0x08;
    else if (value == 'N' || value == 'n') value = 0x10;
+   else value = 0x00;
 
    // Swap stacks
    nstack_t * active = nfa->temp;
