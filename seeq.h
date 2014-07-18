@@ -8,8 +8,9 @@
 #define INITIAL_LINE_SIZE 10
 #define INITIAL_STACK_SIZE 256
 #define INITIAL_TRIE_SIZE  256
+#define INITIAL_DFA_SIZE   256
 
-#define NBASES 6
+#define NBASES 5
 
 typedef struct nfa_t    nfa_t;
 typedef struct nstack_t nstack_t;
@@ -63,12 +64,12 @@ struct dfa_t {
 };
 
 static const int translate[256] = {
-   [0 ... 255] = -1,
+   [0 ... 255] = 4,
    ['a'] = 0, ['c'] = 1, ['g'] = 2, ['t'] = 3, ['n'] = 4,
    ['A'] = 0, ['C'] = 1, ['G'] = 2, ['T'] = 3, ['N'] = 4
 };
 
-static const char bases[NBASES] = "ACTGN?";
+static const char bases[NBASES] = "ACGTN";
 
 int parse(char *, char **);
 void proc_match(int *, int, int *, int *);
@@ -78,8 +79,9 @@ nstack_t * new_stack(int);
 void stack_add(nstack_t **, int);
 pstack_t * new_pstack(int);
 void pstack_add(pstack_t *, path_t);
-int build_dfa(int, int, int*, dfa_t*, nstack_t*, char*, btrie_t*);
+int build_dfa(int, int, int*, int*, dfa_t**, nstack_t*, char*, btrie_t*);
 btrie_t * trie_new(int, int);
+int trie_search(btrie_t *, char*);
 int trie_insert(btrie_t *, char*, int);
 void trie_reset(btrie_t *);
 void trie_free(btrie_t *);

@@ -54,12 +54,13 @@ int main(int argc, char *argv[])
    }
    
    // Maximum number of states is 2^(tau+1)*wlen.
-   dfa_t * dfa = calloc(((int)(1) << (tau + 1)) * wlen, sizeof(dfa_t));
+   dfa_t * dfa = calloc(INITIAL_DFA_SIZE, sizeof(dfa_t));
    btrie_t * trie = trie_new(INITIAL_TRIE_SIZE, nstat);
    int nstatus = 0;
+   int dfasize = INITIAL_DFA_SIZE;
 
    // Compute DFA.
-   build_dfa(rows, nstat, &nstatus, dfa, start, keys, trie);
+   build_dfa(rows, nstat, &nstatus, &dfasize, &dfa, start, keys, trie);
 
    free(start);
    trie_free(trie);
@@ -72,7 +73,6 @@ int main(int argc, char *argv[])
       }
       fprintf(stdout, "\n");
    }
-   exit(0);
 
    // Read and update
    char * line = malloc(INITIAL_LINE_SIZE*sizeof(char));
@@ -119,7 +119,7 @@ int main(int argc, char *argv[])
                start_dist   = dist;
                start_offset = offset;
             } else {
-               fprintf(stdout, "%d,%d:%d+%d (%d)\n", lines, start_pos-wlen+1-start_offset, start_pos, i-1-start_pos, start_dist);
+               fprintf(stdout, "%d,%d:%d+%d (%d)\n", lines, start_pos-wlen-start_offset, start_pos, i-1-start_pos, start_dist);
                // break if only first match is desired
                //break;
                post_match = 1;
@@ -137,7 +137,7 @@ int main(int argc, char *argv[])
             start_offset = offset;
             post_match   = 0;
          }
-         //printf(stdout, "start_i = %d\tstart_d = %d\tstart_o = %d\n", start_pos, start_dist, start_offset);
+         fprintf(stdout, "start_i = %d\tstart_d = %d\tstart_o = %d\n", start_pos, start_dist, start_offset);
       }
 
       // Report last match if start_dist == dist.
@@ -238,19 +238,31 @@ build_dfa
  int         rows,
  int         nstat,
  int       * status,
- dfa_t     * dfa,
+ int       * size,
+ dfa_t    ** dfap,
  nstack_t  * active,
  char      * exp,
  btrie_t   * trie
 )
 // dfa_t must be initialized to 0! (so use calloc before passing)
 {
+   dfa_t * dfa = *dfap;
    int empty_node = 1;
    int current_status = *status;
    int cols = nstat / rows;
    char matrix[nstat];
    for (int i = 0; i < nstat; i++) matrix[i] = 0;
    nstack_t * buffer = new_stack(INITIAL_STACK_SIZE);
+
+   // Check if realloc is needed.
+   if (current_status >= *size) {
+      (*size) *= 2;
+      *dfap = dfa = realloc(dfa, (*size) * sizeof(status_t));
+      if (dfa == NULL) {
+         fprintf(stderr, "error (realloc) dfa: build_dfa\n");
+         exit(1);
+      }
+   }
 
    for (int i = 0; i < NBASES; i++) {
       int mark = i + 1;
@@ -268,6 +280,7 @@ build_dfa
       }
       if (buffer->p == 0) {
          dfa[current_status].next[i].match = rows;
+         dfa[current_status].next[i].status = 0;
          continue;
       }
 
@@ -285,7 +298,7 @@ build_dfa
       char path[nstat];
       for (int k = 0; k < nstat; k++) path[k] = 0;
       for (int k = 0; k < buffer->p; k++) path[buffer->val[k]] = 1;
-      int exists = trie_insert(trie, path, (*status) + 1);
+      int exists = trie_search(trie, path);
 
       if (exists) {
          // If exists, redirect to the matching status and leave this branch.
@@ -294,11 +307,16 @@ build_dfa
          // Save pointer to the next status.
          dfa[current_status].next[i].status = ++(*status);
          // Continue building DFA starting at status.
-         if (build_dfa(rows, nstat, status, dfa, buffer, exp, trie)) {
+         int sub_empty = build_dfa(rows, nstat, status, size, dfap, buffer, exp, trie);
+         // Re-read dfa address (in case realloc happened).
+         dfa = *dfap;
+         if (sub_empty) {
             // Next node was empty. Return node to DFA and set next to 0.
             // Can do status-- because we haven't created any new node!
             (*status)--;
             dfa[current_status].next[i].status = 0;
+         } else {
+            trie_insert(trie, path, (*status));
          }
       }
 
@@ -309,6 +327,7 @@ build_dfa
 
    return empty_node;
 }
+
 
 btrie_t *
 trie_new
@@ -334,6 +353,27 @@ trie_new
    return trie;
 }
 
+
+int
+trie_search
+(
+ btrie_t * trie,
+ char    * path
+)
+{
+   int nodeid = 0;
+   bnode_t * nodes = trie->root;
+
+   for (int i = 0; i < trie->height; i++) {
+      int next = nodes[nodeid].next[path[i]];
+      if (next > 0) {
+         nodeid = next;
+      } else return 0;
+   }
+   return nodeid;
+}
+
+
 int
 trie_insert
 (
@@ -343,7 +383,7 @@ trie_insert
 )
 {
    int i;
-   int found  = 0;
+   int found  = 1;
    int nodeid = 0;
 
    bnode_t * nodes = trie->root;
@@ -355,8 +395,8 @@ trie_insert
          continue;
       }
 
-      found = 1;
-      
+      found = 0;
+
       // Create new node.
       if (trie->pos >= trie->size) {
          trie->root = nodes = realloc(nodes, 2*trie->size*sizeof(bnode_t));
@@ -365,9 +405,12 @@ trie_insert
             exit(1);
          }
          trie->size *= 2;
+         // Initialize memory.
+         bnode_t zero = {0 , 0};
+         for (int k = trie->pos; k < trie->size; k++) trie->root[k] = zero;
       }
 
-      nodeid = nodes[nodeid].next[path[i]] = trie->pos++;
+      nodeid = nodes[nodeid].next[path[i]] = (trie->pos)++;
    }
    int final = nodes[nodeid].next[path[i]];
    // If the value is not present, insert it and return 0.
