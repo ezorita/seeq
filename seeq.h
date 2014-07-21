@@ -82,6 +82,6 @@ void pstack_add(pstack_t *, path_t);
 int build_dfa(int, int, int*, int*, dfa_t**, nstack_t*, char*, btrie_t*);
 btrie_t * trie_new(int, int);
 int trie_search(btrie_t *, char*);
-int trie_insert(btrie_t *, char*, int);
+void trie_insert(btrie_t *, char*, int);
 void trie_reset(btrie_t *);
 void trie_free(btrie_t *);

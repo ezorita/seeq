@@ -61,19 +61,19 @@ int main(int argc, char *argv[])
 
    // Compute DFA.
    build_dfa(rows, nstat, &nstatus, &dfasize, &dfa, start, keys, trie);
-
    free(start);
    trie_free(trie);
 
    // DEBUG DFA:
+   /*
    for (int i = 0; i <= nstatus; i++) {
-      fprintf(stdout, "[node %d]\n", i);
+      fprintf(stderr, "[node %d]\n", i);
       for (int j = 0; j < NBASES; j++) {
-         fprintf(stdout, " %c:\t%d\t(%d)\n", bases[j], dfa[i].next[j].status, dfa[i].next[j].match);
+         fprintf(stderr, " %c:\t%d\t(%d)\n", bases[j], dfa[i].next[j].status, dfa[i].next[j].match);
       }
       fprintf(stdout, "\n");
    }
-
+   */
    // Read and update
    char * line = malloc(INITIAL_LINE_SIZE*sizeof(char));
    size_t bsize = INITIAL_LINE_SIZE;
@@ -90,7 +90,7 @@ int main(int argc, char *argv[])
       line[size] = 0;
       if (size < wlen - tau) continue;
       int post_match = 0;
-      int start_dist = tau+1, start_pos = 0, start_offset = tau + 1;
+      int streak_dist = tau+1, streak_pos = 0, streak_offset = tau + 1;
       int dist = tau + 1, offset = tau + 1;
       for (int i = 0; i < size; i++) {
          // Add a new path to the DFA.
@@ -110,38 +110,39 @@ int main(int argc, char *argv[])
 
          // Compute matches
          dist = match.dist;
-         offset = i - match.start - wlen;
+         offset = i + 1 - match.start - wlen;
+         //         fprintf(stderr, "[%d] dist = %d\tstart = %d\n",i,dist,match.start);
 
-         // TODO: RENAME TO STREAK_START, DIST IS NOW TAKEN FROM MATCH
-         if (start_dist < dist) {
+         // Update streak.
+         if (streak_dist < dist) {
             if (post_match == 1) {
-               start_pos    = i;
-               start_dist   = dist;
-               start_offset = offset;
+               streak_pos    = i;
+               streak_dist   = dist;
+               streak_offset = offset;
             } else {
-               fprintf(stdout, "%d,%d:%d+%d (%d)\n", lines, start_pos-wlen-start_offset, start_pos, i-1-start_pos, start_dist);
+               fprintf(stdout, "%d,%d:%d+%d (%d)\n", lines, streak_pos+1-wlen-streak_offset, streak_pos, i-1-streak_pos, streak_dist);
                // break if only first match is desired
                //break;
                post_match = 1;
-               start_offset = tau + 1;
+               streak_offset = tau + 1;
             }
-         } else if (start_dist == dist && dist <= tau) {
-            if (start_offset*start_offset > offset*offset) {
-               start_pos    = i;
-               start_offset = offset;
+         } else if (streak_dist == dist && dist <= tau) {
+            if (streak_offset*streak_offset > offset*offset) {
+               streak_pos    = i;
+               streak_offset = offset;
             }
             post_match = 0;
          } else {
-            start_pos    = i;
-            start_dist   = dist;
-            start_offset = offset;
+            streak_pos    = i;
+            streak_dist   = dist;
+            streak_offset = offset;
             post_match   = 0;
          }
-         fprintf(stdout, "start_i = %d\tstart_d = %d\tstart_o = %d\n", start_pos, start_dist, start_offset);
+         //         fprintf(stdout, "[%d] start_i = %d\tstart_d = %d\tstart_o = %d\n", i, streak_pos, streak_dist, streak_offset);
       }
 
       // Report last match if start_dist == dist.
-      if (start_dist == dist && dist <= tau) {
+      if (streak_dist == dist && dist <= tau) {
          // TODO.
       }
 
@@ -209,23 +210,27 @@ update
    for (int i = 0; i < active->p; i++) {
       path_t path = active->path[i];
       path_t new;
+
+      // Update status.
       int  status = path.node.status;
       new.node  = dfa[status].next[value];
       new.start = path.start;
-      if(new.node.status) {
-         pstack_add(next, new);
-         int dist = new.node.match;
-         int offs = pos - new.start - wlen;
-         if (dist < mindist) {
-            mindist = dist;
-            minoffs = offs;
-            match.dist  = dist;
-            match.start = new.start;
-         } else if (dist == mindist && offs*offs < minoffs*minoffs) {
-            minoffs = offs;
-            match.dist  = dist;
-            match.start = new.start;
-         }
+
+      // Node is still active if new status != 0.
+      if(new.node.status) pstack_add(next, new);
+
+      // Check match.
+      int dist = new.node.match;
+      int offs = pos + 1 - new.start - wlen;
+      if (dist < mindist) {
+         mindist = dist;
+         minoffs = offs;
+         match.dist  = dist;
+         match.start = new.start;
+      } else if (dist == mindist && offs*offs < minoffs*minoffs) {
+         minoffs = offs;
+         match.dist  = dist;
+         match.start = new.start;
       }
    }
 
@@ -251,6 +256,7 @@ build_dfa
    int current_status = *status;
    int cols = nstat / rows;
    char matrix[nstat];
+   int mark = 0;
    for (int i = 0; i < nstat; i++) matrix[i] = 0;
    nstack_t * buffer = new_stack(INITIAL_STACK_SIZE);
 
@@ -265,7 +271,7 @@ build_dfa
    }
 
    for (int i = 0; i < NBASES; i++) {
-      int mark = i + 1;
+      mark++;
       for (int j = 0; j < active->p; j++) {
          int node = active->val[j];
          // If it's a hit, set inactive.
@@ -306,17 +312,19 @@ build_dfa
       } else {
          // Save pointer to the next status.
          dfa[current_status].next[i].status = ++(*status);
+         // Insert status into trie.
+         trie_insert(trie, path, (*status));
          // Continue building DFA starting at status.
          int sub_empty = build_dfa(rows, nstat, status, size, dfap, buffer, exp, trie);
          // Re-read dfa address (in case realloc happened).
          dfa = *dfap;
+         // Check whether the child node is empty.
          if (sub_empty) {
-            // Next node was empty. Return node to DFA and set next to 0.
+            // Next node is empty. Return node to DFA and set next and trie to 0.
             // Can do status-- because we haven't created any new node!
             (*status)--;
             dfa[current_status].next[i].status = 0;
-         } else {
-            trie_insert(trie, path, (*status));
+            trie_insert(trie, path, 0);
          }
       }
 
@@ -374,13 +382,14 @@ trie_search
 }
 
 
-int
+void
 trie_insert
 (
  btrie_t * trie,
  char    * path,
  int       value
 )
+// Returns 0 if inserted node was not already in the trie, 1 otherwise.
 {
    int i;
    int found  = 1;
@@ -394,8 +403,6 @@ trie_insert
          nodeid = next;
          continue;
       }
-
-      found = 0;
 
       // Create new node.
       if (trie->pos >= trie->size) {
@@ -412,12 +419,9 @@ trie_insert
 
       nodeid = nodes[nodeid].next[path[i]] = (trie->pos)++;
    }
-   int final = nodes[nodeid].next[path[i]];
-   // If the value is not present, insert it and return 0.
-   if (!found || !final) {
-      nodes[nodeid].next[path[i]] = value;
-      return 0;
-   } else return final;
+
+   // Assign new value.
+   nodes[nodeid].next[path[i]] = value;
 }
 
 void
@@ -453,7 +457,8 @@ setactive
 
 )
 {
-   if (matrix[node] == status || node >= rows*cols) return;
+   if (node >= rows*cols) return;
+   if (matrix[node] == status) return;
    matrix[node] = status;
    stack_add(buffer, node);
    // Last row line, return.
