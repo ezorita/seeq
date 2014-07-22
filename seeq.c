@@ -1,5 +1,7 @@
 #include "seeq.h"
 
+int iter = 0;
+
 void SIGSEGV_handler(int sig) {
    void *array[10];
    size_t size;
@@ -19,6 +21,8 @@ int main(int argc, char *argv[])
 {
    signal(SIGSEGV, SIGSEGV_handler); 
 
+   //----- PARSE PARAMS -----
+
    if (argc != 4) {
       fprintf(stderr,"usage: seeq expression distance inputfile\n");
       exit(0);
@@ -27,15 +31,16 @@ int main(int argc, char *argv[])
    char * expression = argv[1];
    int    tau = atoi(argv[2]);
    FILE * in = fopen(argv[3], "r");
-   
+
    if (in == NULL) {
       fprintf(stderr,"error: could not open file\n");
       exit(1);
    }
-   
+
+   // ----- COMPUTE DFA -----
+
    char * keys;
    int    wlen = parse(expression, &keys);
-   int    nnfa = 2*tau + 1;
    int    rows = tau + 1;
    int    cols = wlen + 1;
    int    nstat= cols*rows;
@@ -46,12 +51,6 @@ int main(int argc, char *argv[])
    }
 
    nstack_t * start = new_stack(rows);
-   int diag = 0;
-   // Compute epsilon startpoint.
-   for (int i = 0; i < rows; i++) {
-      stack_add(&start, diag);
-      diag += rows + 1;
-   }
    
    // Maximum number of states is 2^(tau+1)*wlen.
    dfa_t * dfa = calloc(INITIAL_DFA_SIZE, sizeof(dfa_t));
@@ -60,20 +59,40 @@ int main(int argc, char *argv[])
    int dfasize = INITIAL_DFA_SIZE;
 
    // Compute DFA.
-   build_dfa(rows, nstat, &nstatus, &dfasize, &dfa, start, keys, trie);
-   free(start);
+   build_dfa(rows, nstat, &nstatus, &dfasize, &dfa, start, keys, trie, DFA_FORWARD);
+
+   // Reverse the query and build reverse DFA.
+   int explen = strlen(expression);
+   char * rexp = malloc(explen + 1);
+   for (int i = 0; i < explen; i++) rexp[i] = expression[explen-i-1];
+   rexp[explen] = 0;
+   char * rkeys;
+   parse(rexp, &rkeys);
+   free(rexp);
+   
+   dfa_t * rdfa = calloc(INITIAL_DFA_SIZE, sizeof(dfa_t));
+   trie_reset(trie);
+   int rstatus = 0;
+   int rdfasize = INITIAL_DFA_SIZE;
+
+   // Compute RDFA.
+   build_dfa(rows, nstat, &rstatus, &dfasize, &rdfa, start, rkeys, trie, DFA_REVERSE);
+
+   free(start);   
    trie_free(trie);
 
-   // DEBUG DFA:
    /*
-   for (int i = 0; i <= nstatus; i++) {
+   // DEBUG DFA:
+   for (int i = 0; i <= rstatus; i++) {
       fprintf(stderr, "[node %d]\n", i);
       for (int j = 0; j < NBASES; j++) {
-         fprintf(stderr, " %c:\t%d\t(%d)\n", bases[j], dfa[i].next[j].status, dfa[i].next[j].match);
+         fprintf(stderr, " %c:\t%d\t(%d)\n", bases[j], rdfa[i].next[j].status, rdfa[i].next[j].match);
       }
-      fprintf(stdout, "\n");
+      fprintf(stderr, "\n");
    }
    */
+
+   // ----- PROCESS FILE -----
    // Read and update
    char * line = malloc(INITIAL_LINE_SIZE*sizeof(char));
    size_t bsize = INITIAL_LINE_SIZE;
@@ -81,74 +100,51 @@ int main(int argc, char *argv[])
    int lines = 0;
 
    // DFA status.
-   pstack_t * active = new_pstack(rows + cols);
-   pstack_t * next   = new_pstack(rows + cols);
-   status_t startnode = {.status = 0, .match = tau + 1};
-
    while ((size = getline(&line, &bsize, in)) != -1) {
       lines++;
-      line[size] = 0;
-      if (size < wlen - tau) continue;
       int post_match = 0;
       int streak_dist = tau+1, streak_pos = 0, streak_offset = tau + 1;
-      int dist = tau + 1, offset = tau + 1;
+      int current_node = 0;
+      if (size < wlen - tau) continue;
       for (int i = 0; i < size; i++) {
-         // Add a new path to the DFA.
-         path_t new = {.node = startnode, .start = i};
-         pstack_add(active, new);
-
-         // Update DFA
-         // Each new character follows an independent path in only one DFA.
-         // This is like a car race, where the input characters are the cars
-         // and they all run in the same circuit (dfa).
-         match_t match = update(line[i], active, next, dfa, i, tau, wlen);
-
-         // Swap path buffers.
-         pstack_t * temp = active;
-         active = next;
-         next = temp;
-
-         // Compute matches
-         dist = match.dist;
-         offset = i + 1 - match.start - wlen;
-         //         fprintf(stderr, "[%d] dist = %d\tstart = %d\n",i,dist,match.start);
+         // Update DFA.
+         status_t next  = dfa[current_node].next[translate[line[i]]];
+         current_node = next.status;
 
          // Update streak.
-         if (streak_dist < dist) {
+         if (streak_dist == next.match) continue;
+         else if (streak_dist > next.match) {
+            streak_pos    = i;
+            streak_dist   = next.match;
+            post_match    = 0;
+         } else { 
             if (post_match == 1) {
                streak_pos    = i;
-               streak_dist   = dist;
-               streak_offset = offset;
+               streak_dist   = next.match;
             } else {
-               fprintf(stdout, "%d,%d:%d+%d (%d)\n", lines, streak_pos+1-wlen-streak_offset, streak_pos, i-1-streak_pos, streak_dist);
+  
+               int mlen = 0;
+               int rnode = 0;
+               int j = i;
+               int d = tau + 1;
+               do {
+                  status_t next = rdfa[rnode].next[translate[line[--j]]];
+                  rnode = next.status;
+                  d     = next.match;
+               } while (d > streak_dist && j > 0);
+               fprintf(stdout, "%d,%d:%d+%d (%d)\n", lines, j, i-1, i-1-streak_pos, streak_dist);
+
+//               fprintf(stdout, "%d,%d:%d+%d (%d)\n", lines, streak_pos+1-wlen-streak_offset, streak_pos, i-1-streak_pos, streak_dist);
+
+
                // break if only first match is desired
                //break;
                post_match = 1;
-               streak_offset = tau + 1;
             }
-         } else if (streak_dist == dist && dist <= tau) {
-            if (streak_offset*streak_offset > offset*offset) {
-               streak_pos    = i;
-               streak_offset = offset;
-            }
-            post_match = 0;
-         } else {
-            streak_pos    = i;
-            streak_dist   = dist;
-            streak_offset = offset;
-            post_match   = 0;
          }
          //         fprintf(stdout, "[%d] start_i = %d\tstart_d = %d\tstart_o = %d\n", i, streak_pos, streak_dist, streak_offset);
-      }
 
-      // Report last match if start_dist == dist.
-      if (streak_dist == dist && dist <= tau) {
-         // TODO.
       }
-
-      // Clear active nodes.
-      active->p = 0;
-      next->p = 0;
    }
 
    return 0;
@@ -185,58 +181,6 @@ parse
    else return l;
 }
 
-
-match_t
-update
-(
- char       value,
- pstack_t * active,
- pstack_t * next,
- dfa_t    * dfa,
- int        pos,
- int        tau,
- int        wlen
-)
-{
-   int mindist = tau + 1;
-   int minoffs = tau + 1;
-   match_t match = {tau + 1, 0};
-   value = translate[value];
-
-   // Clear next.
-   next->p = 0;
-
-   // Update DFA paths.
-   for (int i = 0; i < active->p; i++) {
-      path_t path = active->path[i];
-      path_t new;
-
-      // Update status.
-      int  status = path.node.status;
-      new.node  = dfa[status].next[value];
-      new.start = path.start;
-
-      // Node is still active if new status != 0.
-      if(new.node.status) pstack_add(next, new);
-
-      // Check match.
-      int dist = new.node.match;
-      int offs = pos + 1 - new.start - wlen;
-      if (dist < mindist) {
-         mindist = dist;
-         minoffs = offs;
-         match.dist  = dist;
-         match.start = new.start;
-      } else if (dist == mindist && offs*offs < minoffs*minoffs) {
-         minoffs = offs;
-         match.dist  = dist;
-         match.start = new.start;
-      }
-   }
-
-   return match;
-}
-
 int
 build_dfa
 (
@@ -247,7 +191,8 @@ build_dfa
  dfa_t    ** dfap,
  nstack_t  * active,
  char      * exp,
- btrie_t   * trie
+ btrie_t   * trie,
+ int         reverse
 )
 // dfa_t must be initialized to 0! (so use calloc before passing)
 {
@@ -263,13 +208,21 @@ build_dfa
    // Check if realloc is needed.
    if (current_status >= *size) {
       (*size) *= 2;
-      *dfap = dfa = realloc(dfa, (*size) * sizeof(status_t));
+      *dfap = dfa = realloc(dfa, (*size) * sizeof(dfa_t));
       if (dfa == NULL) {
          fprintf(stderr, "error (realloc) dfa: build_dfa\n");
          exit(1);
       }
    }
 
+   // Epsilon at node 0.
+   int diag = 0;
+   for (int i = 0; i < rows && !reverse; i++) {
+      stack_add(&active, diag);
+      diag += rows + 1;
+   }
+
+   // Compute all possible updates.
    for (int i = 0; i < NBASES; i++) {
       mark++;
       for (int j = 0; j < active->p; j++) {
@@ -289,7 +242,6 @@ build_dfa
          dfa[current_status].next[i].status = 0;
          continue;
       }
-
       empty_node = 0;
 
       // Check match.
@@ -315,7 +267,7 @@ build_dfa
          // Insert status into trie.
          trie_insert(trie, path, (*status));
          // Continue building DFA starting at status.
-         int sub_empty = build_dfa(rows, nstat, status, size, dfap, buffer, exp, trie);
+         int sub_empty = build_dfa(rows, nstat, status, size, dfap, buffer, exp, trie, reverse);
          // Re-read dfa address (in case realloc happened).
          dfa = *dfap;
          // Check whether the child node is empty.
@@ -392,7 +344,6 @@ trie_insert
 // Returns 0 if inserted node was not already in the trie, 1 otherwise.
 {
    int i;
-   int found  = 1;
    int nodeid = 0;
 
    bnode_t * nodes = trie->root;
@@ -520,13 +471,16 @@ new_pstack
    stack->p = 0;
    return stack;
 }
-
-void
-pstack_add
-(
- pstack_t * stack,
- path_t     item
- )
+/*
+unsigned long
+hash(unsigned char *str, int strlen)
 {
-   stack->path[stack->p++] = item;
+    unsigned long hash = 5381;
+    int c;
+
+    for (int i = 0; i < strlen: i++)
+        hash = ((hash << 5) + hash) + *str++; 
+
+    return hash;
 }
+*/

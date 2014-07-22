@@ -5,10 +5,12 @@
 #include <execinfo.h>
 #include <signal.h>
 
-#define INITIAL_LINE_SIZE 10
+#define INITIAL_LINE_SIZE  10
 #define INITIAL_STACK_SIZE 256
 #define INITIAL_TRIE_SIZE  256
 #define INITIAL_DFA_SIZE   256
+#define DFA_FORWARD 0
+#define DFA_REVERSE 1
 
 #define NBASES 5
 
@@ -27,7 +29,19 @@ struct nstack_t {
    int l;
    int val[];
 };
+/*
+struct htable_t {
+   int p;
+   int l;
+   int sorted;
+   hitem_t val[];
+};
 
+struct hitem_t {
+   unsigned long key;
+   int           val;
+};
+*/
 struct status_t {
    int status;
    int match;
@@ -79,7 +93,7 @@ nstack_t * new_stack(int);
 void stack_add(nstack_t **, int);
 pstack_t * new_pstack(int);
 void pstack_add(pstack_t *, path_t);
-int build_dfa(int, int, int*, int*, dfa_t**, nstack_t*, char*, btrie_t*);
+int build_dfa(int, int, int*, int*, dfa_t**, nstack_t*, char*, btrie_t*, int);
 btrie_t * trie_new(int, int);
 int trie_search(btrie_t *, char*);
 void trie_insert(btrie_t *, char*, int);
