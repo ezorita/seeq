@@ -454,6 +454,7 @@ new_stack
  int elements
 )
 {
+   if (elements < 1) elements = 1;
    nstack_t * stack = malloc(sizeof(nstack_t) + elements*sizeof(int));
    if (stack == NULL) {
       fprintf(stderr, "error (malloc) nstack_t in new_stack: %s\n", strerror(errno));
