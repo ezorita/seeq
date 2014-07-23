@@ -1,36 +1,22 @@
 #include "seeq.h"
 
-int iter = 0;
-
-void SIGSEGV_handler(int sig) {
-   void *array[10];
-   size_t size;
-
-   // get void*'s for all entries on the stack
-   size = backtrace(array, 10);
-
-   // print out all the frames to stderr
-   fprintf(stderr, "Error: signal %d:\n", sig);
-   backtrace_symbols_fd(array, size, 2);
-   exit(1);
-}
-
-
-
-int main(int argc, char *argv[])
+void
+seeq
+(
+ char * expression,
+ char * input,
+ struct seeqarg_t args
+)
 {
-   signal(SIGSEGV, SIGSEGV_handler); 
-
    //----- PARSE PARAMS -----
 
-   if (argc != 4) {
-      fprintf(stderr,"usage: seeq expression distance inputfile\n");
-      exit(0);
+   int tau = args.dist;
+   if (input == NULL) {
+      fprintf(stderr, "error: input file not specified.\n");
+      exit(1);
    }
 
-   char * expression = argv[1];
-   int    tau        = atoi(argv[2]);
-   int    fdi        = open(argv[3], O_RDONLY);
+   int fdi = open(input, O_RDWR);
 
    if (fdi == -1) {
       fprintf(stderr,"error: could not open file: %s\n\n", strerror(errno));
@@ -41,7 +27,7 @@ int main(int argc, char *argv[])
    lseek(fdi, 0, SEEK_SET);
    
    // Map file to memory.
-   char * data = (char *) mmap(NULL, isize, PROT_READ, MAP_PRIVATE | MAP_POPULATE, fdi, 0);
+   char * data = (char *) mmap(NULL, isize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_POPULATE, fdi, 0);
 
    if (data == MAP_FAILED) {
       fprintf(stderr, "error loading data into memory (mmap): %s\n", strerror(errno));
@@ -93,10 +79,13 @@ int main(int argc, char *argv[])
    int post_match = 0;
    int streak_dist = tau+1, streak_pos = 0;
    int current_node = 0;
+   int linestart = 0;
+   int count = 0;
 
    // DFA status.
    for (unsigned long k = 0; k < isize; k++, i++) {
       if (data[k] == '\n') {
+         linestart = k + 1;
          i = -1;
          lines++;
          post_match = streak_pos = current_node = 0;
@@ -105,7 +94,7 @@ int main(int argc, char *argv[])
       }
 
       // Update DFA.
-      status_t next  = dfa[current_node].next[translate[data[k]]];
+      status_t next  = dfa[current_node].next[(int)translate[(int)data[k]]];
       current_node = next.status;
 
       // Update streak.
@@ -121,30 +110,68 @@ int main(int argc, char *argv[])
             streak_pos    = i;
             streak_dist   = next.match;
          } else {
-            int mlen = 0;
-            int rnode = 0;
-            int j = 0;
-            int d = tau + 1;
-            // Find match start with RDFA.
-            do {
-               status_t next = rdfa[rnode].next[translate[data[k-++j]]];
-               rnode = next.status;
-               d     = next.match;
-            } while (d > streak_dist && j < i);
+            // Format only if stdout == default stdout!
+            while (data[k] != '\n' && k < isize) k++;
+            data[k] = 0;
 
-            // Compute match length and print match.
-            j = i - j;
-            fprintf(stdout, "%d,%d:%d+%d (%d)\n", lines, j, i-1, i-1-streak_pos, streak_dist);
+            // FORMAT OUTPUT (quite crappy)
+            if (args.count) {
+               count++;
+            } else {
+               int j = 0;
+               if (args.showpos || args.compact || args.matchonly) {
+                  int rnode = 0;
+                  int d = tau + 1;
+                  // Find match start with RDFA.
+                  do {
+                     status_t next = rdfa[rnode].next[(int)translate[(int)data[linestart+i-++j]]];
+                     rnode = next.status;
+                     d     = next.match;
+                  } while (d > streak_dist && j < i);
 
+                  // Compute match length and print match.
+                  j = i - j;
+               }
+               if (args.compact) {
+                  fprintf(stdout, "%d:%d-%d:%d\n",lines, j, i-1, streak_dist);
+               } else {
+                  if (args.showline) fprintf(stdout, "[%d] ", lines);
+                  if (args.showpos)  fprintf(stdout, "%d-%d ", j, i-1);
+                  if (args.showdist) fprintf(stdout, "%d ", streak_dist);
+                  if (args.matchonly) {
+                     data[linestart+i] = 0;
+                     fprintf(stdout, "%s", data+linestart+j);
+                  } else if (args.printline) {
+                     if(isatty(fileno(stdout)) && args.showpos) {
+                        char tmp = data[linestart + j];
+                        data[linestart+j] = 0;
+                        fprintf(stdout, "%s", data+linestart);
+                        data[linestart+j] = tmp;
+                        tmp = data[linestart+i];
+                        data[linestart+i] = 0;
+                        fprintf(stdout, (streak_dist > 0 ? BOLDRED : BOLDGREEN));
+                        fprintf(stdout, "%s" RESET, data+linestart+j);
+                        data[linestart+i] = tmp;
+                        fprintf(stdout, "%s", data+linestart+i);
+                     } else {
+                        fprintf(stdout, "%s", data+linestart);
+                     }
+                  }
+                  fprintf(stdout, "\n");
+               }
+            }
+            data[k--] = '\n';
+            continue;
             // Filter flag.
             post_match = 1;
          }
       }
    }
 
+   if (args.count) fprintf(stdout, "%d\n", count);
+
    free(rdfa);
    free(dfa);
-   return 0;
 }
 
 
@@ -323,7 +350,7 @@ trie_search
    bnode_t * nodes = trie->root;
 
    for (int i = 0; i < trie->height; i++) {
-      int next = nodes[nodeid].next[path[i]];
+      int next = nodes[nodeid].next[(int)path[i]];
       if (next > 0) {
          nodeid = next;
       } else return 0;
@@ -347,7 +374,7 @@ trie_insert
    bnode_t * nodes = trie->root;
 
    for (i = 0; i < trie->height - 1; i++) {
-      int next = nodes[nodeid].next[path[i]];
+      int next = nodes[nodeid].next[(int)path[i]];
       if (next > 0) {
          nodeid = next;
          continue;
@@ -362,15 +389,18 @@ trie_insert
             exit(1);
          }
          // Initialize memory.
-         bnode_t zero = {0 , 0};
+         bnode_t zero;
+         zero.next[0] = 0;
+         zero.next[1] = 0;
+
          for (int k = trie->pos; k < trie->size; k++) trie->root[k] = zero;
       }
 
-      nodeid = nodes[nodeid].next[path[i]] = (trie->pos)++;
+      nodeid = nodes[nodeid].next[(int)path[i]] = (trie->pos)++;
    }
 
    // Assign new value.
-   nodes[nodeid].next[path[i]] = value;
+   nodes[nodeid].next[(int)path[i]] = value;
 }
 
 void
@@ -454,3 +484,4 @@ stack_add
 
    stack->val[stack->p++] = value;
 }
+

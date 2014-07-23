@@ -11,6 +11,7 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
+#include <getopt.h>
 
 #define MEMCHR_PERIOD      200
 #define INITIAL_LINE_SIZE  10
@@ -29,6 +30,17 @@ typedef struct match_t  match_t;
 typedef struct dfa_t    dfa_t;
 typedef struct btrie_t  btrie_t;
 typedef struct bnode_t  bnode_t;
+
+struct seeqarg_t {
+   int showdist;
+   int showpos;
+   int showline;
+   int printline;
+   int matchonly;
+   int count;
+   int compact;
+   int dist;
+};
 
 struct nstack_t {
    int p;
@@ -69,6 +81,7 @@ static const int translate[256] = {
 
 static const char bases[NBASES] = "ACGTN";
 
+void seeq(char *, char *, struct seeqarg_t);
 int parse(char *, char **);
 void setactive(int, int, int, int, char*, nstack_t**);
 nstack_t * new_stack(int);
@@ -79,3 +92,7 @@ int trie_search(btrie_t *, char*);
 void trie_insert(btrie_t *, char*, int);
 void trie_reset(btrie_t *);
 void trie_free(btrie_t *);
+
+#define RESET   "\033[0m"
+#define BOLDRED     "\033[1m\033[31m"      /* Bold Red */
+#define BOLDGREEN   "\033[1m\033[32m"      /* Bold Green */
