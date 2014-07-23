@@ -4,23 +4,29 @@
 #include <string.h>
 #include <execinfo.h>
 #include <signal.h>
+#include <sys/mman.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <string.h>
+#include <errno.h>
+#include <unistd.h>
 
+#define MEMCHR_PERIOD      200
 #define INITIAL_LINE_SIZE  10
 #define INITIAL_STACK_SIZE 256
 #define INITIAL_TRIE_SIZE  256
 #define INITIAL_DFA_SIZE   256
-#define DFA_FORWARD 0
-#define DFA_REVERSE 1
+#define DFA_FORWARD        0
+#define DFA_REVERSE        1
+
 
 #define NBASES 5
 
-typedef struct nfa_t    nfa_t;
 typedef struct nstack_t nstack_t;
-typedef struct pstack_t pstack_t;
 typedef struct status_t status_t;
 typedef struct match_t  match_t;
 typedef struct dfa_t    dfa_t;
-typedef struct path_t   path_t;
 typedef struct btrie_t  btrie_t;
 typedef struct bnode_t  bnode_t;
 
@@ -29,32 +35,10 @@ struct nstack_t {
    int l;
    int val[];
 };
-/*
-struct htable_t {
-   int p;
-   int l;
-   int sorted;
-   hitem_t val[];
-};
 
-struct hitem_t {
-   unsigned long key;
-   int           val;
-};
-*/
 struct status_t {
    int status;
    int match;
-};
-
-struct path_t {
-   status_t node;
-   int      start;
-};
-
-struct pstack_t {
-   int    p;
-   path_t path[];
 };
 
 struct match_t {
@@ -86,13 +70,9 @@ static const int translate[256] = {
 static const char bases[NBASES] = "ACGTN";
 
 int parse(char *, char **);
-void proc_match(int *, int, int *, int *);
-match_t update(char, pstack_t*, pstack_t*, dfa_t*, int, int, int);
 void setactive(int, int, int, int, char*, nstack_t**);
 nstack_t * new_stack(int);
 void stack_add(nstack_t **, int);
-pstack_t * new_pstack(int);
-void pstack_add(pstack_t *, path_t);
 int build_dfa(int, int, int*, int*, dfa_t**, nstack_t*, char*, btrie_t*, int);
 btrie_t * trie_new(int, int);
 int trie_search(btrie_t *, char*);
