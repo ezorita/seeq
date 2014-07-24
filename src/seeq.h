@@ -21,7 +21,7 @@
 #define DFA_FORWARD        0
 #define DFA_REVERSE        1
 
-
+// Shoule never be set larger than 32.
 #define NBASES 5
 
 typedef struct nstack_t nstack_t;

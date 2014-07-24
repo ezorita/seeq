@@ -319,6 +319,11 @@ trie_new
  int height
 )
 {
+
+   // Allocate at least one node with at least height 1.
+   if (initial_size < 1) initial_size = 1;
+   if (height < 1) height = 1;
+
    btrie_t * trie = malloc(sizeof(btrie_t));
    if (trie == NULL) {
       fprintf(stderr, "error (malloc) btrie_t in trie_new: %s\n", strerror(errno));
@@ -334,6 +339,7 @@ trie_new
    trie->height = height;
 
    return trie;
+
 }
 
 
@@ -349,7 +355,7 @@ trie_search
 
    for (int i = 0; i < trie->height; i++) {
       int next = nodes[nodeid].next[(int)path[i]];
-      if (next > 0) {
+      if (next != 0) {
          nodeid = next;
       } else return 0;
    }
@@ -364,8 +370,11 @@ trie_insert
  char    * path,
  int       value
 )
-// Returns 0 if inserted node was not already in the trie, 1 otherwise.
 {
+
+   // If 'path' is  longer then trie height, the overflow is
+   // ignored. If it is shorter, memory error may happen.
+   
    int i;
    int nodeid = 0;
 
@@ -373,7 +382,7 @@ trie_insert
 
    for (i = 0; i < trie->height - 1; i++) {
       int next = nodes[nodeid].next[(int)path[i]];
-      if (next > 0) {
+      if (next != 0) {
          nodeid = next;
          continue;
       }
@@ -383,23 +392,22 @@ trie_insert
          trie->size *= 2;
          trie->root = nodes = realloc(nodes, trie->size*sizeof(bnode_t));
          if (nodes == NULL) {
-            fprintf(stderr, "error (realloc) in trie_insert: %s\n", strerror(errno));
+            fprintf(stderr, "error (realloc) in trie_insert: %s\n",
+                  strerror(errno));
             exit(1);
          }
          // Initialize memory.
-         bnode_t zero;
-         zero.next[0] = 0;
-         zero.next[1] = 0;
-
+         bnode_t zero = { .next = {0,0} };
          for (int k = trie->pos; k < trie->size; k++) trie->root[k] = zero;
       }
-
       nodeid = nodes[nodeid].next[(int)path[i]] = (trie->pos)++;
    }
 
    // Assign new value.
    nodes[nodeid].next[(int)path[i]] = value;
+
 }
+
 
 void
 trie_reset
@@ -411,6 +419,7 @@ trie_reset
    trie->pos = 0;
    trie->root = calloc(trie->size, sizeof(bnode_t));
 }
+
 
 void
 trie_free
