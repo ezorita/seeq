@@ -83,7 +83,7 @@ static const char bases[NBASES] = "ACGTN";
 
 void seeq(char *, char *, struct seeqarg_t);
 int parse(char *, char **);
-void setactive(int, int, int, int, char*, nstack_t**);
+void setactive(int, int, int, char, char*, nstack_t**);
 nstack_t * new_stack(int);
 void stack_add(nstack_t **, int);
 int build_dfa(int, int, int*, int*, dfa_t**, nstack_t*, char*, btrie_t*, int);

@@ -223,7 +223,6 @@ build_dfa
    int empty_node = 1;
    int current_status = *status;
    int cols = nstat / rows;
-   int mark = 0;
    char matrix[nstat];
    memset(matrix, 0, nstat);
    nstack_t * buffer = new_stack(INITIAL_STACK_SIZE);
@@ -247,7 +246,6 @@ build_dfa
 
    // Compute all possible updates.
    for (int i = 0; i < NBASES; i++) {
-      mark++;
       for (int j = 0; j < active->p; j++) {
          int node = active->val[j];
          // Hits are not updated. Continue then.
@@ -255,11 +253,11 @@ build_dfa
          int value = 1 << i;
          // Match.
          if ((exp[node/rows] & value) > 0)
-            setactive(rows, cols, node + rows, mark, matrix, &buffer);
+            setactive(rows, cols, node + rows, (char)i+1, matrix, &buffer);
          // Mismatch but not in the last row.
          else if (node % rows < rows - 1) {
-            setactive(rows, cols, node + 1, mark, matrix, &buffer);
-            setactive(rows, cols, node + rows + 1, mark, matrix, &buffer);
+            setactive(rows, cols, node + 1, (char)i+1, matrix, &buffer);
+            setactive(rows, cols, node + rows + 1, (char)i+1, matrix, &buffer);
          }
       }
       if (buffer->p == 0) {
@@ -272,7 +270,7 @@ build_dfa
       // Check match.
       int m = 0;
       int offset = nstat - rows;
-      for (; m < rows; m++) if (matrix[offset + m] == mark) break;
+      for (; m < rows; m++) if (matrix[offset + m] == (char)i+1) break;
 
       // Save match value.
       dfa[current_status].next[i].match = m;
@@ -430,7 +428,7 @@ setactive
  int         rows,
  int         cols,
  int         node,
- int         status,
+ char        status,
  char      * matrix,
  nstack_t ** buffer
 
