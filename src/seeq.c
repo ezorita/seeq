@@ -45,6 +45,11 @@ seeq
    int    rows = tau + 1;
    int    cols = wlen + 1;
    int    nstat= cols*rows;
+
+   if (!wlen) {
+      fprintf(stderr, "error: invalid pattern expression.\n");
+      exit(1);
+   }
    
    if (rows >= cols) {
       fprintf(stderr, "error: expression must be longer than the maximum distance.\n");
@@ -195,12 +200,13 @@ parse
       else if (c == 'N' || c == 'n') keys[l] |= 0x1F;
       else if (c == '[') add = 1;
       else if (c == ']') add = 0;
+      else return 0;
 
       if (!add) l++;
       i++;
    }
    
-   if (add == 1) return -1;
+   if (add == 1) return 0;
    else return l;
 }
 
