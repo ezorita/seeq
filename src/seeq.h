@@ -59,7 +59,7 @@ struct match_t {
 };
 
 struct bnode_t {
-   int next[2];
+   unsigned int next[2];
 };
 
 struct btrie_t {
@@ -89,7 +89,7 @@ void stack_add(nstack_t **, int);
 int build_dfa(int, int, int*, int*, dfa_t**, nstack_t*, char*, btrie_t*, int);
 btrie_t * trie_new(int, int);
 int trie_search(btrie_t *, char*);
-void trie_insert(btrie_t *, char*, int);
+void trie_insert(btrie_t *, char*, unsigned int);
 void trie_reset(btrie_t *);
 void trie_free(btrie_t *);
 

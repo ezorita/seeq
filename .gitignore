@@ -3,4 +3,5 @@
 *.so
 *.gcda
 *.gcno
+*.gcov
 test/testset

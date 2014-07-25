@@ -227,7 +227,7 @@ test_trie_insert
    g_assert_cmpint(bnode.next[1], ==, 0);
 
    // Insert rightmost branch in the trie.
-   trie_insert(trie, "\1\1\1\1\1\1\1\1\1\1", -22923985);
+   trie_insert(trie, "\1\1\1\1\1\1\1\1\1\1", 22923985);
    g_assert_cmpint(trie->pos, ==, 19);
    g_assert_cmpint(trie->size, ==, 32);
    for (int i = 1 ; i < 9 ; i++) {
@@ -248,7 +248,7 @@ test_trie_insert
    g_assert_cmpint(bnode.next[1], ==, 0);
    bnode = trie->root[18];
    g_assert_cmpint(bnode.next[0], ==, 0);
-   g_assert_cmpint(bnode.next[1], ==, -22923985);
+   g_assert_cmpint(bnode.next[1], ==, 22923985);
 
    // Insert middle branch in the trie.
    trie_insert(trie, "\1\0\1\0\1\0\1\0\1\0", 9309871);
@@ -286,7 +286,7 @@ test_trie_insert
    g_assert_cmpint(bnode.next[1], ==, 11);
    bnode = trie->root[18];
    g_assert_cmpint(bnode.next[0], ==, 0);
-   g_assert_cmpint(bnode.next[1], ==, -22923985);
+   g_assert_cmpint(bnode.next[1], ==, 22923985);
    bnode = trie->root[26];
    g_assert_cmpint(bnode.next[0], ==, 9309871);
    g_assert_cmpint(bnode.next[1], ==, 0);
@@ -297,9 +297,9 @@ test_trie_insert
    g_assert(lowtrie != NULL);
 
    // Insert a path longer than trie height.
-   trie_insert(lowtrie, "\0\0\0", -1);
+   trie_insert(lowtrie, "\0\0\0", 1);
    g_assert_cmpint(lowtrie->pos, ==, 1);
-   g_assert_cmpint(lowtrie->root->next[0], ==, -1);
+   g_assert_cmpint(lowtrie->root->next[0], ==, 1);
 
    trie_free(lowtrie);
 
@@ -323,7 +323,7 @@ test_trie_search
       for (int j = 0 ; j < 10 ; j++) {
          path[j] = (drand48() < .5);
       }
-      int value = (int) mrand48();
+      unsigned int value = (int) lrand48();
       trie_insert(trie, path, value);
       g_assert_cmpint(trie_search(trie, path), ==, value);
    }
@@ -376,6 +376,63 @@ test_trie_reset
 
 }
 
+
+void
+test_parse
+(void)
+{
+
+   char *keysp;
+   g_assert_cmpint(parse("AaAaAaAa", &keysp), ==, 8);
+   for (int i = 0 ; i < 8 ; i++) {
+      g_assert_cmpint(keysp[i], ==, 1);
+   }
+   free(keysp);
+
+   g_assert_cmpint(parse("CcCcCcCc", &keysp), ==, 8);
+   for (int i = 0 ; i < 8 ; i++) {
+      g_assert_cmpint(keysp[i], ==, 2);
+   }
+   free(keysp);
+
+   g_assert_cmpint(parse("GgGgGgGg", &keysp), ==, 8);
+   for (int i = 0 ; i < 8 ; i++) {
+      g_assert_cmpint(keysp[i], ==, 4);
+   }
+   free(keysp);
+
+   g_assert_cmpint(parse("TtTtTtTt", &keysp), ==, 8);
+   for (int i = 0 ; i < 8 ; i++) {
+      g_assert_cmpint(keysp[i], ==, 8);
+   }
+   free(keysp);
+
+   g_assert_cmpint(parse("NnNnNnNn", &keysp), ==, 8);
+   for (int i = 0 ; i < 8 ; i++) {
+      g_assert_cmpint(keysp[i], ==, 31);
+   }
+   free(keysp);
+
+   g_assert_cmpint(parse("[GATC][gatc][GaTc][gAtC]", &keysp), ==, 4);
+   for (int i = 0 ; i < 4 ; i++) {
+      g_assert_cmpint(keysp[i], ==, 15);
+   }
+   free(keysp);
+
+   g_assert_cmpint(parse("[GATCgatc", &keysp), ==, -1);
+   free(keysp);
+
+   g_assert_cmpint(parse("A]", &keysp), ==, -1);
+   free(keysp);
+
+   g_assert_cmpint(parse("Z", &keysp), ==, -1);
+   free(keysp);
+
+   return;
+
+}
+
+
 int
 main(
    int argc,
@@ -393,5 +450,6 @@ main(
    g_test_add_func("/trie_insert", test_trie_insert);
    g_test_add_func("/trie_search", test_trie_search);
    g_test_add_func("/trie_reset", test_trie_reset);
+   g_test_add_func("/parse", test_parse);
    return g_test_run();
 }

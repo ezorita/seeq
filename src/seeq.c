@@ -182,6 +182,9 @@ parse
  char ** keysp
 )
 {
+   // FIXME: expressions containing unmatched closing brackets
+   // do not return -1 as they ought to. Either check the matching
+   // of brackets or use the IUPAC alphabet for degenerate positions.
    *keysp = calloc(strlen(expr),sizeof(char));
    char * keys = *keysp;
    int i = 0;
@@ -355,7 +358,7 @@ trie_search
 
    for (int i = 0; i < trie->height; i++) {
       int next = nodes[nodeid].next[(int)path[i]];
-      if (next != 0) {
+      if (next > 0) {
          nodeid = next;
       } else return 0;
    }
@@ -366,9 +369,9 @@ trie_search
 void
 trie_insert
 (
- btrie_t * trie,
- char    * path,
- int       value
+ btrie_t      * trie,
+ char         * path,
+ unsigned int   value
 )
 {
 
@@ -382,7 +385,7 @@ trie_insert
 
    for (i = 0; i < trie->height - 1; i++) {
       int next = nodes[nodeid].next[(int)path[i]];
-      if (next != 0) {
+      if (next > 0) {
          nodeid = next;
          continue;
       }
