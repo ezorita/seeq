@@ -20,16 +20,19 @@
 #define INITIAL_DFA_SIZE   256
 #define DFA_FORWARD        0
 #define DFA_REVERSE        1
-
+#define DFA_EMPTYNODE      1
+#define DFA_RECOMPUTE      -1
+#define DFA_OK             0
 
 #define NBASES 5
 
-typedef struct nstack_t nstack_t;
-typedef struct status_t status_t;
+typedef struct state_t  state_t;
 typedef struct match_t  match_t;
 typedef struct dfa_t    dfa_t;
 typedef struct btrie_t  btrie_t;
 typedef struct bnode_t  bnode_t;
+typedef struct job_t    job_t;
+typedef struct jstack_t  jstack_t;
 
 struct seeqarg_t {
    int showdist;
@@ -40,16 +43,11 @@ struct seeqarg_t {
    int count;
    int compact;
    int dist;
+   int verbose;
 };
 
-struct nstack_t {
-   int p;
-   int l;
-   int val[];
-};
-
-struct status_t {
-   int status;
+struct state_t {
+   int state;
    int match;
 };
 
@@ -70,7 +68,18 @@ struct btrie_t {
 };
 
 struct dfa_t {
-   status_t next[NBASES];
+   state_t next[NBASES];
+};
+
+struct job_t {
+   char     * nfa_state;
+   int        link;
+};
+
+struct jstack_t {
+   int   p;
+   int   l;
+   job_t job[];
 };
 
 static const int translate[256] = {
@@ -83,13 +92,14 @@ static const char bases[NBASES] = "ACGTN";
 
 void seeq(char *, char *, struct seeqarg_t);
 int parse(char *, char **);
-void setactive(int, int, int, char, char*, nstack_t**);
-nstack_t * new_stack(int);
-void stack_add(nstack_t **, int);
-int build_dfa(int, int, int*, int*, dfa_t**, nstack_t*, char*, btrie_t*, int);
+int setactive(int, int, int, char*);
+jstack_t * new_jstack(int);
+void push(jstack_t **, job_t);
+job_t pop(jstack_t *);
+dfa_t * build_dfa(int, int, char*, int);
 btrie_t * trie_new(int, int);
 int trie_search(btrie_t *, char*);
-void trie_insert(btrie_t *, char*, int);
+int * trie_insert(btrie_t *, char*, int);
 void trie_reset(btrie_t *);
 void trie_free(btrie_t *);
 

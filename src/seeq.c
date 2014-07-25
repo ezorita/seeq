@@ -8,13 +8,16 @@ seeq
  struct seeqarg_t args
 )
 {
-   //----- PARSE PARAMS -----
+   int verbose = args.verbose;
 
+   //----- PARSE PARAMS -----
    int tau = args.dist;
    if (input == NULL) {
       fprintf(stderr, "error: input file not specified.\n");
       exit(1);
    }
+
+   if (verbose) fprintf(stderr, "loading input file\n");
 
    int fdi = open(input, O_RDWR);
 
@@ -34,6 +37,8 @@ seeq
       exit(EXIT_FAILURE);
    }
 
+   if (verbose) fprintf(stderr, "parsing pattern\n");
+
    // ----- COMPUTE DFA -----
    char * keys;
    int    wlen = parse(expression, &keys);
@@ -45,32 +50,20 @@ seeq
       fprintf(stderr, "error: expression must be longer than the maximum distance.\n");
       exit(1);
    }
-  
-   // Initialize memory to compute DFA.
-   dfa_t * dfa = malloc(INITIAL_DFA_SIZE*sizeof(dfa_t));
-   btrie_t * trie = trie_new(INITIAL_TRIE_SIZE, nstat);
-   int nstatus = 0;
-   int dfasize = INITIAL_DFA_SIZE;
-   nstack_t * start = new_stack(rows);
+
+   if (verbose) fprintf(stderr, "building DFA\n");
 
    // Compute DFA.
-   build_dfa(rows, nstat, &nstatus, &dfasize, &dfa, start, keys, trie, DFA_FORWARD);
-   trie_free(trie);
-
+   dfa_t * dfa = build_dfa(rows, nstat, keys, DFA_FORWARD);
+   
    // Reverse the query and build reverse DFA.
    char * rkeys = malloc(wlen);
    for (int i = 0; i < wlen; i++)
       rkeys[i] = keys[wlen-i-1];
-   
-   dfa_t * rdfa = malloc(INITIAL_DFA_SIZE*sizeof(dfa_t));
-   trie = trie_new(INITIAL_TRIE_SIZE, nstat);
-   int rstatus = 0;
-   int rdfasize = INITIAL_DFA_SIZE;
 
-   // Compute RDFA.
-   build_dfa(rows, nstat, &rstatus, &rdfasize, &rdfa, start, rkeys, trie, DFA_REVERSE);
-   free(start);   
-   trie_free(trie);
+   //Compute RDFA.
+   dfa_t * rdfa = build_dfa(rows, nstat, rkeys, DFA_REVERSE);
+   free(rkeys);
 
    // ----- PROCESS FILE -----
    // Read and update
@@ -78,24 +71,27 @@ seeq
    int i = 0;
    int post_match = 0;
    int streak_dist = tau+1, streak_pos = 0;
-   int current_node = 0;
+   int current_node = 1;
    int linestart = 0;
    int count = 0;
 
-   // DFA status.
+   if (verbose) fprintf(stderr, "processing data\n");
+
+   // DFA state.
    for (unsigned long k = 0; k < isize; k++, i++) {
       if (data[k] == '\n') {
          linestart = k + 1;
          i = -1;
          lines++;
-         post_match = streak_pos = current_node = 0;
+         post_match = streak_pos = 0;
+         current_node = 1;
          streak_dist = tau + 1;
          continue;
       }
 
       // Update DFA.
-      status_t next  = dfa[current_node].next[(int)translate[(int)data[k]]];
-      current_node = next.status;
+      state_t next  = dfa[current_node].next[(int)translate[(int)data[k]]];
+      current_node = next.state;
 
       // Update streak.
       if (streak_dist == next.match) continue;
@@ -120,14 +116,14 @@ seeq
             } else {
                int j = 0;
                if (args.showpos || args.compact || args.matchonly) {
-                  int rnode = 0;
+                  int rnode = 1;
                   int d = tau + 1;
                   // Find match start with RDFA.
                   do {
-                     status_t next = rdfa[rnode].next[(int)translate[(int)data[linestart+i-++j]]];
-                     rnode = next.status;
+                     state_t next = rdfa[rnode].next[(int)translate[(int)data[linestart+i-++j]]];
+                     rnode = next.state;
                      d     = next.match;
-                  } while (d > streak_dist && j < i);
+                  } while (rnode && d > streak_dist && j < i);
 
                   // Compute match length and print match.
                   j = i - j;
@@ -205,110 +201,142 @@ parse
    else return l;
 }
 
-int
+dfa_t *
 build_dfa
 (
  int         rows,
  int         nstat,
- int       * status,
- int       * size,
- dfa_t    ** dfap,
- nstack_t  * active,
  char      * exp,
- btrie_t   * trie,
  int         reverse
 )
 {
-   dfa_t * dfa = *dfap;
-   int empty_node = 1;
-   int current_status = *status;
+   // Columns.
    int cols = nstat / rows;
-   char matrix[nstat];
-   memset(matrix, 0, nstat);
-   nstack_t * buffer = new_stack(INITIAL_STACK_SIZE);
 
-   // Check if realloc is needed.
-   if (current_status + 1 >= *size) {
-      (*size) *= 2;
-      *dfap = dfa = realloc(dfa, (*size) * sizeof(dfa_t));
-      if (dfa == NULL) {
-         fprintf(stderr, "error (realloc) dfa in build_dfa: %s\n", strerror(errno));
-         exit(1);
-      }
-   }
+   // Create DFA and trie.
+   btrie_t * trie = trie_new(INITIAL_TRIE_SIZE, nstat - rows);
+   dfa_t   * dfa  = malloc(INITIAL_DFA_SIZE*sizeof(dfa_t));
 
-   // Epsilon at node 0.
-   int diag = 0;
-   for (int i = 0; i < rows && !reverse; i++) {
-      stack_add(&active, diag);
-      diag += rows + 1;
-   }
+   // DFA control vars.
+   int state = 0;
+   int size  = INITIAL_DFA_SIZE;
+   
+   // Initialize job stack.
+   jstack_t * stack = new_jstack(INITIAL_STACK_SIZE);
 
-   // Compute all possible updates.
-   for (int i = 0; i < NBASES; i++) {
-      for (int j = 0; j < active->p; j++) {
-         int node = active->val[j];
-         // Hits are not updated. Continue then.
-         if (node >= nstat - rows) continue;
-         int value = 1 << i;
-         // Match.
-         if ((exp[node/rows] & value) > 0)
-            setactive(rows, cols, node + rows, (char)i+1, matrix, &buffer);
-         // Mismatch but not in the last row.
-         else if (node % rows < rows - 1) {
-            setactive(rows, cols, node + 1, (char)i+1, matrix, &buffer);
-            setactive(rows, cols, node + rows + 1, (char)i+1, matrix, &buffer);
+   // Activate initial state.
+   char * startmatrix = calloc(nstat, sizeof(char));
+   setactive(rows, cols, 0, startmatrix);
+   // Add initial job.
+   job_t start = {.nfa_state = startmatrix, .link = 0};
+   push(&stack, start);
+
+   while(stack->p > 0) {
+      // Pop new job from stack.
+      job_t job = pop(stack);
+
+      // Check if realloc is needed before dereferencing.
+      if (state + 1 >= size) {
+         size *= 2;
+         dfa = realloc(dfa, size * sizeof(dfa_t));
+         if (dfa == NULL) {
+            fprintf(stderr, "error (realloc) dfa in build_dfa: %s\n", strerror(errno));
+            exit(1);
          }
       }
-      if (buffer->p == 0) {
-         dfa[current_status].next[i].match = rows;
-         dfa[current_status].next[i].status = 0;
+
+      // Take job parameters.
+      char * matrix = job.nfa_state;
+      int  * link   = ((int *) dfa) + job.link;
+
+      // If I already exist, send my parent somewhere else.
+      int exists = trie_search(trie, matrix);
+      if (exists) {
+         *link = exists;
          continue;
       }
-      empty_node = 0;
 
-      // Check match.
-      int m = 0;
-      int offset = nstat - rows;
-      for (; m < rows; m++) if (matrix[offset + m] == (char)i+1) break;
+      // Let's register this node before we start.
+      // If we find that is empty we'll return it to
+      // the DFA before finishing the job.
+      state++;
 
-      // Save match value.
-      dfa[current_status].next[i].match = m;
+      // Compute all possible updates.
+      int empty_node = 1;
+      for (int i = 0; i < NBASES; i++) {
+         // Reset matrix.
+         char * newmatrix = calloc(nstat, sizeof(char));
+         int    newcount  = 0;
+         int    value     = 1 << i;
 
-      // Check if this status already exists.
-      char path[nstat];
-      memset(path, 0, nstat);
-      for (int k = 0; k < buffer->p; k++) path[buffer->val[k]] = 1;
-      int exists = trie_search(trie, path);
+         for (int j = 0; j < nstat - rows; j++) {
+            // Not active, continue.
+            if (!matrix[j]) continue;
+            // Match.
+            if ((exp[j/rows] & value) > 0)
+               newcount += setactive(rows, cols, j + rows, newmatrix);
+            // Mismatch but not in the last row.
+            else if (j % rows < rows - 1) {
+               newcount += setactive(rows, cols, j + 1, newmatrix);
+               newcount += setactive(rows, cols, j + rows + 1, newmatrix);
+            }
+         }
 
-      if (exists) {
-         // If exists, redirect to the matching status and leave this branch.
-         dfa[current_status].next[i].status = exists;
-      } else {
-         // Save pointer to the next status.
-         dfa[current_status].next[i].status = ++(*status);
-         // Insert status into trie.
-         trie_insert(trie, path, (*status));
-         // Continue building DFA starting at status.
-         int sub_empty = build_dfa(rows, nstat, status, size, dfap, buffer, exp, trie, reverse);
-         // Re-read dfa address (in case realloc happened).
-         dfa = *dfap;
-         // Check whether the child node is empty.
-         if (sub_empty) {
-            // Next node is empty. Return node to DFA and set next and trie to 0.
-            // Can do status-- because we haven't created any new node!
-            (*status)--;
-            dfa[current_status].next[i].status = 0;
-            trie_insert(trie, path, 0);
+         // Epsilon at node 0.
+         if (!reverse) newcount += setactive(rows, cols, 0, newmatrix);
+
+         if (newcount == 0) {
+            dfa[state].next[i].match = rows;
+            dfa[state].next[i].state = 0;
+            continue;
+         }
+
+         // The node is not empty, now we can link to parent
+         // and add to trie.
+         if (empty_node) {
+            empty_node = 0;
+            *link = state;
+            trie_insert(trie, matrix, state);
+         }
+
+         // Check match.
+         int m = 0;
+         int offset = nstat - rows;
+         for (; m < rows; m++) if (newmatrix[offset + m]) break;
+
+         // Save match value.
+         dfa[state].next[i].match = m;
+
+         // Check if this state already exists.
+         exists = trie_search(trie, newmatrix);
+
+         if (exists) {
+            // If exists, just link with the existing state.
+            // No new jobs will be created.
+            dfa[state].next[i].state = exists;
+         } else {
+            // Create job and push to stack.
+            int offset   = (int *)&(dfa[state].next[i].state) - (int *)dfa;
+            job_t newjob = {.nfa_state = newmatrix, .link = offset};
+            push(&stack, newjob);
          }
       }
-
-      // Reset buffer
-      buffer->p = 0;
+   
+      if (empty_node) {
+         // Unregister node if empty.
+         *link = 0;
+         state--;
+      }
+      free(matrix);
    }
-   free(buffer);
+   
+   // Free stack and trie.
+   trie_free(trie);
+   free(stack);
 
-   return empty_node;
+   // Resize DFA and return.
+   dfa = realloc(dfa, (state+1)*sizeof(dfa_t));
+   return dfa;
 }
 
 
@@ -357,7 +385,7 @@ trie_search
 }
 
 
-void
+int *
 trie_insert
 (
  btrie_t * trie,
@@ -398,7 +426,9 @@ trie_insert
    }
 
    // Assign new value.
-   nodes[nodeid].next[(int)path[i]] = value;
+   int * data = &(nodes[nodeid].next[(int)path[i]]);
+   *data = value;
+   return data;
 }
 
 void
@@ -422,40 +452,36 @@ trie_free
    free(trie);
 }
 
-void
+int
 setactive
 (
  int         rows,
  int         cols,
  int         node,
- char        status,
- char      * matrix,
- nstack_t ** buffer
-
+ char      * matrix
 )
 {
-   if (node >= rows*cols) return;
-   if (matrix[node] == status) return;
-   matrix[node] = status;
-   stack_add(buffer, node);
+   if (node >= rows*cols) return 0;
+   if (matrix[node]) return 0;
+   matrix[node] = 1;
    // Last row line, return.
-   if (node % rows == rows - 1) return;
+   if (node % rows == rows - 1) return 1;
    // Epsilon.
    int free = node + rows + 1;
-   if (free < rows * cols) setactive(rows, cols, free, status, matrix, buffer);
+   if (free < rows * cols) return 1 + setactive(rows, cols, free, matrix);
+   else return 1;
 }
 
-
-nstack_t *
-new_stack
+jstack_t *
+new_jstack
 (
  int elements
 )
 {
    if (elements < 1) elements = 1;
-   nstack_t * stack = malloc(sizeof(nstack_t) + elements*sizeof(int));
+   jstack_t * stack = malloc(sizeof(jstack_t) + elements*sizeof(job_t));
    if (stack == NULL) {
-      fprintf(stderr, "error (malloc) nstack_t in new_stack: %s\n", strerror(errno));
+      fprintf(stderr, "error (malloc) jstack_t in new_jstack: %s\n", strerror(errno));
       exit(1);
    }
    stack->p = 0;
@@ -464,23 +490,31 @@ new_stack
 }
 
 void
-stack_add
+push
 (
- nstack_t ** stackp,
- int         value
+ jstack_t ** stackp,
+ job_t       job
 )
 {
-   nstack_t * stack = *stackp;
+   jstack_t * stack = *stackp;
    if (stack->p >= stack->l) {
       size_t newsize = 2*stack->l;
-      *stackp = stack = realloc(stack, sizeof(nstack_t)+newsize*sizeof(int));
+      *stackp = stack = realloc(stack, sizeof(jstack_t)+newsize*sizeof(job_t));
       if (stack == NULL) {
-         fprintf(stderr, "error (realloc) nstack_t in stack_add: %s\n", strerror(errno));
+         fprintf(stderr, "error (realloc) jstack_t in push: %s\n", strerror(errno));
          exit(1);
       }
       stack->l = newsize;
    }
 
-   stack->val[stack->p++] = value;
+   stack->job[stack->p++] = job;
 }
 
+job_t
+pop
+(
+ jstack_t * stack
+)
+{
+   return stack->job[--(stack->p)];
+}

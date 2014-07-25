@@ -2,6 +2,7 @@
 
 char *USAGE = "Usage:\n"
 "  seeq [options] pattern inputfile\n"
+"    -v --verbose         verbose\n"
 "    -d --distance        maximum Levenshtein distance (default 0)\n"
 "    -c --count           show only match count\n"
 "    -m --match-only      print only the matching string\n"
@@ -45,6 +46,7 @@ main(
    int count_flag     = -1;
    int compact_flag   = -1;
    int dist_flag      = -1;
+   int verbose_flag   = -1;
 
    // Unset options (value 'UNSET').
    char *input = NULL;
@@ -60,12 +62,13 @@ main(
          {"show-line",     no_argument, 0, 'l'},
          {"count",         no_argument, 0, 'c'},
          {"format-compact",no_argument, 0, 'f'},
+         {"verbose",       no_argument, 0, 'v'},
          {"help",          no_argument, 0, 'h'},
          {"distance", required_argument, 0, 'd'},
          {0, 0, 0, 0}
       };
 
-      c = getopt_long(argc, argv, "pmnslcfhd:",
+      c = getopt_long(argc, argv, "pmnslcfvhd:",
             long_options, &option_index);
  
       /* Detect the end of the options. */
@@ -78,6 +81,17 @@ main(
          }
          else {
             fprintf(stderr, "distance option set more than once\n");
+            say_usage();
+            return 1;
+         }
+         break;
+
+      case 'v':
+         if (verbose_flag < 0) {
+            verbose_flag = 1;
+         }
+         else {
+            fprintf(stderr, "verbose option set more than once\n");
             say_usage();
             return 1;
          }
@@ -187,6 +201,7 @@ main(
    if (count_flag == -1) count_flag = 0;
    if (compact_flag == -1) compact_flag = 0;
    if (dist_flag == -1) dist_flag = 0;
+   if (verbose_flag == -1) verbose_flag = 0;
 
    if (!showdist_flag && !showpos_flag && !printline_flag && !matchonly_flag && !showline_flag && !count_flag && !compact_flag) {
       fprintf(stderr, "Invalid options: No output will be generated.\n");
@@ -196,7 +211,7 @@ main(
    struct seeqarg_t args = {showdist_flag, showpos_flag,
                             showline_flag, printline_flag,
                             matchonly_flag, count_flag,
-                            compact_flag, dist_flag};
+                            compact_flag, dist_flag, verbose_flag};
 
    seeq(expr, input, args);
    return 0;
