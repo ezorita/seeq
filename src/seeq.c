@@ -348,6 +348,93 @@ build_dfa
    return dfa;
 }
 
+void
+build_dfa_step
+(
+ int       rows,
+ int       nstat,
+ int       dfa_state,
+ int       value,
+ dfa_t  ** dfap,
+ trie_t *  trie,
+ int       reverse
+)
+{
+   int      i     = translate[value];
+   int      cols  = nstat/rows;
+   dfa_t  * dfa   = *dfap;
+   int    * state = (int *) *dfap; // Use dfa[0] as counter.
+   int    * size  = state + 1;     // Use dfa[0] + 4B as size.
+
+   // Reset matrix.
+   char * newmatrix = calloc(nstat, sizeof(char));
+   int    newcount  = 0;
+
+   // Explore the trie backwards to find out the path (NFA status)
+   char * matrix = trie_getpath(trie, dfa[dfa_state].trie_leaf);
+
+   for (int j = 0; j < nstat - rows; j++) {
+      // Not active, continue.
+      if (!matrix[j]) continue;
+      // Match.
+      if ((exp[j/rows] & value) > 0)
+         newcount += setactive(rows, cols, j + rows, newmatrix);
+      // Mismatch but not in the last row.
+      else if (j % rows < rows - 1) {
+         newcount += setactive(rows, cols, j + 1, newmatrix);
+         newcount += setactive(rows, cols, j + rows + 1, newmatrix);
+      }
+   }
+
+   // Epsilon at node 0.
+   if (!reverse) newcount += setactive(rows, cols, 0, newmatrix);
+
+   if (newcount == 0) {
+      dfa[dfa_state].next[i].match = rows;
+      dfa[dfa_state].next[i].state = 0;
+      continue;
+   }
+
+   // Check match.
+   int m = 0;
+   int offset = nstat - rows;
+   for (; m < rows; m++) if (newmatrix[offset + m]) break;
+
+   // Save match value.
+   dfa[dfa_state].next[i].match = m;
+
+   // Check if this state already exists.
+   exists = trie_search(trie, newmatrix);
+
+   if (exists) {
+      // If exists, just link with the existing state.
+      // No new jobs will be created.
+      dfa[dfa_state].next[i].state = exists;
+   } else {
+      // Register new dfa state.
+      unsigned int * leafp = trie_insert(triep, newmatrix, ++(*state));
+      unsigned int leaf = (leafp - (unsigned int *) trie->root) / 3; // bnode_t has 3 ints.
+      // Create new state in DFA.
+      if (*state >= *size) {
+         *size *= 2;
+         *dfap = dfa = realloc(dfa, size * sizeof(dfa_t));
+         if (dfa == NULL) {
+            fprintf(stderr, "error (realloc) dfa in build_dfa: %s\n", strerror(errno));
+            exit(1);
+         }
+      }
+      // Initialize DFA state as not computed. Annotate leaf.
+      state_t new = {.state = DFA_COMPUTE, .match = rows};
+      for (int j = 0; j < NBASES; j++) dfa[*state].next[j] = new;
+      dfa[*state].trie_leaf = leaf;
+      // Connect states.
+      dfa[dfa_state] = *state;
+   }
+   free(newmatrix);
+   free(matrix);
+   
+}
+
 
 btrie_t *
 trie_new
@@ -397,6 +484,34 @@ trie_search
       } else return 0;
    }
    return nodeid;
+}
+
+char *
+trie_getpath
+(
+  btrie_t      * trie,
+  unsigned int   leaf
+)
+{
+   bnode_t * nodes = trie->root;
+   char * path = malloc(trie->height);
+   int current;
+   int parent = leaf;
+   int i      = trie->height;
+   do {
+      current = parent;
+      int       parent = nodes[current].parent;
+      bnode_t * pnode  = nodes[parent];
+      path[--i] = (pnode.next[0] == current ? 0 : 1);
+   } while (current != 0);
+
+   // Control.
+   if (i != 0) {
+      free(path);
+      return NULL;
+   }
+
+   return path;
 }
 
 

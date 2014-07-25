@@ -20,9 +20,7 @@
 #define INITIAL_DFA_SIZE   256
 #define DFA_FORWARD        0
 #define DFA_REVERSE        1
-#define DFA_EMPTYNODE      1
-#define DFA_RECOMPUTE      -1
-#define DFA_OK             0
+#define DFA_COMPUTE        -1
 // Should never be set larger than 32.
 #define NBASES 5
 
@@ -57,6 +55,7 @@ struct match_t {
 };
 
 struct bnode_t {
+   unsigned int parent;
    unsigned int next[2];
 };
 
@@ -68,6 +67,7 @@ struct btrie_t {
 };
 
 struct dfa_t {
+   unsigned int trie_leaf;
    state_t next[NBASES];
 };
 
@@ -97,9 +97,11 @@ jstack_t * new_jstack(int);
 void push(jstack_t **, job_t);
 job_t pop(jstack_t *);
 dfa_t * build_dfa(int, int, char*, int);
+void build_dfa_step(int, int, int, int, dfa_t **, trie_t *, int);
 btrie_t * trie_new(int, int);
 int trie_search(btrie_t *, char*);
 unsigned int * trie_insert(btrie_t *, char*, unsigned int);
+char * trie_getpath(btrie_t *, unsigned int);
 void trie_reset(btrie_t *);
 void trie_free(btrie_t *);
 
