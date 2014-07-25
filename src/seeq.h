@@ -23,7 +23,7 @@
 #define DFA_EMPTYNODE      1
 #define DFA_RECOMPUTE      -1
 #define DFA_OK             0
-
+// Should never be set larger than 32.
 #define NBASES 5
 
 typedef struct state_t  state_t;
@@ -57,7 +57,7 @@ struct match_t {
 };
 
 struct bnode_t {
-   int next[2];
+   unsigned int next[2];
 };
 
 struct btrie_t {
@@ -99,7 +99,7 @@ job_t pop(jstack_t *);
 dfa_t * build_dfa(int, int, char*, int);
 btrie_t * trie_new(int, int);
 int trie_search(btrie_t *, char*);
-int * trie_insert(btrie_t *, char*, int);
+unsigned int * trie_insert(btrie_t *, char*, unsigned int);
 void trie_reset(btrie_t *);
 void trie_free(btrie_t *);
 
