@@ -106,8 +106,7 @@ seeq
    // Read and update
    int lines = 1;
    int i = 0;
-   int post_match = 0;
-   int streak_dist = tau+1, streak_pos = 0;
+   int streak_dist = tau+1;
    int current_node = 1;
    int linestart = 0;
    int count = 0;
@@ -116,92 +115,79 @@ seeq
 
    // DFA state.
    for (unsigned long k = 0; k < isize; k++, i++) {
-      if (data[k] == '\n') {
-         linestart = k + 1;
-         i = -1;
-         lines++;
-         post_match = streak_pos = 0;
-         current_node = 1;
-         streak_dist = tau + 1;
-         continue;
-      }
-
       // Update DFA.
       state_t next  = dfa[current_node].next[(int)translate[(int)data[k]]];
       if (next.state == -1) next = build_dfa_step(rows, nstat, current_node, (int)data[k], &dfa, trie, keys, DFA_FORWARD);
       current_node = next.state;
 
       // Update streak.
-      if (streak_dist == next.match) continue;
-      else if (streak_dist > next.match) {
+      //      if (streak_dist == next.match) continue;
+      if (streak_dist > next.match) {
          // Tau is decreasing, track new streak.
-         streak_pos    = i;
          streak_dist   = next.match;
-         post_match    = 0;
-      } else { 
-         if (post_match == 1) {
-            // Coming from a recent match, just update.
-            streak_pos    = i;
-            streak_dist   = next.match;
+      } else if (streak_dist < next.match) { 
+         while (data[k] != '\n' && k < isize) k++;
+         data[k] = 0;
+
+         // FORMAT OUTPUT (quite crappy)
+         if (args.count) {
+            count++;
          } else {
-            while (data[k] != '\n' && k < isize) k++;
-            data[k] = 0;
+            int j = 0;
+            if (args.showpos || args.compact || args.matchonly) {
+               int rnode = 1;
+               int d = tau + 1;
+               // Find match start with RDFA.
+               do {
+                  int c = (int)data[linestart+i-++j];
+                  state_t next = rdfa[rnode].next[(int)translate[c]];
+                  if (next.state == -1) next = build_dfa_step(rows, nstat, rnode, c, &rdfa, rtrie, rkeys, DFA_REVERSE);
+                  rnode = next.state;
+                  d     = next.match;
+               } while (rnode && d > streak_dist && j < i);
 
-            // FORMAT OUTPUT (quite crappy)
-            if (args.count) {
-               count++;
-            } else {
-               int j = 0;
-               if (args.showpos || args.compact || args.matchonly) {
-                  int rnode = 1;
-                  int d = tau + 1;
-                  // Find match start with RDFA.
-                  do {
-                     int c = (int)data[linestart+i-++j];
-                     state_t next = rdfa[rnode].next[(int)translate[c]];
-                     if (next.state == -1) next = build_dfa_step(rows, nstat, rnode, c, &rdfa, rtrie, rkeys, DFA_REVERSE);
-                     rnode = next.state;
-                     d     = next.match;
-
-                  } while (rnode && d > streak_dist && j < i);
-
-                  // Compute match length and print match.
-                  j = i - j;
-               }
-               if (args.compact) {
-                  fprintf(stdout, "%d:%d-%d:%d\n",lines, j, i-1, streak_dist);
-               } else {
-                  if (args.showline) fprintf(stdout, "[%d] ", lines);
-                  if (args.showpos)  fprintf(stdout, "%d-%d ", j, i-1);
-                  if (args.showdist) fprintf(stdout, "%d ", streak_dist);
-                  if (args.matchonly) {
-                     data[linestart+i] = 0;
-                     fprintf(stdout, "%s", data+linestart+j);
-                  } else if (args.printline) {
-                     if(isatty(fileno(stdout)) && args.showpos) {
-                        char tmp = data[linestart + j];
-                        data[linestart+j] = 0;
-                        fprintf(stdout, "%s", data+linestart);
-                        data[linestart+j] = tmp;
-                        tmp = data[linestart+i];
-                        data[linestart+i] = 0;
-                        fprintf(stdout, (streak_dist > 0 ? BOLDRED : BOLDGREEN));
-                        fprintf(stdout, "%s" RESET, data+linestart+j);
-                        data[linestart+i] = tmp;
-                        fprintf(stdout, "%s", data+linestart+i);
-                     } else {
-                        fprintf(stdout, "%s", data+linestart);
-                     }
-                  }
-                  fprintf(stdout, "\n");
-               }
+               // Compute match length and print match.
+               j = i - j;
             }
-            data[k--] = '\n';
-            continue;
-            // Filter flag.
-            post_match = 1;
+            if (args.compact) {
+               fprintf(stdout, "%d:%d-%d:%d\n",lines, j, i-1, streak_dist);
+            } else {
+               if (args.showline) fprintf(stdout, "%d ", lines);
+               if (args.showpos)  fprintf(stdout, "%d-%d ", j, i-1);
+               if (args.showdist) fprintf(stdout, "%d ", streak_dist);
+               if (args.matchonly) {
+                  data[linestart+i] = 0;
+                  fprintf(stdout, "%s", data+linestart+j);
+               } else if (args.printline) {
+                  if(isatty(fileno(stdout)) && args.showpos) {
+                     char tmp = data[linestart + j];
+                     data[linestart+j] = 0;
+                     fprintf(stdout, "%s", data+linestart);
+                     data[linestart+j] = tmp;
+                     tmp = data[linestart+i];
+                     data[linestart+i] = 0;
+                     fprintf(stdout, (streak_dist > 0 ? BOLDRED : BOLDGREEN));
+                     fprintf(stdout, "%s" RESET, data+linestart+j);
+                     data[linestart+i] = tmp;
+                     fprintf(stdout, "%s", data+linestart+i);
+                  } else {
+                     fprintf(stdout, "%s", data+linestart);
+                  }
+               }
+               fprintf(stdout, "\n");
+            }
          }
+         data[k] = '\n';
       }
+
+      if (data[k] == '\n') {
+         linestart = k + 1;
+         i = -1;
+         lines++;
+         current_node = 1;
+         streak_dist = tau + 1;
+      }
+
    }
 
    if (args.count) fprintf(stdout, "%d\n", count);
@@ -537,7 +523,7 @@ trie_getpath
    int i      = trie->height;
    // Identify leaf.
    int node_ints = (sizeof(bnode_t)/sizeof(unsigned int));
-   path[--i] = leaf % node_ints - 1;
+   path[--i] = leaf % node_ints;
    int current;
    int parent = leaf / node_ints;
    do {

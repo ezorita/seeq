@@ -54,8 +54,10 @@ struct match_t {
 };
 
 struct bnode_t {
-   unsigned int parent;
    unsigned int next[2];
+   // Additional data below this line.
+   //Alignment is important in this struct!
+   unsigned int parent;
 };
 
 struct btrie_t {
