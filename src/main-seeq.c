@@ -11,6 +11,7 @@ char *USAGE = "Usage:\n"
 "    -p --show-position   shows the position of the match within the matched line\n"
 "    -s --show-dist       prints the Levenshtein distance of each match\n"
 "    -f --compact         prints output in compact format\n"
+"    -e --line-end        print the end of the line starting after the match\n"
 "    -r --precompute      precomputes DFA before matching";
 
 
@@ -49,6 +50,7 @@ main(
    int dist_flag      = -1;
    int verbose_flag   = -1;
    int precompute_flag = -1;
+   int endline_flag   = -1;
 
    // Unset options (value 'UNSET').
    char *input = NULL;
@@ -67,11 +69,12 @@ main(
          {"verbose",       no_argument, 0, 'v'},
          {"help",          no_argument, 0, 'h'},
          {"precompute",    no_argument, 0, 'r'},
+         {"line-end",      no_argument, 0, 'e'},         
          {"distance",required_argument, 0, 'd'},
          {0, 0, 0, 0}
       };
 
-      c = getopt_long(argc, argv, "pmnslcfvhrd:",
+      c = getopt_long(argc, argv, "pmnslcfvhred:",
             long_options, &option_index);
  
       /* Detect the end of the options. */
@@ -95,6 +98,17 @@ main(
          }
          else {
             fprintf(stderr, "verbose option set more than once\n");
+            say_usage();
+            return 1;
+         }
+         break;
+
+      case 'e':
+         if (endline_flag < 0) {
+            endline_flag = 1;
+         }
+         else {
+            fprintf(stderr, "line-end option set more than once\n");
             say_usage();
             return 1;
          }
@@ -217,6 +231,7 @@ main(
    if (dist_flag == -1) dist_flag = 0;
    if (verbose_flag == -1) verbose_flag = 0;
    if (precompute_flag == -1) precompute_flag = 0;
+   if (endline_flag == -1) endline_flag = 0;
 
    if (!showdist_flag && !showpos_flag && !printline_flag && !matchonly_flag && !showline_flag && !count_flag && !compact_flag) {
       fprintf(stderr, "Invalid options: No output will be generated.\n");
@@ -227,7 +242,8 @@ main(
                             showline_flag, printline_flag,
                             matchonly_flag, count_flag,
                             compact_flag, dist_flag,
-                            verbose_flag, precompute_flag};
+                            verbose_flag, precompute_flag,
+                            endline_flag};
 
    seeq(expr, input, args);
    return 0;

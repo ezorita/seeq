@@ -41,6 +41,7 @@ struct seeqarg_t {
    int dist;
    int verbose;
    int precompute;
+   int endline;
 };
 
 struct state_t {

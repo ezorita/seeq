@@ -121,7 +121,6 @@ seeq
       current_node = next.state;
 
       // Update streak.
-      //      if (streak_dist == next.match) continue;
       if (streak_dist > next.match) {
          // Tau is decreasing, track new streak.
          streak_dist   = next.match;
@@ -158,6 +157,8 @@ seeq
                if (args.matchonly) {
                   data[linestart+i] = 0;
                   fprintf(stdout, "%s", data+linestart+j);
+               } else if (args.endline) {
+                  fprintf(stdout, "%s", data+linestart+i);
                } else if (args.printline) {
                   if(isatty(fileno(stdout)) && args.showpos) {
                      char tmp = data[linestart + j];
