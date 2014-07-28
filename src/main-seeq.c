@@ -10,7 +10,8 @@ char *USAGE = "Usage:\n"
 "    -l --show-line       prints the original line of the match\n"
 "    -p --show-position   shows the position of the match within the matched line\n"
 "    -s --show-dist       prints the Levenshtein distance of each match\n"
-"    -f --compact         prints output in compact format";
+"    -f --compact         prints output in compact format\n"
+"    -r --precompute      precomputes DFA before matching";
 
 
 void say_usage(void) { fprintf(stderr, "%s\n", USAGE); }
@@ -47,6 +48,7 @@ main(
    int compact_flag   = -1;
    int dist_flag      = -1;
    int verbose_flag   = -1;
+   int precompute_flag = -1;
 
    // Unset options (value 'UNSET').
    char *input = NULL;
@@ -64,11 +66,12 @@ main(
          {"format-compact",no_argument, 0, 'f'},
          {"verbose",       no_argument, 0, 'v'},
          {"help",          no_argument, 0, 'h'},
-         {"distance", required_argument, 0, 'd'},
+         {"precompute",    no_argument, 0, 'r'},
+         {"distance",required_argument, 0, 'd'},
          {0, 0, 0, 0}
       };
 
-      c = getopt_long(argc, argv, "pmnslcfvhd:",
+      c = getopt_long(argc, argv, "pmnslcfvhrd:",
             long_options, &option_index);
  
       /* Detect the end of the options. */
@@ -92,6 +95,17 @@ main(
          }
          else {
             fprintf(stderr, "verbose option set more than once\n");
+            say_usage();
+            return 1;
+         }
+         break;
+
+      case 'r':
+         if (precompute_flag < 0) {
+            precompute_flag = 1;
+         }
+         else {
+            fprintf(stderr, "precompute option set more than once\n");
             say_usage();
             return 1;
          }
@@ -202,6 +216,7 @@ main(
    if (compact_flag == -1) compact_flag = 0;
    if (dist_flag == -1) dist_flag = 0;
    if (verbose_flag == -1) verbose_flag = 0;
+   if (precompute_flag == -1) precompute_flag = 0;
 
    if (!showdist_flag && !showpos_flag && !printline_flag && !matchonly_flag && !showline_flag && !count_flag && !compact_flag) {
       fprintf(stderr, "Invalid options: No output will be generated.\n");
@@ -211,7 +226,8 @@ main(
    struct seeqarg_t args = {showdist_flag, showpos_flag,
                             showline_flag, printline_flag,
                             matchonly_flag, count_flag,
-                            compact_flag, dist_flag, verbose_flag};
+                            compact_flag, dist_flag,
+                            verbose_flag, precompute_flag};
 
    seeq(expr, input, args);
    return 0;

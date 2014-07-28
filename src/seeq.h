@@ -13,8 +13,6 @@
 #include <unistd.h>
 #include <getopt.h>
 
-#define MEMCHR_PERIOD      200
-#define INITIAL_LINE_SIZE  10
 #define INITIAL_STACK_SIZE 256
 #define INITIAL_TRIE_SIZE  256
 #define INITIAL_DFA_SIZE   256
@@ -42,6 +40,7 @@ struct seeqarg_t {
    int compact;
    int dist;
    int verbose;
+   int precompute;
 };
 
 struct state_t {
@@ -97,7 +96,7 @@ jstack_t * new_jstack(int);
 void push(jstack_t **, job_t);
 job_t pop(jstack_t *);
 dfa_t * build_dfa(int, int, char*, int);
-void build_dfa_step(int, int, int, int, dfa_t **, trie_t *, int);
+state_t build_dfa_step(int, int, int, int, dfa_t **, btrie_t *, char *, int);
 btrie_t * trie_new(int, int);
 int trie_search(btrie_t *, char*);
 unsigned int * trie_insert(btrie_t *, char*, unsigned int);

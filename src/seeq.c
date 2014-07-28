@@ -58,17 +58,49 @@ seeq
 
    if (verbose) fprintf(stderr, "building DFA\n");
 
-   // Compute DFA.
-   dfa_t * dfa = build_dfa(rows, nstat, keys, DFA_FORWARD);
-   
    // Reverse the query and build reverse DFA.
    char * rkeys = malloc(wlen);
    for (int i = 0; i < wlen; i++)
       rkeys[i] = keys[wlen-i-1];
 
-   //Compute RDFA.
-   dfa_t * rdfa = build_dfa(rows, nstat, rkeys, DFA_REVERSE);
-   free(rkeys);
+   dfa_t * dfa, * rdfa;
+   btrie_t * trie, * rtrie;
+   if (!args.precompute) {
+      dfa = malloc(INITIAL_DFA_SIZE * sizeof(dfa_t));
+      rdfa = malloc(INITIAL_DFA_SIZE * sizeof(dfa_t));
+      // Initialize R/DFA for step building.
+      int * dfa_st = (int *) dfa;
+      int * dfa_sz = dfa_st + 1;
+      int * rdfa_st = (int *) rdfa;
+      int * rdfa_sz = rdfa_st + 1;
+      *dfa_st = *rdfa_st =  0;
+      *dfa_sz = *rdfa_sz = INITIAL_DFA_SIZE;
+      // Initialize state 1.
+      state_t new = {.state = DFA_COMPUTE, .match = rows};
+      for (int i = 0; i < NBASES; i++) {
+         dfa[1].next[i] = new;
+         rdfa[1].next[i] = new;
+      }
+      // Initialize tries.
+      trie  = trie_new(INITIAL_TRIE_SIZE, nstat - rows);
+      rtrie = trie_new(INITIAL_TRIE_SIZE, nstat - rows);
+      // Insert state 1.
+      char * matrix = calloc(nstat-rows, sizeof(char));
+      setactive(rows, cols, 0, matrix);
+      unsigned int * leafp = trie_insert(trie, matrix, ++(*dfa_st));
+      unsigned int leaf = leafp - (unsigned int *) trie->root; // bnode_t has 3 ints.
+      dfa[1].trie_leaf = leaf;
+      leafp = trie_insert(rtrie, matrix, ++(*rdfa_st));
+      leaf = leafp - (unsigned int *) rtrie->root;
+      rdfa[1].trie_leaf = leaf;
+   } else {
+      // Compute DFA and RDFA.
+      dfa = build_dfa(rows, nstat, keys, DFA_FORWARD);
+      rdfa = build_dfa(rows, nstat, rkeys, DFA_REVERSE);
+      // NULL tries.
+      trie  = NULL;
+      rtrie = NULL;
+   }
 
    // ----- PROCESS FILE -----
    // Read and update
@@ -96,6 +128,7 @@ seeq
 
       // Update DFA.
       state_t next  = dfa[current_node].next[(int)translate[(int)data[k]]];
+      if (next.state == -1) next = build_dfa_step(rows, nstat, current_node, (int)data[k], &dfa, trie, keys, DFA_FORWARD);
       current_node = next.state;
 
       // Update streak.
@@ -111,7 +144,6 @@ seeq
             streak_pos    = i;
             streak_dist   = next.match;
          } else {
-            // Format only if stdout == default stdout!
             while (data[k] != '\n' && k < isize) k++;
             data[k] = 0;
 
@@ -125,9 +157,12 @@ seeq
                   int d = tau + 1;
                   // Find match start with RDFA.
                   do {
-                     state_t next = rdfa[rnode].next[(int)translate[(int)data[linestart+i-++j]]];
+                     int c = (int)data[linestart+i-++j];
+                     state_t next = rdfa[rnode].next[(int)translate[c]];
+                     if (next.state == -1) next = build_dfa_step(rows, nstat, rnode, c, &rdfa, rtrie, rkeys, DFA_REVERSE);
                      rnode = next.state;
                      d     = next.match;
+
                   } while (rnode && d > streak_dist && j < i);
 
                   // Compute match length and print match.
@@ -170,7 +205,6 @@ seeq
    }
 
    if (args.count) fprintf(stdout, "%d\n", count);
-
    free(rdfa);
    free(dfa);
 }
@@ -348,23 +382,25 @@ build_dfa
    return dfa;
 }
 
-void
+state_t
 build_dfa_step
 (
- int       rows,
- int       nstat,
- int       dfa_state,
- int       value,
- dfa_t  ** dfap,
- trie_t *  trie,
- int       reverse
+ int        rows,
+ int        nstat,
+ int        dfa_state,
+ int        base,
+ dfa_t   ** dfap,
+ btrie_t *  trie,
+ char    *  exp,
+ int        reverse
 )
 {
-   int      i     = translate[value];
+   int      i     = translate[base];
    int      cols  = nstat/rows;
    dfa_t  * dfa   = *dfap;
    int    * state = (int *) *dfap; // Use dfa[0] as counter.
    int    * size  = state + 1;     // Use dfa[0] + 4B as size.
+   int      value = 1 << i;
 
    // Reset matrix.
    char * newmatrix = calloc(nstat, sizeof(char));
@@ -392,7 +428,7 @@ build_dfa_step
    if (newcount == 0) {
       dfa[dfa_state].next[i].match = rows;
       dfa[dfa_state].next[i].state = 0;
-      continue;
+      return dfa[dfa_state].next[i];
    }
 
    // Check match.
@@ -404,7 +440,7 @@ build_dfa_step
    dfa[dfa_state].next[i].match = m;
 
    // Check if this state already exists.
-   exists = trie_search(trie, newmatrix);
+   int exists = trie_search(trie, newmatrix);
 
    if (exists) {
       // If exists, just link with the existing state.
@@ -412,27 +448,30 @@ build_dfa_step
       dfa[dfa_state].next[i].state = exists;
    } else {
       // Register new dfa state.
-      unsigned int * leafp = trie_insert(triep, newmatrix, ++(*state));
-      unsigned int leaf = (leafp - (unsigned int *) trie->root) / 3; // bnode_t has 3 ints.
+      unsigned int * leafp = trie_insert(trie, newmatrix, ++(*state));
+      unsigned int leaf = leafp - (unsigned int *) trie->root; // bnode_t has 3 ints.
       // Create new state in DFA.
       if (*state >= *size) {
          *size *= 2;
-         *dfap = dfa = realloc(dfa, size * sizeof(dfa_t));
+         *dfap = dfa = realloc(dfa, *size * sizeof(dfa_t));
          if (dfa == NULL) {
             fprintf(stderr, "error (realloc) dfa in build_dfa: %s\n", strerror(errno));
             exit(1);
          }
+         state = (int *) *dfap; // Use dfa[0] as counter.
+         size  = state + 1;     // Use dfa[0] + 4B as size.
       }
       // Initialize DFA state as not computed. Annotate leaf.
       state_t new = {.state = DFA_COMPUTE, .match = rows};
       for (int j = 0; j < NBASES; j++) dfa[*state].next[j] = new;
       dfa[*state].trie_leaf = leaf;
       // Connect states.
-      dfa[dfa_state] = *state;
+      dfa[dfa_state].next[i].state = *state;
    }
    free(newmatrix);
    free(matrix);
    
+   return dfa[dfa_state].next[i];
 }
 
 
@@ -495,15 +534,18 @@ trie_getpath
 {
    bnode_t * nodes = trie->root;
    char * path = malloc(trie->height);
-   int current;
-   int parent = leaf;
    int i      = trie->height;
+   // Identify leaf.
+   int node_ints = (sizeof(bnode_t)/sizeof(unsigned int));
+   path[--i] = leaf % node_ints - 1;
+   int current;
+   int parent = leaf / node_ints;
    do {
       current = parent;
-      int       parent = nodes[current].parent;
-      bnode_t * pnode  = nodes[parent];
+      parent = nodes[current].parent;
+      bnode_t  pnode  = nodes[parent];
       path[--i] = (pnode.next[0] == current ? 0 : 1);
-   } while (current != 0);
+   } while (parent != 0);
 
    // Control.
    if (i != 0) {
@@ -552,7 +594,9 @@ trie_insert
          bnode_t zero = { .next = {0,0} };
          for (int k = trie->pos; k < trie->size; k++) trie->root[k] = zero;
       }
-      nodeid = nodes[nodeid].next[(int)path[i]] = (trie->pos)++;
+      nodes[nodeid].next[(int)path[i]] = trie->pos;
+      nodes[trie->pos].parent = nodeid;
+      nodeid = (trie->pos)++;
    }
 
    // Assign new value.
