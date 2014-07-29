@@ -104,12 +104,12 @@ seeq
 
    // ----- PROCESS FILE -----
    // Read and update
-   int lines = 1;
-   int i = 0;
    int streak_dist = tau+1;
    int current_node = 1;
-   int linestart = 0;
-   int count = 0;
+   long i = 0;
+   unsigned long lines = 1;
+   unsigned long linestart = 0;
+   unsigned long count = 0;
 
    if (verbose) fprintf(stderr, "processing data\n");
 
@@ -132,7 +132,7 @@ seeq
          if (args.count) {
             count++;
          } else {
-            int j = 0;
+            long j = 0;
             if (args.showpos || args.compact || args.matchonly) {
                int rnode = 1;
                int d = tau + 1;
@@ -149,10 +149,10 @@ seeq
                j = i - j;
             }
             if (args.compact) {
-               fprintf(stdout, "%d:%d-%d:%d\n",lines, j, i-1, streak_dist);
+               fprintf(stdout, "%lu:%ld-%ld:%d\n",lines, j, i-1, streak_dist);
             } else {
-               if (args.showline) fprintf(stdout, "%d ", lines);
-               if (args.showpos)  fprintf(stdout, "%d-%d ", j, i-1);
+               if (args.showline) fprintf(stdout, "%lu ", lines);
+               if (args.showpos)  fprintf(stdout, "%ld-%ld ", j, i-1);
                if (args.showdist) fprintf(stdout, "%d ", streak_dist);
                if (args.matchonly) {
                   data[linestart+i] = 0;
@@ -191,7 +191,7 @@ seeq
 
    }
 
-   if (args.count) fprintf(stdout, "%d\n", count);
+   if (args.count) fprintf(stdout, "%lu\n", count);
    free(rdfa);
    free(dfa);
 }

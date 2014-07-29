@@ -11,7 +11,7 @@ char *USAGE = "Usage:\n"
 "    -p --show-position   shows the position of the match within the matched line\n"
 "    -s --show-dist       prints the Levenshtein distance of each match\n"
 "    -f --compact         prints output in compact format\n"
-"    -e --line-end        print the end of the line starting after the match\n"
+"    -e --line-end        print only the end of the line starting after the match\n"
 "    -r --precompute      precomputes DFA before matching";
 
 
