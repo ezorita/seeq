@@ -1,18 +1,21 @@
 #include "seeq.h"
 
 char *USAGE = "Usage:\n"
-"  seeq [options] pattern inputfile\n"
-"    -v --verbose         verbose\n"
-"    -d --distance        maximum Levenshtein distance (default 0)\n"
-"    -c --count           show only match count\n"
-"    -m --match-only      print only the matching string\n"
-"    -n --no-printline    does not print the matching line\n"
-"    -l --show-line       prints the original line of the match\n"
-"    -p --show-position   shows the position of the match within the matched line\n"
-"    -s --show-dist       prints the Levenshtein distance of each match\n"
-"    -f --compact         prints output in compact format\n"
-"    -e --line-end        print only the end of the line starting after the match\n"
-"    -r --precompute      precomputes DFA before matching";
+"  seeq [options] (-i patternfile | pattern) inputfile\n"
+"    -v --verbose             verbose\n"
+"    -i --input <file>        match using multiple patterns from a file\n"
+"    -d --distance            maximum Levenshtein distance (default 0)\n"
+"    -t --threads             maximum number of threads\n"
+"    -c --count               show only match count\n"
+"    -r --reverse-complement  match also the reverse complements\n"
+"    -m --match-only          print only the matching string\n"
+"    -n --no-printline        does not print the matching line\n"
+"    -l --show-line           prints the line number of the match\n"
+"    -p --show-position       shows the position of the match within the matched line\n"
+"    -s --show-dist           prints the Levenshtein distance of the match\n"
+"    -f --compact             prints output in compact format\n"
+"    -e --line-end            print only the end of the line starting after the match";
+
 
 
 void say_usage(void) { fprintf(stderr, "%s\n", USAGE); }
@@ -37,7 +40,7 @@ main(
 )
 {
    // Backtrace handler
-   signal(SIGSEGV, SIGSEGV_handler); 
+   //signal(SIGSEGV, SIGSEGV_handler); 
 
    // Unset flags (value -1).
    int showdist_flag  = -1;
@@ -51,9 +54,14 @@ main(
    int verbose_flag   = -1;
    int precompute_flag = -1;
    int endline_flag   = -1;
+   int input_flag     = -1;
+   int reverse_flag   = -1;
+   int threads_flag   = -1;
 
    // Unset options (value 'UNSET').
    char *input = NULL;
+   char *expfile = NULL;
+   char *expr_flag = NULL;
 
    int c;
    while (1) {
@@ -68,13 +76,15 @@ main(
          {"format-compact",no_argument, 0, 'f'},
          {"verbose",       no_argument, 0, 'v'},
          {"help",          no_argument, 0, 'h'},
-         {"precompute",    no_argument, 0, 'r'},
-         {"line-end",      no_argument, 0, 'e'},         
+         {"line-end",      no_argument, 0, 'e'},
+         {"reverse",       no_argument, 0, 'r'},
+         {"threads" ,required_argument, 0, 't'},         
+         {"input"   ,required_argument, 0, 'i'},         
          {"distance",required_argument, 0, 'd'},
          {0, 0, 0, 0}
       };
 
-      c = getopt_long(argc, argv, "pmnslcfvhred:",
+      c = getopt_long(argc, argv, "pmnslcfvhert:i:d:",
             long_options, &option_index);
  
       /* Detect the end of the options. */
@@ -92,6 +102,29 @@ main(
          }
          break;
 
+      case 'i':
+         if (input_flag < 0) {
+            input_flag = 1;
+            expfile = optarg;
+         }
+         else {
+            fprintf(stderr, "pattern file option set more than once\n");
+            say_usage();
+            return 1;
+         }
+         break;
+
+      case 't':
+         if (threads_flag < 0) {
+            threads_flag = atoi(optarg);
+         }
+         else {
+            fprintf(stderr, "threads option set more than once\n");
+            say_usage();
+            return 1;
+         }
+         break;
+
       case 'v':
          if (verbose_flag < 0) {
             verbose_flag = 1;
@@ -103,23 +136,23 @@ main(
          }
          break;
 
+      case 'r':
+         if (reverse_flag < 0) {
+            reverse_flag = 1;
+         }
+         else {
+            fprintf(stderr, "reverse option set more than once\n");
+            say_usage();
+            return 1;
+         }
+         break;
+
       case 'e':
          if (endline_flag < 0) {
             endline_flag = 1;
          }
          else {
             fprintf(stderr, "line-end option set more than once\n");
-            say_usage();
-            return 1;
-         }
-         break;
-
-      case 'r':
-         if (precompute_flag < 0) {
-            precompute_flag = 1;
-         }
-         else {
-            fprintf(stderr, "precompute option set more than once\n");
             say_usage();
             return 1;
          }
@@ -209,10 +242,11 @@ main(
       }
    }
 
-   char * expr = argv[optind++];
+   if (input_flag == -1)
+      expr_flag = argv[optind++];
 
    if (optind < argc) {
-      if ((optind == argc - 1) && (input == NULL)) {
+      if (optind == argc-1 && input == NULL) {
          input = argv[optind];
       }
       else {
@@ -232,19 +266,122 @@ main(
    if (verbose_flag == -1) verbose_flag = 0;
    if (precompute_flag == -1) precompute_flag = 0;
    if (endline_flag == -1) endline_flag = 0;
+   if (input_flag == -1) input_flag = 0;
+   if (reverse_flag == -1) reverse_flag = 0;
+   if (threads_flag == -1) threads_flag = 1;
 
    if (!showdist_flag && !showpos_flag && !printline_flag && !matchonly_flag && !showline_flag && !count_flag && !compact_flag) {
       fprintf(stderr, "Invalid options: No output will be generated.\n");
       exit(1);
    }
+   
+   // Options variable.
+   int options = 0;
+   options |= showdist_flag;
+   options |= showline_flag   << 1;
+   options |= printline_flag  << 2;
+   options |= count_flag      << 3;
+   options |= verbose_flag    << 4;
+   options |= precompute_flag << 5;
+   options |= endline_flag    << 6;
+   // These 3 must be the greatest (RDFA conditional).
+   options |= compact_flag    << 8;
+   options |= showpos_flag    << 9;
+   options |= matchonly_flag  << 10;
 
-   struct seeqarg_t args = {showdist_flag, showpos_flag,
-                            showline_flag, printline_flag,
-                            matchonly_flag, count_flag,
-                            compact_flag, dist_flag,
-                            verbose_flag, precompute_flag,
-                            endline_flag};
+   // mmap file.
+   if (verbose_flag) fprintf(stderr, "loading input file\n");
+   int fdi = open(input, O_RDWR);
+   if (fdi == -1) {
+      fprintf(stderr,"error: could not open file: %s\n\n", strerror(errno));
+      exit(1);
+   }
+   unsigned long isize = lseek(fdi, 0, SEEK_END);
+   lseek(fdi, 0, SEEK_SET);
+   // Map file to memory.
+   char * data = (char *) mmap(NULL, isize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_POPULATE, fdi, 0);
+   if (data == MAP_FAILED) {
+      fprintf(stderr, "error loading data into memory (mmap): %s\n", strerror(errno));
+      exit(EXIT_FAILURE);
+   }
 
-   seeq(expr, input, args);
+   // Expression vector.
+   int nexpr;
+   char ** expr;
+
+   // Create expression vector.
+   if (input_flag) {
+      // Read expression file
+      expr = read_expr_file(expfile, &nexpr);
+   } else {
+      int len = strlen(expr_flag);
+      char * pattern = malloc(len+1);
+      strcpy(pattern, expr_flag);
+      expr = malloc(sizeof(char *));
+      expr[0] = pattern;
+      nexpr = 1;
+   }
+   
+   if (reverse_flag) {
+      expr = realloc(expr, 2*nexpr * sizeof(char *));
+      if (expr == NULL) {
+         fprintf(stderr, "error (realloc) in 'main:reverse_flag': %s\n", strerror(errno));
+         exit(1);
+      }
+      for (int i = 0; i < nexpr; i++) expr[nexpr + i] = reverse_pattern(expr[i]);
+      nexpr *= 2;
+   }
+
+   // SCHEDULER: Multithreaded pipeline.
+   pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+   pthread_cond_t  cond  = PTHREAD_COND_INITIALIZER;
+   mtcont_t control = {.mutex = &mutex, .cond = &cond, .nthreads = 0 };
+
+   // Bridge stacks.
+   sstack_t ** pipein = NULL;
+   sstack_t ** pipebuf = malloc((nexpr-1) * sizeof(sstack_t *));
+   for (int i = 0; i < nexpr; i++) {
+      // Bridge stacks.
+      sstack_t ** pipeout;
+      if (i < nexpr - 1) {
+         pipebuf[i] = new_sstack(INITIAL_STACK_SIZE);
+         pipeout = pipebuf + i;
+      } else {
+         pipeout = NULL;
+      }
+      seeqarg_t * args = malloc(sizeof(seeqarg_t));
+      args->options = options;
+      args->dist    = dist_flag;
+      args->expr    = expr[i];
+      args->data    = data;
+      args->isize   = isize;
+      args->stckin  = pipein;
+      args->stckout = pipeout;
+      args->control = &control;
+
+      // Connect next node.
+      pipein = pipeout;
+
+      // Create new thread.
+      pthread_t newthread;
+      pthread_mutex_lock(&mutex);
+      control.nthreads++;
+      pthread_create(&newthread, NULL, seeq, (void *) args);
+      pthread_detach(newthread);
+
+      // Monitor.
+      while (control.nthreads == threads_flag) {
+         pthread_cond_wait(&cond, &mutex);
+      }
+      pthread_mutex_unlock(&mutex);
+   }
+
+   pthread_mutex_lock(&mutex);
+   while (control.nthreads > 0) {
+      pthread_cond_wait(&cond, &mutex);
+   }
+   pthread_mutex_unlock(&mutex);
+
+
    return 0;
 }

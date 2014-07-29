@@ -1,47 +1,31 @@
 #include "seeq.h"
 
-void
+void *
 seeq
 (
- char * expression,
- char * input,
- struct seeqarg_t args
+ void * argsp
 )
 {
-   int verbose = args.verbose;
-
    //----- PARSE PARAMS -----
-   int tau = args.dist;
-   if (input == NULL) {
-      fprintf(stderr, "error: input file not specified.\n");
-      exit(1);
-   }
+   struct seeqarg_t * args = (struct seeqarg_t *) argsp;
 
-   if (verbose) fprintf(stderr, "loading input file\n");
+   char * data = args->data;
+   char * expr = args->expr;
+   int verbose = args->options & OPTION_VERBOSE;
+   int tau     = args->dist;
+   unsigned long isize = args->isize;
 
-   int fdi = open(input, O_RDWR);
-
-   if (fdi == -1) {
-      fprintf(stderr,"error: could not open file: %s\n\n", strerror(errno));
-      exit(1);
-   }
-
-   unsigned long isize = lseek(fdi, 0, SEEK_END);
-   lseek(fdi, 0, SEEK_SET);
-   
-   // Map file to memory.
-   char * data = (char *) mmap(NULL, isize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_POPULATE, fdi, 0);
-
-   if (data == MAP_FAILED) {
-      fprintf(stderr, "error loading data into memory (mmap): %s\n", strerror(errno));
-      exit(EXIT_FAILURE);
+   // Input stack mutex.
+   pthread_mutex_t * stckinmutex = NULL;
+   if (args->stckin != NULL) {
+      stckinmutex = args->stckin[0]->mutex;
    }
 
    if (verbose) fprintf(stderr, "parsing pattern\n");
 
    // ----- COMPUTE DFA -----
    char * keys;
-   int    wlen = parse(expression, &keys);
+   int    wlen = parse(expr, &keys);
    int    rows = tau + 1;
    int    cols = wlen + 1;
    int    nstat= cols*rows;
@@ -65,42 +49,33 @@ seeq
 
    dfa_t * dfa, * rdfa;
    btrie_t * trie, * rtrie;
-   if (!args.precompute) {
-      dfa = malloc(INITIAL_DFA_SIZE * sizeof(dfa_t));
-      rdfa = malloc(INITIAL_DFA_SIZE * sizeof(dfa_t));
-      // Initialize R/DFA for step building.
-      int * dfa_st = (int *) dfa;
-      int * dfa_sz = dfa_st + 1;
-      int * rdfa_st = (int *) rdfa;
-      int * rdfa_sz = rdfa_st + 1;
-      *dfa_st = *rdfa_st =  0;
-      *dfa_sz = *rdfa_sz = INITIAL_DFA_SIZE;
-      // Initialize state 1.
-      state_t new = {.state = DFA_COMPUTE, .match = rows};
-      for (int i = 0; i < NBASES; i++) {
-         dfa[1].next[i] = new;
-         rdfa[1].next[i] = new;
-      }
-      // Initialize tries.
-      trie  = trie_new(INITIAL_TRIE_SIZE, nstat - rows);
-      rtrie = trie_new(INITIAL_TRIE_SIZE, nstat - rows);
-      // Insert state 1.
-      char * matrix = calloc(nstat-rows, sizeof(char));
-      setactive(rows, cols, 0, matrix);
-      unsigned int * leafp = trie_insert(trie, matrix, ++(*dfa_st));
-      unsigned int leaf = leafp - (unsigned int *) trie->root; // bnode_t has 3 ints.
-      dfa[1].trie_leaf = leaf;
-      leafp = trie_insert(rtrie, matrix, ++(*rdfa_st));
-      leaf = leafp - (unsigned int *) rtrie->root;
-      rdfa[1].trie_leaf = leaf;
-   } else {
-      // Compute DFA and RDFA.
-      dfa = build_dfa(rows, nstat, keys, DFA_FORWARD);
-      rdfa = build_dfa(rows, nstat, rkeys, DFA_REVERSE);
-      // NULL tries.
-      trie  = NULL;
-      rtrie = NULL;
+   dfa = malloc(INITIAL_DFA_SIZE * sizeof(dfa_t));
+   rdfa = malloc(INITIAL_DFA_SIZE * sizeof(dfa_t));
+   // Initialize R/DFA for step building.
+   int * dfa_st = (int *) dfa;
+   int * dfa_sz = dfa_st + 1;
+   int * rdfa_st = (int *) rdfa;
+   int * rdfa_sz = rdfa_st + 1;
+   *dfa_st = *rdfa_st =  0;
+   *dfa_sz = *rdfa_sz = INITIAL_DFA_SIZE;
+   // Initialize state 1.
+   state_t new = {.state = DFA_COMPUTE, .match = rows};
+   for (int i = 0; i < NBASES; i++) {
+      dfa[1].next[i] = new;
+      rdfa[1].next[i] = new;
    }
+   // Initialize tries.
+   trie  = trie_new(INITIAL_TRIE_SIZE, nstat - rows);
+   rtrie = trie_new(INITIAL_TRIE_SIZE, nstat - rows);
+   // Insert state 1.
+   char * matrix = calloc(nstat-rows, sizeof(char));
+   setactive(rows, cols, 0, matrix);
+   unsigned int * leafp = trie_insert(trie, matrix, ++(*dfa_st));
+   unsigned int leaf = leafp - (unsigned int *) trie->root; // bnode_t has 3 ints.
+   dfa[1].trie_leaf = leaf;
+   leafp = trie_insert(rtrie, matrix, ++(*rdfa_st));
+   leaf = leafp - (unsigned int *) rtrie->root;
+   rdfa[1].trie_leaf = leaf;
 
    // ----- PROCESS FILE -----
    // Read and update
@@ -111,10 +86,32 @@ seeq
    unsigned long linestart = 0;
    unsigned long count = 0;
 
+   // Parse format options.
+   int f_count = args->options & OPTION_COUNT;
+   int f_sline = args->options & OPTION_SHOWLINE;
+   int f_spos  = args->options & OPTION_SHOWPOS;
+   int f_sdist = args->options & OPTION_SHOWDIST;
+   int f_match = args->options & OPTION_MATCHONLY;
+   int f_endl  = args->options & OPTION_ENDLINE;
+   int f_pline = args->options & OPTION_PRINTLINE;
+   int f_comp  = args->options & OPTION_COMPACT;
+
    if (verbose) fprintf(stderr, "processing data\n");
 
+   long k = 0;
+   long lastcount = 0;
+   // Piped input.
+   if (args->stckin != NULL) {
+      pthread_mutex_lock(stckinmutex);
+      k = pop(args->stckin);
+      pthread_mutex_unlock(stckinmutex);
+      // Break if EOF flag is received.
+      if (k == MSG_EOF) k = isize;
+   }
+
    // DFA state.
-   for (unsigned long k = 0; k < isize; k++, i++) {
+   for (; k < isize; k++, i++) {
+
       // Update DFA.
       state_t next  = dfa[current_node].next[(int)translate[(int)data[k]]];
       if (next.state == -1) next = build_dfa_step(rows, nstat, current_node, (int)data[k], &dfa, trie, keys, DFA_FORWARD);
@@ -129,11 +126,11 @@ seeq
          data[k] = 0;
 
          // FORMAT OUTPUT (quite crappy)
-         if (args.count) {
+         if (f_count) {
             count++;
          } else {
             long j = 0;
-            if (args.showpos || args.compact || args.matchonly) {
+            if (args->options >= OPTION_RDFA) {
                int rnode = 1;
                int d = tau + 1;
                // Find match start with RDFA.
@@ -148,19 +145,19 @@ seeq
                // Compute match length and print match.
                j = i - j;
             }
-            if (args.compact) {
+            if (f_comp) {
                fprintf(stdout, "%lu:%ld-%ld:%d\n",lines, j, i-1, streak_dist);
             } else {
-               if (args.showline) fprintf(stdout, "%lu ", lines);
-               if (args.showpos)  fprintf(stdout, "%ld-%ld ", j, i-1);
-               if (args.showdist) fprintf(stdout, "%d ", streak_dist);
-               if (args.matchonly) {
+               if (f_sline) fprintf(stdout, "%lu ", lines);
+               if (f_spos)  fprintf(stdout, "%ld-%ld ", j, i-1);
+               if (f_sdist) fprintf(stdout, "%d ", streak_dist);
+               if (f_match) {
                   data[linestart+i] = 0;
                   fprintf(stdout, "%s", data+linestart+j);
-               } else if (args.endline) {
+               } else if (f_endl) {
                   fprintf(stdout, "%s", data+linestart+i);
-               } else if (args.printline) {
-                  if(isatty(fileno(stdout)) && args.showpos) {
+               } else if (f_pline) {
+                  if(isatty(fileno(stdout)) && f_spos) {
                      char tmp = data[linestart + j];
                      data[linestart+j] = 0;
                      fprintf(stdout, "%s", data+linestart);
@@ -182,6 +179,25 @@ seeq
       }
 
       if (data[k] == '\n') {
+         // If last line did not match, forward to next DFA.
+         if (args->stckout != NULL) {
+            if (count == lastcount) {
+               push(args->stckout, linestart);
+            }
+         }
+
+         // Piped input wait.
+         if (args->stckin != NULL) {
+            // Need to take mutex before dereferencing stckin to make it fully thread safe!
+            pthread_mutex_lock(stckinmutex);
+            k = pop(args->stckin);
+            pthread_mutex_unlock(stckinmutex);
+            // Break if EOF flag is received.
+            if (k == MSG_EOF) break;
+            k--;
+         }
+
+         // Reset line variables.
          linestart = k + 1;
          i = -1;
          lines++;
@@ -191,9 +207,29 @@ seeq
 
    }
 
-   if (args.count) fprintf(stdout, "%lu\n", count);
+   if (f_count) fprintf(stdout, "%lu\n", count);
+   
+   // Flag EOF.
+   if (args->stckout != NULL) seteof(args->stckout[0]);
+
+   // Free DFA.
    free(rdfa);
    free(dfa);
+
+   // Decrement num threads.
+   pthread_mutex_lock(args->control->mutex);
+   args->control->nthreads--;
+   pthread_cond_signal(args->control->cond);
+   pthread_mutex_unlock(args->control->mutex);
+
+   // Free expression buffer.
+   free(expr);
+   // Free pipein.
+   if (args->stckin != NULL) free(args->stckin[0]);
+   // Free seeqargs.
+   free(args);
+
+   return NULL;
 }
 
 
@@ -229,144 +265,6 @@ parse
    
    if (add == 1) return 0;
    else return l;
-}
-
-dfa_t *
-build_dfa
-(
- int         rows,
- int         nstat,
- char      * exp,
- int         reverse
-)
-{
-   // Columns.
-   int cols = nstat / rows;
-
-   // Create DFA and trie.
-   btrie_t * trie = trie_new(INITIAL_TRIE_SIZE, nstat - rows);
-   dfa_t   * dfa  = malloc(INITIAL_DFA_SIZE*sizeof(dfa_t));
-
-   // DFA control vars.
-   int state = 0;
-   int size  = INITIAL_DFA_SIZE;
-   
-   // Initialize job stack.
-   jstack_t * stack = new_jstack(INITIAL_STACK_SIZE);
-
-   // Activate initial state.
-   char * startmatrix = calloc(nstat, sizeof(char));
-   setactive(rows, cols, 0, startmatrix);
-   // Add initial job.
-   job_t start = {.nfa_state = startmatrix, .link = 0};
-   push(&stack, start);
-
-   while(stack->p > 0) {
-      // Pop new job from stack.
-      job_t job = pop(stack);
-
-      // Check if realloc is needed before dereferencing.
-      if (state + 1 >= size) {
-         size *= 2;
-         dfa = realloc(dfa, size * sizeof(dfa_t));
-         if (dfa == NULL) {
-            fprintf(stderr, "error (realloc) dfa in build_dfa: %s\n", strerror(errno));
-            exit(1);
-         }
-      }
-
-      // Take job parameters.
-      char * matrix = job.nfa_state;
-      int  * link   = ((int *) dfa) + job.link;
-
-      // If I already exist, send my parent somewhere else.
-      int exists = trie_search(trie, matrix);
-      if (exists) {
-         *link = exists;
-         continue;
-      }
-
-      // Let's register this node before we start.
-      // If we find that is empty we'll return it to
-      // the DFA before finishing the job.
-      state++;
-
-      // Compute all possible updates.
-      int empty_node = 1;
-      for (int i = 0; i < NBASES; i++) {
-         // Reset matrix.
-         char * newmatrix = calloc(nstat, sizeof(char));
-         int    newcount  = 0;
-         int    value     = 1 << i;
-
-         for (int j = 0; j < nstat - rows; j++) {
-            // Not active, continue.
-            if (!matrix[j]) continue;
-            // Match.
-            if ((exp[j/rows] & value) > 0)
-               newcount += setactive(rows, cols, j + rows, newmatrix);
-            // Mismatch but not in the last row.
-            else if (j % rows < rows - 1) {
-               newcount += setactive(rows, cols, j + 1, newmatrix);
-               newcount += setactive(rows, cols, j + rows + 1, newmatrix);
-            }
-         }
-
-         // Epsilon at node 0.
-         if (!reverse) newcount += setactive(rows, cols, 0, newmatrix);
-
-         if (newcount == 0) {
-            dfa[state].next[i].match = rows;
-            dfa[state].next[i].state = 0;
-            continue;
-         }
-
-         // The node is not empty, now we can link to parent
-         // and add to trie.
-         if (empty_node) {
-            empty_node = 0;
-            *link = state;
-            trie_insert(trie, matrix, state);
-         }
-
-         // Check match.
-         int m = 0;
-         int offset = nstat - rows;
-         for (; m < rows; m++) if (newmatrix[offset + m]) break;
-
-         // Save match value.
-         dfa[state].next[i].match = m;
-
-         // Check if this state already exists.
-         exists = trie_search(trie, newmatrix);
-
-         if (exists) {
-            // If exists, just link with the existing state.
-            // No new jobs will be created.
-            dfa[state].next[i].state = exists;
-         } else {
-            // Create job and push to stack.
-            int offset   = (int *)&(dfa[state].next[i].state) - (int *)dfa;
-            job_t newjob = {.nfa_state = newmatrix, .link = offset};
-            push(&stack, newjob);
-         }
-      }
-   
-      if (empty_node) {
-         // Unregister node if empty.
-         *link = 0;
-         state--;
-      }
-      free(matrix);
-   }
-   
-   // Free stack and trie.
-   trie_free(trie);
-   free(stack);
-
-   // Resize DFA and return.
-   dfa = realloc(dfa, (state+1)*sizeof(dfa_t));
-   return dfa;
 }
 
 state_t
@@ -635,49 +533,148 @@ setactive
    else return 1;
 }
 
-jstack_t *
-new_jstack
+sstack_t *
+new_sstack
 (
- int elements
+ int nelements
 )
 {
-   if (elements < 1) elements = 1;
-   jstack_t * stack = malloc(sizeof(jstack_t) + elements*sizeof(job_t));
-   if (stack == NULL) {
-      fprintf(stderr, "error (malloc) jstack_t in new_jstack: %s\n", strerror(errno));
+   // Allocate stack.
+   sstack_t * sstack = malloc(sizeof(sstack_t) + nelements*sizeof(long));
+   if (sstack == NULL) {
+      fprintf(stderr, "error (malloc) sstack in 'new_sstack': %s\n", strerror(errno));
       exit(1);
    }
-   stack->p = 0;
-   stack->l = elements;
-   return stack;
+   sstack->p = 0;
+   sstack->l = nelements;
+
+   // Create monitor.
+   pthread_mutex_t * mutex = malloc(sizeof(pthread_mutex_t));
+   if (mutex == NULL) {
+      fprintf(stderr, "error (malloc) mutex in 'new_sstack': %s\n", strerror(errno));
+      exit(1);
+   }
+   pthread_mutex_init(mutex, NULL);
+   sstack->mutex = mutex;
+   
+   pthread_cond_t * cond   = malloc(sizeof(pthread_cond_t));
+   if (cond == NULL) {
+      fprintf(stderr, "error (malloc) cond in 'new_sstack': %s\n", strerror(errno));
+      exit(1);
+   }
+   pthread_cond_init(cond, NULL);
+   sstack->cond = cond;
+
+   sstack->eof = 0;
+
+   return sstack;
 }
 
 void
 push
 (
- jstack_t ** stackp,
- job_t       job
-)
+ sstack_t ** stackp,
+ long        value
+ )
 {
-   jstack_t * stack = *stackp;
+   sstack_t * stack = *stackp;
+   pthread_mutex_lock(stack->mutex);
    if (stack->p >= stack->l) {
-      size_t newsize = 2*stack->l;
-      *stackp = stack = realloc(stack, sizeof(jstack_t)+newsize*sizeof(job_t));
+      stack->l *= 2;
+      *stackp = stack = realloc(stack, sizeof(sstack_t) + stack->l*sizeof(long));
       if (stack == NULL) {
-         fprintf(stderr, "error (realloc) jstack_t in push: %s\n", strerror(errno));
+         fprintf(stderr, "error (realloc) sstack_t in 'push': %s\n", strerror(errno));
          exit(1);
       }
-      stack->l = newsize;
    }
 
-   stack->job[stack->p++] = job;
+   stack->val[stack->p++] = value;
+   pthread_cond_signal(stack->cond);
+   pthread_mutex_unlock(stack->mutex);
 }
 
-job_t
+long
 pop
 (
- jstack_t * stack
+ sstack_t ** stackp
+)
+// This function must be called with the mutex LOCKED!
+{
+   sstack_t * stack = *stackp;
+
+   while (stack->p == 0) {
+      if (stack->eof == 1) return MSG_EOF;
+      pthread_cond_wait(stack->cond, stack->mutex);
+      // Just in case a realloc happened while waiting.
+      stack = *stackp;
+   }
+   long value = stack->val[--stack->p];
+
+   return value;
+}
+
+void
+seteof
+(
+ sstack_t * stack
+)
+{ 
+   pthread_mutex_lock(stack->mutex);
+   stack->eof = 1;
+   pthread_cond_signal(stack->cond);
+   pthread_mutex_unlock(stack->mutex);
+}
+char **
+read_expr_file
+(
+ char * file,
+ int  * nexpr
 )
 {
-   return stack->job[--(stack->p)];
+   FILE * input = fopen(file, "r");
+   if (input == NULL) {
+      fprintf(stderr, "error: could not open pattern file: %s\n", strerror(errno));
+      exit(1);
+   }
+   
+   *nexpr = 0;
+   size_t  size = INITIAL_STACK_SIZE;
+   char ** expr = malloc(size*sizeof(char *));
+   char *  line = malloc(INITIAL_LINE_SIZE);
+
+   if (expr == NULL || line == NULL) {
+      fprintf(stderr, "error (malloc) in 'read_expr_file': %s\n", strerror(errno));
+      exit(1);
+   }
+   
+   ssize_t nread;
+   while((nread = getline(&line, &size, input)) != -1) {
+      if (line[nread-1] == '\n') line[nread-1] = 0;
+      char * newexp = malloc(nread);
+      strcpy(newexp, line);
+      expr[(*nexpr)++] = newexp;
+   }
+   
+   expr = realloc(expr, (*nexpr) * sizeof(char *));
+   return expr;
+}
+
+char *
+reverse_pattern
+(
+ char * expr
+)
+{
+   int len = strlen(expr);
+   char * reverse = malloc(len+1);
+   for (int i = 0; i < len; i++) {
+      reverse[i] = translate_reverse[(int)expr[len - 1 - i]];
+      if (reverse[i] == 'X') {
+         fprintf(stderr, "error: invalid pattern: %s\n", expr);
+         exit(1);
+      }
+   }
+   reverse[len] = 0;
+
+   return reverse;
 }
