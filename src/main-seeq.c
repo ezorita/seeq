@@ -5,7 +5,7 @@ char *USAGE = "Usage:\n"
 "    -v --verbose             verbose\n"
 "    -i --input <file>        match using multiple patterns from a file\n"
 "    -d --distance            maximum Levenshtein distance (default 0)\n"
-"    -t --threads             maximum number of threads\n"
+"    -t --threads             maximum number of threads (default 1)\n"
 "    -c --count               show only match count\n"
 "    -r --reverse-complement  match also the reverse complements\n"
 "    -m --match-only          print only the matching string\n"
@@ -350,7 +350,7 @@ main(
          pipeout = NULL;
       }
       seeqarg_t * args = malloc(sizeof(seeqarg_t));
-      args->options = options;
+      args->options = options | (reverse_flag && i >= nexpr/2 ? OPTION_REVCOMP : 0) ;
       args->dist    = dist_flag;
       args->expr    = expr[i];
       args->data    = data;

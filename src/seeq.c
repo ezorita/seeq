@@ -123,12 +123,11 @@ seeq
          streak_dist   = next.match;
       } else if (streak_dist < next.match) { 
          while (data[k] != '\n' && k < isize) k++;
-         data[k] = 0;
+         count++;
 
          // FORMAT OUTPUT (quite crappy)
-         if (f_count) {
-            count++;
-         } else {
+         if (!f_count) {
+            data[k] = 0;
             long j = 0;
             if (args->options >= OPTION_RDFA) {
                int rnode = 1;
@@ -174,8 +173,9 @@ seeq
                }
                fprintf(stdout, "\n");
             }
+         
+            data[k] = '\n';
          }
-         data[k] = '\n';
       }
 
       if (data[k] == '\n') {
@@ -184,6 +184,7 @@ seeq
             if (count == lastcount) {
                push(args->stckout, linestart);
             }
+            lastcount = count;
          }
 
          // Piped input wait.
@@ -207,7 +208,15 @@ seeq
 
    }
 
-   if (f_count) fprintf(stdout, "%lu\n", count);
+   if (f_count) {
+      if (args->options & OPTION_REVCOMP) {
+         char * rev = reverse_pattern(args->expr);
+         fprintf(stdout, "%s*\t%lu\n", rev, count);
+         free(rev);
+      } else {
+         fprintf(stdout, "%s\t%lu\n", args->expr, count);
+      }
+   }
    
    // Flag EOF.
    if (args->stckout != NULL) seteof(args->stckout[0]);

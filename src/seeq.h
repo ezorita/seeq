@@ -43,6 +43,7 @@ typedef struct seeqarg_t seeqarg_t;
 #define OPTION_VERBOSE   0x00000010
 #define OPTION_PRECOMP   0x00000020
 #define OPTION_ENDLINE   0x00000040
+#define OPTION_REVCOMP   0x00000080
 // Let these 3 be the greatest values
 #define OPTION_COMPACT   0x00000100
 #define OPTION_SHOWPOS   0x00000200
