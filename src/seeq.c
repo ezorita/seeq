@@ -103,8 +103,12 @@ seeq
    // Piped input.
    if (args->stckin != NULL) {
       pthread_mutex_lock(stckinmutex);
-      k = pop(args->stckin);
+      filepos_t jump = pop(args->stckin);
       pthread_mutex_unlock(stckinmutex);
+      // Update position.
+      k = jump.offset;
+      lines = jump.line;
+      linestart = k;
       // Break if EOF flag is received.
       if (k == MSG_EOF) k = isize;
    }
@@ -147,33 +151,34 @@ seeq
             if (f_comp) {
                fprintf(stdout, "%lu:%ld-%ld:%d\n",lines, j, i-1, streak_dist);
             } else {
-               if (f_sline) fprintf(stdout, "%lu ", lines);
-               if (f_spos)  fprintf(stdout, "%ld-%ld ", j, i-1);
-               if (f_sdist) fprintf(stdout, "%d ", streak_dist);
+               char buffer[STRLEN_POSITION+STRLEN_LINENO+STRLEN_DISTANCE+k-linestart+3];
+               int  off = 0;
+               if (f_sline) off += sprintf(buffer+off, "%lu ", lines);
+               if (f_spos)  off += sprintf(buffer+off, "%ld-%ld ", j, i-1);
+               if (f_sdist) off += sprintf(buffer+off, "%d ", streak_dist);
                if (f_match) {
                   data[linestart+i] = 0;
-                  fprintf(stdout, "%s", data+linestart+j);
+                  off += sprintf(buffer+off, "%s", data+linestart+j);
                } else if (f_endl) {
-                  fprintf(stdout, "%s", data+linestart+i);
+                  off += sprintf(buffer+off, "%s", data+linestart+i);
                } else if (f_pline) {
                   if(isatty(fileno(stdout)) && f_spos) {
                      char tmp = data[linestart + j];
                      data[linestart+j] = 0;
-                     fprintf(stdout, "%s", data+linestart);
+                     off += sprintf(buffer+off, "%s", data+linestart);
                      data[linestart+j] = tmp;
                      tmp = data[linestart+i];
                      data[linestart+i] = 0;
-                     fprintf(stdout, (streak_dist > 0 ? BOLDRED : BOLDGREEN));
-                     fprintf(stdout, "%s" RESET, data+linestart+j);
+                     off += sprintf(buffer+off, (streak_dist > 0 ? BOLDRED : BOLDGREEN));
+                     off += sprintf(buffer+off, "%s" RESET, data+linestart+j);
                      data[linestart+i] = tmp;
-                     fprintf(stdout, "%s", data+linestart+i);
+                     off += sprintf(buffer+off, "%s", data+linestart+i);
                   } else {
-                     fprintf(stdout, "%s", data+linestart);
+                     off += sprintf(buffer+off, "%s", data+linestart);
                   }
                }
-               fprintf(stdout, "\n");
+               fprintf(stdout, "%s\n", buffer);
             }
-         
             data[k] = '\n';
          }
       }
@@ -182,7 +187,8 @@ seeq
          // If last line did not match, forward to next DFA.
          if (args->stckout != NULL) {
             if (count == lastcount) {
-               push(args->stckout, linestart);
+               filepos_t current = {.offset = linestart, .line = lines};
+               push(args->stckout, current);
             }
             lastcount = count;
          }
@@ -191,8 +197,11 @@ seeq
          if (args->stckin != NULL) {
             // Need to take mutex before dereferencing stckin to make it fully thread safe!
             pthread_mutex_lock(stckinmutex);
-            k = pop(args->stckin);
+            filepos_t jump = pop(args->stckin);
             pthread_mutex_unlock(stckinmutex);
+            // Update position.
+            k = jump.offset;
+            lines = jump.line - 1;
             // Break if EOF flag is received.
             if (k == MSG_EOF) break;
             k--;
@@ -549,7 +558,7 @@ new_sstack
 )
 {
    // Allocate stack.
-   sstack_t * sstack = malloc(sizeof(sstack_t) + nelements*sizeof(long));
+   sstack_t * sstack = malloc(sizeof(sstack_t) + nelements*sizeof(filepos_t));
    if (sstack == NULL) {
       fprintf(stderr, "error (malloc) sstack in 'new_sstack': %s\n", strerror(errno));
       exit(1);
@@ -582,15 +591,15 @@ new_sstack
 void
 push
 (
- sstack_t ** stackp,
- long        value
+ sstack_t  ** stackp,
+ filepos_t    value
  )
 {
    sstack_t * stack = *stackp;
    pthread_mutex_lock(stack->mutex);
    if (stack->p >= stack->l) {
       stack->l *= 2;
-      *stackp = stack = realloc(stack, sizeof(sstack_t) + stack->l*sizeof(long));
+      *stackp = stack = realloc(stack, sizeof(sstack_t) + stack->l*sizeof(filepos_t));
       if (stack == NULL) {
          fprintf(stderr, "error (realloc) sstack_t in 'push': %s\n", strerror(errno));
          exit(1);
@@ -602,7 +611,7 @@ push
    pthread_mutex_unlock(stack->mutex);
 }
 
-long
+filepos_t
 pop
 (
  sstack_t ** stackp
@@ -612,12 +621,15 @@ pop
    sstack_t * stack = *stackp;
 
    while (stack->p == 0) {
-      if (stack->eof == 1) return MSG_EOF;
+      if (stack->eof == 1) {
+         filepos_t eofflag = {.offset = MSG_EOF, .line = MSG_EOF};
+         return eofflag;
+      }
       pthread_cond_wait(stack->cond, stack->mutex);
       // Just in case a realloc happened while waiting.
       stack = *stackp;
    }
-   long value = stack->val[--stack->p];
+   filepos_t value = stack->val[--stack->p];
 
    return value;
 }
@@ -633,6 +645,8 @@ seteof
    pthread_cond_signal(stack->cond);
    pthread_mutex_unlock(stack->mutex);
 }
+
+
 char **
 read_expr_file
 (

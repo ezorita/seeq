@@ -291,12 +291,12 @@ main(
 
    // mmap file.
    if (verbose_flag) fprintf(stderr, "loading input file\n");
-   int fdi = open(input, O_RDWR);
+   int fdi = open(input, O_RDONLY);
    if (fdi == -1) {
       fprintf(stderr,"error: could not open file: %s\n\n", strerror(errno));
       exit(1);
    }
-   unsigned long isize = lseek(fdi, 0, SEEK_END);
+   unsigned long isize = lseek(fdi, 0, SEEK_END) + 1;
    lseek(fdi, 0, SEEK_SET);
    // Map file to memory.
    char * data = (char *) mmap(NULL, isize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_POPULATE, fdi, 0);
@@ -304,6 +304,9 @@ main(
       fprintf(stderr, "error loading data into memory (mmap): %s\n", strerror(errno));
       exit(EXIT_FAILURE);
    }
+
+   // Append a newline character to the last line.
+   data[isize-1] = '\n';
 
    // Expression vector.
    int nexpr;

@@ -34,6 +34,7 @@ typedef struct jstack_t jstack_t;
 typedef struct sstack_t sstack_t;
 typedef struct mtcont_t mtcont_t;
 typedef struct seeqarg_t seeqarg_t;
+typedef struct filepos_t filepos_t;
 
 // Format options
 #define OPTION_SHOWDIST  0x00000001
@@ -63,13 +64,18 @@ struct seeqarg_t {
 
 #define MSG_EOF   -1L
 
+struct filepos_t {
+   long offset;
+   long line;
+};
+
 struct sstack_t {
    pthread_mutex_t * mutex;
    pthread_cond_t  * cond;
    int               eof;
    long              p;
    long              l;
-   long              val[];
+   filepos_t         val[];
 };
 
 struct mtcont_t {
@@ -133,12 +139,18 @@ char * trie_getpath(btrie_t *, unsigned int);
 void trie_reset(btrie_t *);
 void trie_free(btrie_t *);
 sstack_t * new_sstack(int);
-void push(sstack_t**, long);
-long pop(sstack_t**);
+void push(sstack_t**, filepos_t);
+filepos_t pop(sstack_t**);
 void seteof(sstack_t *);
 char ** read_expr_file(char*, int*);
 char * reverse_pattern(char*);
 
+
+// Print definitions
+#define STRLEN_LONG      15
+#define STRLEN_POSITION  STRLEN_LONG+STRLEN_LONG+2
+#define STRLEN_LINENO    STRLEN_LONG+1
+#define STRLEN_DISTANCE  3
 #define RESET   "\033[0m"
 #define BOLDRED     "\033[1m\033[31m"      /* Bold Red */
 #define BOLDGREEN   "\033[1m\033[32m"      /* Bold Green */
