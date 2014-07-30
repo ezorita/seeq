@@ -281,7 +281,6 @@ main(
    options |= showline_flag   << 1;
    options |= printline_flag  << 2;
    options |= count_flag      << 3;
-   options |= verbose_flag    << 4;
    options |= precompute_flag << 5;
    options |= endline_flag    << 6;
    // These 3 must be the greatest (RDFA conditional).
@@ -313,6 +312,7 @@ main(
    char ** expr;
 
    // Create expression vector.
+   if (verbose_flag) fprintf(stderr, "reading patterns\n");
    if (input_flag) {
       // Read expression file
       expr = read_expr_file(expfile, &nexpr);
@@ -326,6 +326,7 @@ main(
    }
    
    if (reverse_flag) {
+      if (verbose_flag) fprintf(stderr, "computing reverse complements\n");
       expr = realloc(expr, 2*nexpr * sizeof(char *));
       if (expr == NULL) {
          fprintf(stderr, "error (realloc) in 'main:reverse_flag': %s\n", strerror(errno));
@@ -372,6 +373,8 @@ main(
       pthread_create(&newthread, NULL, seeq, (void *) args);
       pthread_detach(newthread);
 
+      if (verbose_flag) fprintf(stderr, "\rseeq progress: %d/%d", i, nexpr);
+
       // Monitor.
       while (control.nthreads == threads_flag) {
          pthread_cond_wait(&cond, &mutex);
@@ -384,6 +387,7 @@ main(
       pthread_cond_wait(&cond, &mutex);
    }
    pthread_mutex_unlock(&mutex);
+   if (verbose_flag) fprintf(stderr, "\rseeq progress: %d/%d\n",nexpr, nexpr);
 
 
    return 0;

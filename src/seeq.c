@@ -11,7 +11,6 @@ seeq
 
    char * data = args->data;
    char * expr = args->expr;
-   int verbose = args->options & OPTION_VERBOSE;
    int tau     = args->dist;
    unsigned long isize = args->isize;
 
@@ -20,8 +19,6 @@ seeq
    if (args->stckin != NULL) {
       stckinmutex = args->stckin[0]->mutex;
    }
-
-   if (verbose) fprintf(stderr, "parsing pattern\n");
 
    // ----- COMPUTE DFA -----
    char * keys;
@@ -39,8 +36,6 @@ seeq
       fprintf(stderr, "error: expression must be longer than the maximum distance.\n");
       exit(1);
    }
-
-   if (verbose) fprintf(stderr, "building DFA\n");
 
    // Reverse the query and build reverse DFA.
    char * rkeys = malloc(wlen);
@@ -96,8 +91,7 @@ seeq
    int f_pline = args->options & OPTION_PRINTLINE;
    int f_comp  = args->options & OPTION_COMPACT;
 
-   if (verbose) fprintf(stderr, "processing data\n");
-
+   // Process file
    long k = 0;
    long lastcount = 0;
    // Piped input.
