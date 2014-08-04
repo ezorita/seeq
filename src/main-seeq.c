@@ -4,16 +4,18 @@ char *USAGE = "Usage:\n"
 "  seeq [options] (-i patternfile | pattern) inputfile\n"
 "    -v --verbose             verbose\n"
 "    -i --input <file>        match using multiple patterns from a file\n"
-"    -d --distance            maximum Levenshtein distance (default 0)\n"
-"    -t --threads             maximum number of threads (default 1)\n"
+"    -d --distance #          maximum Levenshtein distance (default 0)\n"
+"    -t --threads #           maximum number of threads (default 1)\n"
 "    -c --count               show only match count\n"
 "    -r --reverse-complement  match also the reverse complements\n"
-"    -m --match-only          print only the matching string\n"
 "    -n --no-printline        does not print the matching line\n"
 "    -l --show-line           prints the line number of the match\n"
 "    -p --show-position       shows the position of the match within the matched line\n"
 "    -s --show-dist           prints the Levenshtein distance of the match\n"
 "    -f --compact             prints output in compact format\n"
+"    -u --print-unmatched     print also unmatched lines\n"
+"    -m --match-only          print only the matching string\n"
+"    -b --line-beginning      print only the beginning of the line\n"
 "    -e --line-end            print only the end of the line starting after the match";
 
 
@@ -54,6 +56,8 @@ main(
    int verbose_flag   = -1;
    int precompute_flag = -1;
    int endline_flag   = -1;
+   int begline_flag   = -1;
+   int unmatched_flag = -1;
    int input_flag     = -1;
    int reverse_flag   = -1;
    int threads_flag   = -1;
@@ -77,6 +81,8 @@ main(
          {"verbose",       no_argument, 0, 'v'},
          {"help",          no_argument, 0, 'h'},
          {"line-end",      no_argument, 0, 'e'},
+         {"line-beginning",no_argument, 0, 'b'},
+         {"print-unmatched",no_argument, 0, 'u'},
          {"reverse",       no_argument, 0, 'r'},
          {"threads" ,required_argument, 0, 't'},         
          {"input"   ,required_argument, 0, 'i'},         
@@ -84,7 +90,7 @@ main(
          {0, 0, 0, 0}
       };
 
-      c = getopt_long(argc, argv, "pmnslcfvhert:i:d:",
+      c = getopt_long(argc, argv, "pmnslcfvhuebrt:i:d:",
             long_options, &option_index);
  
       /* Detect the end of the options. */
@@ -131,6 +137,28 @@ main(
          }
          else {
             fprintf(stderr, "verbose option set more than once\n");
+            say_usage();
+            return 1;
+         }
+         break;
+
+      case 'u':
+         if (unmatched_flag < 0) {
+            unmatched_flag = 1;
+         }
+         else {
+            fprintf(stderr, "print-unmatched option set more than once\n");
+            say_usage();
+            return 1;
+         }
+         break;
+
+      case 'b':
+         if (begline_flag < 0) {
+            begline_flag = 1;
+         }
+         else {
+            fprintf(stderr, "line-beginning option set more than once\n");
             say_usage();
             return 1;
          }
@@ -266,11 +294,13 @@ main(
    if (verbose_flag == -1) verbose_flag = 0;
    if (precompute_flag == -1) precompute_flag = 0;
    if (endline_flag == -1) endline_flag = 0;
+   if (begline_flag == -1) begline_flag = 0;
+   if (unmatched_flag == -1) unmatched_flag = 0;
    if (input_flag == -1) input_flag = 0;
    if (reverse_flag == -1) reverse_flag = 0;
    if (threads_flag == -1) threads_flag = 1;
 
-   if (!showdist_flag && !showpos_flag && !printline_flag && !matchonly_flag && !showline_flag && !count_flag && !compact_flag) {
+   if (!showdist_flag && !showpos_flag && !printline_flag && !matchonly_flag && !showline_flag && !count_flag && !compact_flag && !endline_flag && !begline_flag && !unmatched_flag) {
       fprintf(stderr, "Invalid options: No output will be generated.\n");
       exit(1);
    }
@@ -281,13 +311,14 @@ main(
    options |= showline_flag   << 1;
    options |= printline_flag  << 2;
    options |= count_flag      << 3;
+   options |= unmatched_flag  << 4;
    options |= precompute_flag << 5;
    options |= endline_flag    << 6;
    // These 3 must be the greatest (RDFA conditional).
    options |= compact_flag    << 8;
    options |= showpos_flag    << 9;
    options |= matchonly_flag  << 10;
-
+   options |= begline_flag    << 11;
    // mmap file.
    if (verbose_flag) fprintf(stderr, "loading input file\n");
    int fdi = open(input, O_RDONLY);
@@ -298,7 +329,7 @@ main(
    unsigned long isize = lseek(fdi, 0, SEEK_END) + 1;
    lseek(fdi, 0, SEEK_SET);
    // Map file to memory.
-   char * data = (char *) mmap(NULL, isize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_POPULATE, fdi, 0);
+   char * data = (char *) mmap(NULL, isize, PROT_READ | PROT_WRITE, MAP_PRIVATE, fdi, 0);// | MAP_POPULATE, fdi, 0);
    if (data == MAP_FAILED) {
       fprintf(stderr, "error loading data into memory (mmap): %s\n", strerror(errno));
       exit(EXIT_FAILURE);

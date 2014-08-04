@@ -82,14 +82,17 @@ seeq
    unsigned long count = 0;
 
    // Parse format options.
-   int f_count = args->options & OPTION_COUNT;
-   int f_sline = args->options & OPTION_SHOWLINE;
-   int f_spos  = args->options & OPTION_SHOWPOS;
-   int f_sdist = args->options & OPTION_SHOWDIST;
-   int f_match = args->options & OPTION_MATCHONLY;
-   int f_endl  = args->options & OPTION_ENDLINE;
-   int f_pline = args->options & OPTION_PRINTLINE;
-   int f_comp  = args->options & OPTION_COMPACT;
+   const int f_count = args->options & OPTION_COUNT;
+   const int f_sline = args->options & OPTION_SHOWLINE;
+   const int f_spos  = args->options & OPTION_SHOWPOS;
+   const int f_sdist = args->options & OPTION_SHOWDIST;
+   const int f_match = args->options & OPTION_MATCHONLY;
+   const int f_umatch= args->options & OPTION_UNMATCHED;
+   const int f_endl  = args->options & OPTION_ENDLINE;
+   const int f_begl  = args->options & OPTION_BEGLINE;
+   const int f_pline = args->options & OPTION_PRINTLINE;
+   const int f_comp  = args->options & OPTION_COMPACT;
+   const int f_matchoutput = f_sline + f_spos + f_sdist + f_match + f_endl + f_begl + f_pline + f_comp;
 
    // Process file
    long k = 0;
@@ -111,9 +114,24 @@ seeq
    for (; k < isize; k++, i++) {
 
       // Update DFA.
-      state_t next  = dfa[current_node].next[(int)translate[(int)data[k]]];
-      if (next.state == -1) next = build_dfa_step(rows, nstat, current_node, (int)data[k], &dfa, trie, keys, DFA_FORWARD);
-      current_node = next.state;
+      int charin = (int)translate[(int)data[k]];
+      state_t next;
+      if (charin == 6) {
+         while (data[k] != '\n' && k < isize) k++;
+         // Reset line variables.
+         linestart = k + 1;
+         i = -1;
+         lines++;
+         current_node = 1;
+         streak_dist = tau + 1;
+         continue;
+      } else if (charin == 5) {
+         next.match = tau + 1;
+      } else {
+         next  = dfa[current_node].next[charin];
+         if (next.state == -1) next = build_dfa_step(rows, nstat, current_node, (int)data[k], &dfa, trie, keys, DFA_FORWARD);
+         current_node = next.state;
+      }
 
       // Update streak.
       if (streak_dist > next.match) {
@@ -124,7 +142,7 @@ seeq
          count++;
 
          // FORMAT OUTPUT (quite crappy)
-         if (!f_count) {
+         if (!f_count && f_matchoutput) {
             data[k] = 0;
             long j = 0;
             if (args->options >= OPTION_RDFA) {
@@ -151,10 +169,13 @@ seeq
                if (f_spos)  off += sprintf(buffer+off, "%ld-%ld ", j, i-1);
                if (f_sdist) off += sprintf(buffer+off, "%d ", streak_dist);
                if (f_match) {
-                  data[linestart+i] = 0;
+                  data[linestart + i] = 0;
                   off += sprintf(buffer+off, "%s", data+linestart+j);
                } else if (f_endl) {
                   off += sprintf(buffer+off, "%s", data+linestart+i);
+               } else if (f_begl) {
+                  data[linestart + j] = 0;
+                  off += sprintf(buffer+off, "%s", data+linestart);
                } else if (f_pline) {
                   if(isatty(fileno(stdout)) && f_spos) {
                      char tmp = data[linestart + j];
@@ -175,17 +196,23 @@ seeq
             }
             data[k] = '\n';
          }
+
       }
 
-      if (data[k] == '\n') {
+      if (charin == 5) {
          // If last line did not match, forward to next DFA.
-         if (args->stckout != NULL) {
-            if (count == lastcount) {
+         if (count == lastcount) {
+            if (args->stckout != NULL) {
                filepos_t current = {.offset = linestart, .line = lines};
                push(args->stckout, current);
             }
-            lastcount = count;
+            if (f_umatch) {
+               data[k] = 0;
+               fprintf(stdout, "%s\n", data+linestart);
+               data[k] = '\n';
+            }
          }
+         lastcount = count;
 
          // Piped input wait.
          if (args->stckin != NULL) {
@@ -224,9 +251,15 @@ seeq
    // Flag EOF.
    if (args->stckout != NULL) seteof(args->stckout[0]);
 
-   // Free DFA.
-   free(rdfa);
+   // Free expression keys.
+   free(keys);
+   free(rkeys);
+
+   // Free DFAs.
    free(dfa);
+   trie_free(trie);
+   free(rdfa);
+   trie_free(rtrie);
 
    // Decrement num threads.
    pthread_mutex_lock(args->control->mutex);

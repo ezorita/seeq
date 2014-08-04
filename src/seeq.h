@@ -41,7 +41,7 @@ typedef struct filepos_t filepos_t;
 #define OPTION_SHOWLINE  0x00000002
 #define OPTION_PRINTLINE 0x00000004
 #define OPTION_COUNT     0x00000008
-
+#define OPTION_UNMATCHED 0x00000010
 #define OPTION_PRECOMP   0x00000020
 #define OPTION_ENDLINE   0x00000040
 #define OPTION_REVCOMP   0x00000080
@@ -49,6 +49,7 @@ typedef struct filepos_t filepos_t;
 #define OPTION_COMPACT   0x00000100
 #define OPTION_SHOWPOS   0x00000200
 #define OPTION_MATCHONLY 0x00000400
+#define OPTION_BEGLINE   0x00000800
 #define OPTION_RDFA      OPTION_COMPACT
 
 struct seeqarg_t {
@@ -114,8 +115,8 @@ struct dfa_t {
 };
 
 static const int translate[256] = {
-   [0 ... 255] = 4,
-   ['a'] = 0, ['c'] = 1, ['g'] = 2, ['t'] = 3, ['n'] = 4,
+   [0 ... 255] = 6,
+   ['a'] = 0, ['c'] = 1, ['g'] = 2, ['t'] = 3, ['n'] = 4, ['\n'] = 5,
    ['A'] = 0, ['C'] = 1, ['G'] = 2, ['T'] = 3, ['N'] = 4
 };
 
