@@ -4,7 +4,7 @@ void *
 seeq
 (
  void * argsp
-)
+ )
 {
    //----- PARSE PARAMS -----
    struct seeqarg_t * args = (struct seeqarg_t *) argsp;
@@ -43,7 +43,7 @@ seeq
       rkeys[i] = keys[wlen-i-1];
 
    dfa_t * dfa, * rdfa;
-   btrie_t * trie, * rtrie;
+   trie_t * trie, * rtrie;
    dfa = malloc(INITIAL_DFA_SIZE * sizeof(dfa_t));
    rdfa = malloc(INITIAL_DFA_SIZE * sizeof(dfa_t));
    // Initialize R/DFA for step building.
@@ -60,11 +60,12 @@ seeq
       rdfa[1].next[i] = new;
    }
    // Initialize tries.
-   trie  = trie_new(INITIAL_TRIE_SIZE, nstat - rows);
-   rtrie = trie_new(INITIAL_TRIE_SIZE, nstat - rows);
+   trie  = trie_new(INITIAL_TRIE_SIZE, (cols-1)*sizeof(nfanode_t), ((int)1) << rows);
+   rtrie = trie_new(INITIAL_TRIE_SIZE, (cols-1)*sizeof(nfanode_t), ((int)1) << rows);
    // Insert state 1.
-   char * matrix = calloc(nstat-rows, sizeof(char));
-   setactive(rows, cols, 0, matrix);
+   nfanode_t * matrix = calloc(cols - 1, sizeof(nfanode_t));
+   matrix[0] = 1;
+   epsilon(matrix, rows, cols);
    unsigned int * leafp = trie_insert(trie, matrix, ++(*dfa_st));
    unsigned int leaf = leafp - (unsigned int *) trie->root; // bnode_t has 3 ints.
    dfa[1].trie_leaf = leaf;
@@ -129,7 +130,7 @@ seeq
          next.match = tau + 1;
       } else {
          next  = dfa[current_node].next[charin];
-         if (next.state == -1) next = build_dfa_step(rows, nstat, current_node, (int)data[k], &dfa, trie, keys, DFA_FORWARD);
+         if (next.state == -1) next = build_dfa_step(rows, nstat, current_node, charin, &dfa, trie, keys, DFA_FORWARD);
          current_node = next.state;
       }
 
@@ -283,7 +284,7 @@ parse
 (
  char * expr,
  char ** keysp
-)
+ )
 {
    // FIXME: expressions containing unmatched closing brackets
    // do not return -1 as they ought to. Either check the matching
@@ -320,54 +321,61 @@ build_dfa_step
  int        dfa_state,
  int        base,
  dfa_t   ** dfap,
- btrie_t *  trie,
+ trie_t  *  trie,
  char    *  exp,
  int        reverse
-)
+ )
 {
-   int      i     = translate[base];
    int      cols  = nstat/rows;
    dfa_t  * dfa   = *dfap;
    int    * state = (int *) *dfap; // Use dfa[0] as counter.
    int    * size  = state + 1;     // Use dfa[0] + 4B as size.
-   int      value = 1 << i;
-
+   int      value = 1 << base;
+   int      mask  = (1 << rows) - 1;
    // Reset matrix.
-   char * newmatrix = calloc(nstat, sizeof(char));
-   int    newcount  = 0;
+   nfanode_t * newmatrix = calloc(cols, sizeof(nfanode_t));
 
    // Explore the trie backwards to find out the path (NFA status)
-   char * matrix = trie_getpath(trie, dfa[dfa_state].trie_leaf);
+   nfanode_t * matrix = trie_getpath(trie, dfa[dfa_state].trie_leaf);
 
-   for (int j = 0; j < nstat - rows; j++) {
-      // Not active, continue.
-      if (!matrix[j]) continue;
-      // Match.
-      if ((exp[j/rows] & value) > 0)
-         newcount += setactive(rows, cols, j + rows, newmatrix);
-      // Mismatch but not in the last row.
-      else if (j % rows < rows - 1) {
-         newcount += setactive(rows, cols, j + 1, newmatrix);
-         newcount += setactive(rows, cols, j + rows + 1, newmatrix);
+   for (int c = 0; c < cols-1; c++) {
+      nfanode_t column = matrix[c];
+      if ((column &= mask) == 0) continue;
+      char      match  = exp[c] & value;
+      // Match. Copy column.
+      if (match) newmatrix[c + 1] |= column;
+      // Mismatch. Shift column down.
+      else {
+         column <<= 1;
+         newmatrix[c]     |= column;
+         newmatrix[c + 1] |= column;
       }
    }
 
-   // Epsilon at node 0.
-   if (!reverse) newcount += setactive(rows, cols, 0, newmatrix);
-
-   if (newcount == 0) {
-      dfa[dfa_state].next[i].match = rows;
-      dfa[dfa_state].next[i].state = 0;
-      return dfa[dfa_state].next[i];
+   // Activate node 0 in stream mode.
+   if (reverse) {
+      // Epsilon paths.
+      nfanode_t active = 0;
+      for (int c = 0; c < cols; c++) active |= matrix[c];
+      if (!active) {
+         dfa[dfa_state].next[base].match = rows;
+         dfa[dfa_state].next[base].state = 0;
+         return dfa[dfa_state].next[base];
+      }
+   } else {
+      newmatrix[0] |= 1;
    }
+   epsilon(newmatrix, rows, cols);
 
    // Check match.
-   int m = 0;
-   int offset = nstat - rows;
-   for (; m < rows; m++) if (newmatrix[offset + m]) break;
-
+   int       m = rows;
+   nfanode_t matchcol = newmatrix[cols-1];
+   if (matchcol) {
+      m = 0;
+      while (((matchcol >> m) & 1) == 0) m++;
+   }
    // Save match value.
-   dfa[dfa_state].next[i].match = m;
+   dfa[dfa_state].next[base].match = m;
 
    // Check if this state already exists.
    int exists = trie_search(trie, newmatrix);
@@ -375,7 +383,7 @@ build_dfa_step
    if (exists) {
       // If exists, just link with the existing state.
       // No new jobs will be created.
-      dfa[dfa_state].next[i].state = exists;
+      dfa[dfa_state].next[base].state = exists;
    } else {
       // Register new dfa state.
       unsigned int * leafp = trie_insert(trie, newmatrix, ++(*state));
@@ -396,33 +404,53 @@ build_dfa_step
       for (int j = 0; j < NBASES; j++) dfa[*state].next[j] = new;
       dfa[*state].trie_leaf = leaf;
       // Connect states.
-      dfa[dfa_state].next[i].state = *state;
+      dfa[dfa_state].next[base].state = *state;
    }
    free(newmatrix);
    free(matrix);
-   
-   return dfa[dfa_state].next[i];
+
+   return dfa[dfa_state].next[base];
 }
 
 
-btrie_t *
+void
+epsilon
+(
+ nfanode_t * matrix,
+ int rows,
+ int cols
+ )
+{
+   nfanode_t mask = ((unsigned int)1 << rows) - 1;
+   // Epsilon.
+   int i = 0;
+   for (; i < cols - 1; i++) {
+      matrix[i]   &= mask;
+      matrix[i+1] |= (matrix[i] << 1);
+   }
+   matrix[i] &= mask;
+}
+
+trie_t *
 trie_new
 (
  int initial_size,
- int height
-)
+ int height,
+ int branch
+ )
 {
 
    // Allocate at least one node with at least height 1.
    if (initial_size < 1) initial_size = 1;
-   if (height < 1) height = 1;
+   if (height < 2) height = 2;
+   if (branch < 2) branch = 2;
 
-   btrie_t * trie = malloc(sizeof(btrie_t));
+   trie_t * trie = malloc(sizeof(trie_t));
    if (trie == NULL) {
-      fprintf(stderr, "error (malloc) btrie_t in trie_new: %s\n", strerror(errno));
+      fprintf(stderr, "error (malloc) trie_t in trie_new: %s\n", strerror(errno));
       exit(1);
    }
-   trie->root     = calloc(initial_size, sizeof(bnode_t));
+   trie->root     = calloc(initial_size, sizeof(node_t) + branch * sizeof(unsigned int));
    if (trie->root == NULL) {
       fprintf(stderr, "error (malloc) trie root in trie_new: %s\n", strerror(errno));
       exit(1);
@@ -430,24 +458,26 @@ trie_new
    trie->pos = 1;
    trie->size = initial_size;
    trie->height = height;
+   trie->branch = branch;
 
    return trie;
-
 }
 
 
-int
+unsigned int
 trie_search
 (
- btrie_t * trie,
- char    * path
-)
+ trie_t * trie,
+ char   * path
+ )
 {
-   int nodeid = 0;
-   bnode_t * nodes = trie->root;
+   unsigned int   nodeid     = 0;
+   unsigned int   nodeoffset = trie->branch + NODE_OVERHEAD;
+   unsigned int * nodefield  = (unsigned int *) trie->root;
 
    for (int i = 0; i < trie->height; i++) {
-      int next = nodes[nodeid].next[(int)path[i]];
+      node_t * node = (node_t *) (nodefield + nodeoffset*nodeid);
+      unsigned int next = node->next[(unsigned int)path[i]];
       if (next > 0) {
          nodeid = next;
       } else return 0;
@@ -455,27 +485,27 @@ trie_search
    return nodeid;
 }
 
+
 char *
 trie_getpath
 (
-  btrie_t      * trie,
-  unsigned int   leaf
-)
+ trie_t       * trie,
+ unsigned int   leaf
+ )
 {
-   bnode_t * nodes = trie->root;
-   char * path = malloc(trie->height);
-   int i      = trie->height;
+   char * path  = malloc(trie->height);
+   int    i     = trie->height;
+
    // Identify leaf.
-   int node_ints = (sizeof(bnode_t)/sizeof(unsigned int));
-   path[--i] = leaf % node_ints;
-   int current;
-   int parent = leaf / node_ints;
+   unsigned int * nodefield = (unsigned int *) trie->root;
+   unsigned int nodeoffset = trie->branch + NODE_OVERHEAD;
+   unsigned int current = leaf;
+   path[--i] = leaf % nodeoffset - NODE_OVERHEAD;
    do {
-      current = parent;
-      parent = nodes[current].parent;
-      bnode_t  pnode  = nodes[parent];
-      path[--i] = (pnode.next[0] == current ? 0 : 1);
-   } while (parent != 0);
+      node_t * node = (node_t *) (nodefield + (current/nodeoffset) * nodeoffset);
+      current  = node->parent;
+      path[--i] = current % nodeoffset - NODE_OVERHEAD;
+   } while (i > 0);
 
    // Control.
    if (i != 0) {
@@ -490,47 +520,55 @@ trie_getpath
 unsigned int *
 trie_insert
 (
- btrie_t      * trie,
+ trie_t       * trie,
  char         * path,
  unsigned int   value
-)
+ )
 {
 
    // If 'path' is  longer then trie height, the overflow is
    // ignored. If it is shorter, memory error may happen.
    
    int i;
-   int nodeid = 0;
 
-   bnode_t * nodes = trie->root;
+   unsigned int * nodefield  = (unsigned int *) trie->root;
+   unsigned int   nodeoffset = trie->branch + NODE_OVERHEAD;
+
+   // Start at node 0.
+   unsigned int   current = 0;
+   node_t       * node    = (node_t *) nodefield;
 
    for (i = 0; i < trie->height - 1; i++) {
-      int next = nodes[nodeid].next[(int)path[i]];
-      if (next > 0) {
-         nodeid = next;
+      unsigned int next = node->next[(unsigned int)path[i]];
+      if (next) {
+         current = next;
+         node = (node_t *) nodefield + current * nodeoffset;
          continue;
       }
 
       // Create new node.
       if (trie->pos >= trie->size) {
-         trie->size *= 2;
-         trie->root = nodes = realloc(nodes, trie->size*sizeof(bnode_t));
-         if (nodes == NULL) {
+         size_t newsize = trie->size * 2;
+         trie->root = realloc(trie->root, newsize*nodeoffset*sizeof(unsigned int));
+         if (trie->root == NULL) {
             fprintf(stderr, "error (realloc) in trie_insert: %s\n",
-                  strerror(errno));
+                    strerror(errno));
             exit(1);
          }
+         nodefield = (unsigned int *) trie->root;
+         node = (node_t *) nodefield + current * nodeoffset;
          // Initialize memory.
-         bnode_t zero = { .next = {0,0} };
-         for (int k = trie->pos; k < trie->size; k++) trie->root[k] = zero;
+         memset(nodefield + nodeoffset * trie->size, 0, trie->size * nodeoffset * sizeof(unsigned int));
+         trie->size = newsize;
       }
-      nodes[nodeid].next[(int)path[i]] = trie->pos;
-      nodes[trie->pos].parent = nodeid;
-      nodeid = (trie->pos)++;
+      node->next[(int)path[i]] = trie->pos;
+      node = (node_t *) (nodefield + trie->pos * nodeoffset);
+      node->parent = current * nodeoffset + (int)path[i] + NODE_OVERHEAD;
+      current = (trie->pos)++;
    }
 
    // Assign new value.
-   unsigned int * data = &(nodes[nodeid].next[(int)path[i]]);
+   unsigned int * data = nodefield + current * nodeoffset + (unsigned int)path[i] + NODE_OVERHEAD;
    *data = value;
    return data;
 }
@@ -539,50 +577,30 @@ trie_insert
 void
 trie_reset
 (
- btrie_t * trie
-)
+ trie_t * trie
+ )
 {
    free(trie->root);
    trie->pos = 0;
-   trie->root = calloc(trie->size, sizeof(bnode_t));
+   trie->root = calloc(trie->size, (trie->branch + NODE_OVERHEAD) *sizeof(unsigned int));
 }
 
 
 void
 trie_free
 (
- btrie_t * trie
-)
+ trie_t * trie
+ )
 {
    free(trie->root);
    free(trie);
-}
-
-int
-setactive
-(
- int         rows,
- int         cols,
- int         node,
- char      * matrix
-)
-{
-   if (node >= rows*cols) return 0;
-   if (matrix[node]) return 0;
-   matrix[node] = 1;
-   // Last row line, return.
-   if (node % rows == rows - 1) return 1;
-   // Epsilon.
-   int free = node + rows + 1;
-   if (free < rows * cols) return 1 + setactive(rows, cols, free, matrix);
-   else return 1;
 }
 
 sstack_t *
 new_sstack
 (
  int nelements
-)
+ )
 {
    // Allocate stack.
    sstack_t * sstack = malloc(sizeof(sstack_t) + nelements*sizeof(filepos_t));
@@ -642,7 +660,7 @@ filepos_t
 pop
 (
  sstack_t ** stackp
-)
+ )
 // This function must be called with the mutex LOCKED!
 {
    sstack_t * stack = *stackp;
@@ -665,7 +683,7 @@ void
 seteof
 (
  sstack_t * stack
-)
+ )
 { 
    pthread_mutex_lock(stack->mutex);
    stack->eof = 1;
@@ -679,7 +697,7 @@ read_expr_file
 (
  char * file,
  int  * nexpr
-)
+ )
 {
    FILE * input = fopen(file, "r");
    if (input == NULL) {
@@ -713,7 +731,7 @@ char *
 reverse_pattern
 (
  char * expr
-)
+ )
 {
    int len = strlen(expr);
    char * reverse = malloc(len+1);

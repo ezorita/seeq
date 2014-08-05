@@ -42,7 +42,12 @@ main(
 )
 {
    // Backtrace handler
-   //signal(SIGSEGV, SIGSEGV_handler); 
+   signal(SIGSEGV, SIGSEGV_handler); 
+
+   if (argc < 3) {
+      say_usage();
+      exit(1);
+   }
 
    // Unset flags (value -1).
    int showdist_flag  = -1;

@@ -24,15 +24,18 @@
 // Should never be set larger than 32.
 #define NBASES 5
 
-typedef struct state_t  state_t;
-typedef struct match_t  match_t;
-typedef struct dfa_t    dfa_t;
-typedef struct btrie_t  btrie_t;
-typedef struct bnode_t  bnode_t;
-typedef struct job_t    job_t;
-typedef struct jstack_t jstack_t;
-typedef struct sstack_t sstack_t;
-typedef struct mtcont_t mtcont_t;
+// This one defines maxtau
+typedef char nfanode_t;
+
+typedef struct state_t   state_t;
+typedef struct match_t   match_t;
+typedef struct dfa_t     dfa_t;
+typedef struct trie_t    trie_t;
+typedef struct node_t    node_t;
+typedef struct job_t     job_t;
+typedef struct jstack_t  jstack_t;
+typedef struct sstack_t  sstack_t;
+typedef struct mtcont_t  mtcont_t;
 typedef struct seeqarg_t seeqarg_t;
 typedef struct filepos_t filepos_t;
 
@@ -95,18 +98,20 @@ struct match_t {
    int start;
 };
 
-struct bnode_t {
-   unsigned int next[2];
-   // Additional data below this line.
-   // Alignment is important in this struct!
+// Node struct alignment.
+// Define this as the number of unsigned ints before next[]
+#define NODE_OVERHEAD 1
+struct node_t {
    unsigned int parent;
+   unsigned int next[];
 };
 
-struct btrie_t {
+struct trie_t {
    int       pos;
    int       size;
    int       height;
-   bnode_t * root;
+   int       branch;
+   node_t  * root;
 };
 
 struct dfa_t {
@@ -130,22 +135,21 @@ static const char bases[NBASES] = "ACGTN";
 
 void * seeq(void *);
 int parse(char *, char **);
-int setactive(int, int, int, char*);
 dfa_t * build_dfa(int, int, char*, int);
-state_t build_dfa_step(int, int, int, int, dfa_t **, btrie_t *, char *, int);
-btrie_t * trie_new(int, int);
-int trie_search(btrie_t *, char*);
-unsigned int * trie_insert(btrie_t *, char*, unsigned int);
-char * trie_getpath(btrie_t *, unsigned int);
-void trie_reset(btrie_t *);
-void trie_free(btrie_t *);
+state_t build_dfa_step(int, int, int, int, dfa_t **, trie_t *, char *, int);
+trie_t * trie_new(int, int, int);
+unsigned int trie_search(trie_t *, char*);
+unsigned int * trie_insert(trie_t *, char*, unsigned int);
+char * trie_getpath(trie_t *, unsigned int);
+void trie_reset(trie_t *);
+void trie_free(trie_t *);
 sstack_t * new_sstack(int);
 void push(sstack_t**, filepos_t);
 filepos_t pop(sstack_t**);
 void seteof(sstack_t *);
 char ** read_expr_file(char*, int*);
 char * reverse_pattern(char*);
-
+void epsilon(nfanode_t *, int, int);
 
 // Print definitions
 #define STRLEN_LONG      15
