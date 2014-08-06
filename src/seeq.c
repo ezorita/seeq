@@ -151,8 +151,8 @@ seeq
                int d = tau + 1;
                // Find match start with RDFA.
                do {
-                  int c = (int)data[linestart+i-++j];
-                  state_t next = rdfa[rnode].next[(int)translate[c]];
+                  int c = (int)translate[(int)data[linestart+i-++j]];
+                  state_t next = rdfa[rnode].next[c];
                   if (next.state == -1) next = build_dfa_step(rows, nstat, rnode, c, &rdfa, rtrie, rkeys, DFA_REVERSE);
                   rnode = next.state;
                   d     = next.match;
