@@ -19,16 +19,18 @@
 #define DFA_FORWARD        0
 #define DFA_REVERSE        1
 #define DFA_COMPUTE        -1
-// Should never be set larger than 32.
-#define NBASES 5
+#define NBASES 5 // Should never be set larger than 32.
 
-typedef struct state_t  state_t;
+#define min(a,b) (((a) < (b)) ? (a) : (b))
+
 typedef struct match_t  match_t;
 typedef struct dfa_t    dfa_t;
-typedef struct btrie_t  btrie_t;
-typedef struct bnode_t  bnode_t;
-typedef struct job_t    job_t;
-typedef struct jstack_t  jstack_t;
+typedef struct vertex_t vertex_t;
+typedef struct edge_t   edge_t;
+typedef struct trie_t   trie_t;
+typedef struct node_t   node_t;
+
+typedef unsigned int uint;
 
 struct seeqarg_t {
    int showdist;
@@ -44,34 +46,39 @@ struct seeqarg_t {
    int endline;
 };
 
-struct state_t {
-   int state;
-   int match;
-};
-
 struct match_t {
-   int dist;
-   int start;
+   uint dist;
+   uint start;
 };
 
 struct node_t {
-   int      value;
-   node_t * parent;
-   node_t * next[];
+   uint child[3];
+   uint parent;
 };
 
 struct trie_t {
-   int       pos;
-   int       size;
-   int       height;
-   int       branch;
-   node_t  * root;
+   uint    pos;
+   uint    size;
+   uint    height;
+   node_t  nodes[];
+};
+
+struct edge_t {
+   uint state;
+   int  match;
+};
+
+struct vertex_t {
+   uint    node_id;
+   edge_t  next[NBASES];
 };
 
 struct dfa_t {
-   node_t * trie_leaf;
-   state_t  next[NBASES];
+   uint     pos;
+   uint     size;
+   vertex_t states[];
 };
+
 
 static const int translate[256] = {
    [0 ... 255] = 6,
@@ -81,20 +88,15 @@ static const int translate[256] = {
 
 static const char bases[NBASES] = "ACGTN";
 
-void seeq(char *, char *, struct seeqarg_t);
-int parse(char *, char **);
-int setactive(int, int, int, char*);
-jstack_t * new_jstack(int);
-void push(jstack_t **, job_t);
-job_t pop(jstack_t *);
-dfa_t * build_dfa(int, int, char*, int);
-state_t build_dfa_step(int, int, int, int, dfa_t **, btrie_t *, char *, int);
-trie_t * trie_new(int, int, int);
-unsigned int trie_search(trie_t *, int*);
-unsigned int * trie_insert(trie_t *, int*, unsigned int);
-int * trie_getpath(trie_t *, unsigned int);
-void trie_reset(trie_t *);
-void trie_free(trie_t *);
+void        seeq         (char *, char *, struct seeqarg_t);
+int         parse        (char *, char **);
+dfa_t     * dfa_new      (uint);
+edge_t      dfa_step     (uint, uint, uint, uint, dfa_t **, trie_t **, char *, int);
+trie_t    * trie_new     (uint, uint);
+uint        trie_search  (trie_t *, char*, uint*, uint*);
+uint        trie_insert  (trie_t **, char*, uint, uint);
+uint      * trie_getrow  (trie_t *, uint);
+void        trie_reset   (trie_t *);
 
 #define RESET   "\033[0m"
 #define BOLDRED     "\033[1m\033[31m"      /* Bold Red */
