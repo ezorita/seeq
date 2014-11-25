@@ -4,4 +4,6 @@
 *.gcda
 *.gcno
 *.gcov
-test/testset
+*\#*
+test/*
+seeq
