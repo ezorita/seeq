@@ -9,7 +9,6 @@ seeq
 )
 {
    int verbose = args.verbose;
-
    //----- PARSE PARAMS -----
    int tau = args.dist;
 
