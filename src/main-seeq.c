@@ -1,11 +1,37 @@
+/*
+** Copyright 2014 Eduard Valera Zorita.
+**
+** File authors:
+**  Eduard Valera Zorita (eduardvalera@gmail.com)
+**
+** Last modified: November 25, 2014
+**
+** License: 
+**  This program is free software: you can redistribute it and/or modify
+**  it under the terms of the GNU General Public License as published by
+**  the Free Software Foundation, either version 3 of the License, or
+**  (at your option) any later version.
+**
+**  This program is distributed in the hope that it will be useful,
+**  but WITHOUT ANY WARRANTY; without even the implied warranty of
+**  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+**  GNU General Public License for more details.
+**
+**  You should have received a copy of the GNU General Public License
+**  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+**
+*/
+
 #include "seeq.h"
 
 char *USAGE = "Usage:\n"
 "  seeq [options] pattern inputfile\n"
-"    -v --verbose         verbose\n"
+"    -v --version         print version\n"
+"    -z --verbose         verbose using stderr\n"
 "    -d --distance        maximum Levenshtein distance (default 0)\n"
-"    -c --count           show only match count\n"
-"    -m --match-only      print only the matching part of the string\n"
+"    -c --count           returns the count of matching lines\n"
+"    -i --invert          return only the non-matching lines\n"
+"    -m --match-only      print only the matched part of the matched lines\n"
 "    -n --no-printline    does not print the matching line\n"
 "    -l --lines           prints the original line of the match\n"
 "    -p --positions       prints the position of the match within the matched line\n"
@@ -17,6 +43,7 @@ char *USAGE = "Usage:\n"
 
 
 void say_usage(void) { fprintf(stderr, "%s\n", USAGE); }
+void say_version(void) { fprintf(stderr, VERSION "\n"); }
 
 void SIGSEGV_handler(int sig) {
    void *array[10];
@@ -47,6 +74,7 @@ main(
    int matchonly_flag = -1;
    int showline_flag  = -1;
    int count_flag     = -1;
+   int invert_flag    = -1;
    int compact_flag   = -1;
    int dist_flag      = -1;
    int verbose_flag   = -1;
@@ -57,6 +85,7 @@ main(
    char *input = NULL;
 
    if (argc == 1) {
+      say_version();
       say_usage();
       exit(EXIT_SUCCESS);
    }
@@ -71,8 +100,10 @@ main(
          {"print-dist",    no_argument, 0, 's'},
          {"lines",         no_argument, 0, 'l'},
          {"count",         no_argument, 0, 'c'},
+         {"invert",        no_argument, 0, 'i'},
          {"format-compact",no_argument, 0, 'f'},
-         {"verbose",       no_argument, 0, 'v'},
+         {"verbose",       no_argument, 0, 'z'},
+         {"version",       no_argument, 0, 'v'},
          {"help",          no_argument, 0, 'h'},
          {"end",           no_argument, 0, 'e'},         
          {"prefix",        no_argument, 0, 'b'},                  
@@ -80,7 +111,7 @@ main(
          {0, 0, 0, 0}
       };
 
-      c = getopt_long(argc, argv, "pmnslcfvhebd:",
+      c = getopt_long(argc, argv, "pmnislcfvhebd:",
             long_options, &option_index);
  
       /* Detect the end of the options. */
@@ -94,20 +125,26 @@ main(
          else {
             fprintf(stderr, "distance option set more than once\n");
             say_usage();
-            return 1;
+            return EXIT_FAILURE;
          }
          break;
 
       case 'v':
+         say_version();
+         return EXIT_SUCCESS;
+
+      case 'z':
          if (verbose_flag < 0) {
             verbose_flag = 1;
          }
          else {
             fprintf(stderr, "verbose option set more than once\n");
             say_usage();
-            return 1;
+            return EXIT_FAILURE;
          }
          break;
+
+
 
       case 'b':
          if (prefix_flag < 0) {
@@ -116,7 +153,7 @@ main(
          else {
             fprintf(stderr, "prefix option set more than once\n");
             say_usage();
-            return 1;
+            return EXIT_FAILURE;
          }
          break;
 
@@ -128,7 +165,7 @@ main(
          else {
             fprintf(stderr, "line-end option set more than once\n");
             say_usage();
-            return 1;
+            return EXIT_FAILURE;
          }
          break;
 
@@ -139,7 +176,7 @@ main(
          else {
             fprintf(stderr, "show-position option set more than once\n");
             say_usage();
-            return 1;
+            return EXIT_FAILURE;
          }
          break;
 
@@ -150,7 +187,7 @@ main(
          else {
             fprintf(stderr, "match-only option set more than once\n");
             say_usage();
-            return 1;
+            return EXIT_FAILURE;
          }
          break;
 
@@ -161,7 +198,7 @@ main(
          else {
             fprintf(stderr, "no-printline option set more than once\n");
             say_usage();
-            return 1;
+            return EXIT_FAILURE;
          }
          break;
 
@@ -172,7 +209,7 @@ main(
          else {
             fprintf(stderr, "show-distance option set more than once\n");
             say_usage();
-            return 1;
+            return EXIT_FAILURE;
          }
          break;
 
@@ -183,7 +220,7 @@ main(
          else {
             fprintf(stderr, "show-line option set more than once\n");
             say_usage();
-            return 1;
+            return EXIT_FAILURE;
          }
          break;
 
@@ -194,7 +231,18 @@ main(
          else {
             fprintf(stderr, "count option set more than once\n");
             say_usage();
-            return 1;
+            return EXIT_FAILURE;
+         }
+         break;
+
+      case 'i':
+         if (invert_flag < 0) {
+            invert_flag = 1;
+         }
+         else {
+            fprintf(stderr, "invert option set more than once\n");
+            say_usage();
+            return EXIT_FAILURE;
          }
          break;
 
@@ -205,11 +253,12 @@ main(
          else {
             fprintf(stderr, "format-compact option set more than once\n");
             say_usage();
-            return 1;
+            return EXIT_FAILURE;
          }
          break;
 
       case 'h':
+         say_version();
          say_usage();
          exit(0);
          break;
@@ -225,14 +274,15 @@ main(
       else {
          fprintf(stderr, "too many options\n");
          say_usage();
-         return 1;
+         return EXIT_FAILURE;
       }
    }
+   if (count_flag == -1) count_flag = 0;
    if (showdist_flag == -1) showdist_flag = 0;
    if (showpos_flag  == -1) showpos_flag = 0;
    if (matchonly_flag == -1) matchonly_flag = 0;
    if (showline_flag == -1) showline_flag = 0;
-   if (count_flag == -1) count_flag = 0;
+   if (invert_flag == -1) invert_flag = 0;
    if (compact_flag == -1) compact_flag = 0;
    if (dist_flag == -1) dist_flag = 0;
    if (verbose_flag == -1) verbose_flag = 0;
@@ -245,12 +295,15 @@ main(
       exit(1);
    }
 
-   struct seeqarg_t args = {showdist_flag, showpos_flag,
-                            showline_flag, printline_flag,
-                            matchonly_flag, count_flag,
-                            compact_flag, dist_flag,
-                            verbose_flag, endline_flag,
-                            prefix_flag};
+   int maskcnt = !count_flag;
+   int maskinv = !invert_flag * maskcnt;
+
+   struct seeqarg_t args = {showdist_flag * maskinv, showpos_flag * maskinv,
+                            showline_flag * maskcnt, printline_flag * maskinv,
+                            matchonly_flag * maskinv, count_flag,
+                            compact_flag * maskinv, dist_flag * maskinv,
+                            verbose_flag, endline_flag * maskinv,
+                            prefix_flag * maskinv, invert_flag * maskcnt};
 
    seeq(expr, input, args);
    return EXIT_SUCCESS;

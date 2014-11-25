@@ -1,3 +1,27 @@
+/*
+** Copyright 2014 Eduard Valera Zorita.
+**
+** File authors:
+**  Eduard Valera Zorita (eduardvalera@gmail.com)
+**
+** Last modified: November 25, 2014
+**
+** License: 
+**  This program is free software: you can redistribute it and/or modify
+**  it under the terms of the GNU General Public License as published by
+**  the Free Software Foundation, either version 3 of the License, or
+**  (at your option) any later version.
+**
+**  This program is distributed in the hope that it will be useful,
+**  but WITHOUT ANY WARRANTY; without even the implied warranty of
+**  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+**  GNU General Public License for more details.
+**
+**  You should have received a copy of the GNU General Public License
+**  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+**
+*/
+
 #include "seeq.h"
 
 void
@@ -98,8 +122,15 @@ seeq
             if (next.match == DFA_COMPUTE)
                next = dfa_step(wlen, tau, current_node, cin, &dfa, &trie, keys, DFA_FORWARD);
             current_node = next.state;
-         } else {
+         } else if (cin == 5) {
             next.match = tau+1;
+            if (args.invert && streak_dist >= next.match) {
+               if (args.showline) fprintf(stdout, "%lu %s\n", lines, data);
+               else fprintf(stdout, "%s\n", data);
+               break;
+            }
+         } else {
+            break;
          }
 
          // Update streak.
@@ -107,9 +138,11 @@ seeq
             // Tau is decreasing, track new streak.
             streak_dist   = next.match;
          } else if (streak_dist < next.match) {
+            if (args.invert) break;
             // FORMAT OUTPUT
             if (args.count) {
                count++;
+               break;
             } else {
                long j = 0;
                if (args.showpos || args.compact || args.matchonly || args.prefix) {
