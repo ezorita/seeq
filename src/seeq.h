@@ -16,6 +16,7 @@
 #define INITIAL_STACK_SIZE 256
 #define INITIAL_TRIE_SIZE  256
 #define INITIAL_DFA_SIZE   256
+#define INITIAL_LINE_SIZE  50
 #define DFA_FORWARD        0
 #define DFA_REVERSE        1
 #define DFA_COMPUTE        -1
@@ -42,8 +43,8 @@ struct seeqarg_t {
    int compact;
    int dist;
    int verbose;
-   int precompute;
    int endline;
+   int prefix;
 };
 
 struct match_t {
@@ -81,8 +82,8 @@ struct dfa_t {
 
 
 static const int translate[256] = {
-   [0 ... 255] = 6,
-   ['a'] = 0, ['c'] = 1, ['g'] = 2, ['t'] = 3, ['n'] = 4, ['\n'] = 5,
+   [0 ... 255] = 5,
+   ['a'] = 0, ['c'] = 1, ['g'] = 2, ['t'] = 3, ['n'] = 4,
    ['A'] = 0, ['C'] = 1, ['G'] = 2, ['T'] = 3, ['N'] = 4
 };
 
