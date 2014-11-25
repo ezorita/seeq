@@ -200,10 +200,11 @@ seeq
          }
       }
    }
-
+   if (verbose) fprintf(stderr, "done\n");
    if (args.count) fprintf(stdout, "%lu\n", count);
    free(rdfa);
    free(dfa);
+   free(data);
 }
 
 

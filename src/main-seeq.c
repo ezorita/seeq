@@ -111,7 +111,7 @@ main(
          {0, 0, 0, 0}
       };
 
-      c = getopt_long(argc, argv, "pmnislcfvhebd:",
+      c = getopt_long(argc, argv, "pmnislczfvhebd:",
             long_options, &option_index);
  
       /* Detect the end of the options. */
