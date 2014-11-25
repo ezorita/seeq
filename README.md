@@ -1,11 +1,11 @@
-## Seeq: Sequence pattern matching algorithm
+## Seeq: DNA/RNA pattern matching algorithm
 ---
 ## Contents: ##
     1. What is seeq?
     2. Source file list.
     3. Compilation and installation.
     4. Running seeq.
-    5. File formats.
+    5. Using seeq as a sequence trimmer.
     6. License.
     7. References.
 
@@ -16,7 +16,7 @@ Seeq is a DNA/RNA pattern matching algorithm. Sequence matching is performed
 based on a Levenshtein distance metric [1]. Typically, a file containing DNA
 sequences is passed as input along with a DNA pattern. Seeq will search for
 lines containing the matching pattern. By default, Seeq returns the matching
-lines in the stadard output. Seeq has many other applications such as sequence
+lines through the stadard output. Seeq has many other applications such as sequence
 extraction, sequence trimming, etc.
 
 II. Source file list
@@ -123,13 +123,6 @@ List of arguments:
 
      Prints the levenshtein distance between the match and the pattern.
 
-  **-f or --compact**
-
-     Uses compact output format. Each matched line will produce an output as
-     folllows:
-     
-     [line number]:[start index]-[end index]:[distance]
-
   **-e or --end**
 
      Prints only the last part of the matched lines, starting after (not including)
@@ -140,13 +133,23 @@ List of arguments:
      Prints only the beginning of the matched lines, ending before (not including)
      the matched part.
 
+  **-f or --compact**
+
+     Uses compact output format. Each matched line will produce an output as
+     folllows:
+     
+     [line number]:[start index]-[end index]:[distance]
+
+     When specified, other format options [mnlpseb] are ignored.
+
+
   **-h or --help**
 
      Prints usage information.
 
 
-V. Using seeq as sequence trimmer
----------------------------------
+V. Using seeq as a sequence trimmer
+-----------------------------------
 
 Many high-throughput technologies use reference sequences both at the beginning
 and the end of the sequence of interest. When the target sequence is not long enough,
