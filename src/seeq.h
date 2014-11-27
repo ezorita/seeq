@@ -48,6 +48,7 @@
 #define DFA_REVERSE        1
 #define DFA_COMPUTE        -1
 #define NBASES 5 // Should never be set larger than 32.
+#define TRIE_CHILDREN 3
 
 #define min(a,b) (((a) < (b)) ? (a) : (b))
 
@@ -81,7 +82,7 @@ struct match_t {
 };
 
 struct node_t {
-   uint child[3];
+   uint child[TRIE_CHILDREN];
    uint parent;
 };
 
@@ -117,15 +118,16 @@ static const int translate[256] = {
 
 static const char bases[NBASES] = "ACGTN";
 
-void        seeq         (char *, char *, struct seeqarg_t);
-int         parse        (char *, char **);
-dfa_t     * dfa_new      (uint);
-edge_t      dfa_step     (uint, uint, uint, uint, dfa_t **, trie_t **, char *, int);
-trie_t    * trie_new     (uint, uint);
-uint        trie_search  (trie_t *, char*, uint*, uint*);
-uint        trie_insert  (trie_t **, char*, uint, uint);
-uint      * trie_getrow  (trie_t *, uint);
-void        trie_reset   (trie_t *);
+void        seeq          (char *, char *, struct seeqarg_t);
+int         parse         (char *, char **);
+dfa_t     * dfa_new       (int);
+uint        dfa_newvertex (dfa_t **, uint);
+edge_t      dfa_step      (uint, uint, uint, uint, dfa_t **, trie_t **, char *, int);
+trie_t    * trie_new      (int, int);
+uint        trie_search   (trie_t *, char*, uint*, uint*);
+uint        trie_insert   (trie_t **, char*, uint, uint);
+uint      * trie_getrow   (trie_t *, uint);
+void        trie_reset    (trie_t *);
 
 #define RESET   "\033[0m"
 #define BOLDRED     "\033[1m\033[31m"      /* Bold Red */

@@ -69,130 +69,35 @@ teardown(
 // --  TEST FUNCTIONS -- //
 
 void
-test_new_stack
-(void)
-{
-
-   for (int i = 1 ; i < 10000 ; i++) {
-      nstack_t *stack = new_stack(i);
-      g_assert(stack != NULL);
-      g_assert_cmpint(stack->p, ==, 0);
-      g_assert_cmpint(stack->l, ==, i);
-      free(stack);
-   }
-
-   for (int i = 0 ; i > -10000 ; i--) {
-      nstack_t *stack = new_stack(i);
-      g_assert(stack != NULL);
-      g_assert_cmpint(stack->p, ==, 0);
-      g_assert_cmpint(stack->l, ==, 1);
-      free(stack);
-   }
-
-   return;
-
-}
-
-
-void
-test_stack_add
-(void)
-{
-
-   nstack_t *stack = new_stack(0);
-   for (int i = 0 ; i < 10000 ; i++) {
-      stack_add(&stack, i);
-      g_assert(stack != NULL);
-      g_assert_cmpint(stack->p, ==, i+1);
-      g_assert_cmpint(stack->l, >=, i);
-      g_assert_cmpint(stack->val[i], ==, i);
-   }
-   free(stack);
-
-   return;
-
-}
-
-
-void
-test_setactive
-(void)
-{
-
-   char matrix[12] = {0};
-   nstack_t *stack = new_stack(1);
-
-   // Basic tests.
-   setactive(3, 4, 0, 1, matrix, &stack);
-   // Sets positions 0, 4 and 8.
-   for (int i = 0 ; i < 12 ; i++) {
-      g_assert_cmpint(matrix[i], ==, i % 4 == 0);
-   }
-   memset(matrix, 0, 12 * sizeof(char));
-
-   setactive(4, 3, 0, 1, matrix, &stack);
-   // Sets positions 0, 5 and 10.
-   for (int i = 0 ; i < 12 ; i++) {
-      g_assert_cmpint(matrix[i], ==, i % 5 == 0);
-   }
-   memset(matrix, 0, 12 * sizeof(char));
-
-   // Test 'status' values.
-   setactive(4, 3, 3, 255, matrix, &stack);
-   // Sets positions 3.
-   for (int i = 0 ; i < 12 ; i++) {
-      g_assert_cmpint(matrix[i], ==, i == 3 ? -1 : 0);
-   }
-   memset(matrix, 0, 12 * sizeof(char));
-
-
-   // Test on a large matrix.
-   char *bigmatrix = calloc(10000*10000, sizeof(char));
-   g_assert(bigmatrix != NULL);
-   setactive(10000, 10000, 0, 1, bigmatrix, &stack);
-   for (int i = 0 ; i < 10000*10000 ; i++) {
-      g_assert_cmpint(bigmatrix[i], ==, i % 10001 == 0);
-   }
-   memset(bigmatrix, 0, 10000*10000 * sizeof(char));
-   setactive(10000, 10000, 1, 1, bigmatrix, &stack);
-   for (int i = 0 ; i < 10000*10000 ; i++) {
-      g_assert_cmpint(bigmatrix[i], ==, i % 10001 == 1);
-   }
-
-   free(bigmatrix);
-   free(stack);
-
-   return;
-
-}
-
-
-void
-test_trie_new_free
+test_trie_new
 (void)
 {
 
    for (int i = 1 ; i < 100 ; i++) {
    for (int j = 1 ; j < 100 ; j++) {
-      btrie_t *trie = trie_new(i*100, j*100);
+      trie_t *trie = trie_new(i*100, j*100);
       g_assert(trie != NULL);
-      g_assert(trie->root != NULL);
       g_assert_cmpint(trie->pos, ==, 1);
       g_assert_cmpint(trie->size, ==, i*100);
       g_assert_cmpint(trie->height, ==, j*100);
-      trie_free(trie);
+      g_assert_cmpint(trie->nodes[0].parent, ==, 0);
+      for (int k = 0; k < TRIE_CHILDREN; k++)
+         g_assert_cmpint(trie->nodes[0].child[k], ==, 0);
+      free(trie);
    }
    }
 
    for (int i = 0 ; i > -100 ; i--) {
    for (int j = 0 ; j > -100 ; j--) {
-      btrie_t *trie = trie_new(i*100, j*100);
+      trie_t *trie = trie_new(i*100, j*100);
       g_assert(trie != NULL);
-      g_assert(trie->root != NULL);
       g_assert_cmpint(trie->pos, ==, 1);
       g_assert_cmpint(trie->size, ==, 1);
-      g_assert_cmpint(trie->height, ==, 1);
-      trie_free(trie);
+      g_assert_cmpint(trie->height, ==, 0);
+      g_assert_cmpint(trie->nodes[0].parent, ==, 0);
+      for (int k = 0; k < TRIE_CHILDREN; k++)
+      g_assert_cmpint(trie->nodes[0].child[k], ==, 0);
+      free(trie);
    }
    }
 
@@ -206,102 +111,146 @@ test_trie_insert
 (void)
 {
 
-   btrie_t *trie = trie_new(1,10);
+   trie_t *trie = trie_new(1,10);
    g_assert(trie != NULL);
-
-   bnode_t bnode = { .next = {0,0} };
+   uint id;
 
    // Insert leftmost branch in the trie.
-   trie_insert(trie, "\0\0\0\0\0\0\0\0\0\0", 4897892);
-   g_assert_cmpint(trie->pos, ==, 10);
+   id = trie_insert(&trie, "\0\0\0\0\0\0\0\0\0\0", 4897892, 1205);
+   g_assert_cmpint(id, ==, 10);
+   g_assert_cmpint(trie->pos, ==, 11);
    g_assert_cmpint(trie->size, ==, 16);
-   for (int i = 0 ; i < 9 ; i++) {
-      bnode_t bnode = trie->root[i];
-      g_assert_cmpint(bnode.next[0], ==, i+1);
+   for (int i = 0 ; i < 10 ; i++) {
+      node_t node = trie->nodes[i];
+      g_assert_cmpint(node.parent, ==, (i-1 < 0 ? 0 : i-1));
+      g_assert_cmpint(node.child[0], ==, i+1);
+      for (int k = 1; k < TRIE_CHILDREN; k++) {
+         g_assert_cmpint(node.child[k], ==, 0);
+      }
    }
-   bnode = trie->root[0];
-   g_assert_cmpint(bnode.next[0], ==, 1);
-   g_assert_cmpint(bnode.next[1], ==, 0);
-   bnode = trie->root[9];
-   g_assert_cmpint(bnode.next[0], ==, 4897892);
-   g_assert_cmpint(bnode.next[1], ==, 0);
+   node_t node = trie->nodes[10];
+   g_assert_cmpint(node.child[0], ==, 4897892);
+   g_assert_cmpint(node.child[1], ==, 1205);
 
-   // Insert rightmost branch in the trie.
-   trie_insert(trie, "\1\1\1\1\1\1\1\1\1\1", 22923985);
-   g_assert_cmpint(trie->pos, ==, 19);
+   // Insert center branch in the trie.
+   id = trie_insert(&trie, "\1\1\1\1\1\1\1\1\1\1", 22923985, 834139423);
+   g_assert_cmpint(id, ==, 20);
+   g_assert_cmpint(trie->pos, ==, 21);
    g_assert_cmpint(trie->size, ==, 32);
-   for (int i = 1 ; i < 9 ; i++) {
-      bnode_t bnode = trie->root[i];
-      g_assert_cmpint(bnode.next[0], ==, i+1);
-      g_assert_cmpint(bnode.next[1], ==, 0);
+   for (int i = 1 ; i < 10 ; i++) {
+      node_t node = trie->nodes[i];
+      g_assert_cmpint(node.parent, ==, i-1);
+      g_assert_cmpint(node.child[0], ==, i+1);
+      for (int k = 1; k < TRIE_CHILDREN; k++) {
+         g_assert_cmpint(node.child[k], ==, 0);
+      }
    }
-   for (int i = 10 ; i < 18 ; i++) {
-      bnode_t bnode = trie->root[i];
-      g_assert_cmpint(bnode.next[0], ==, 0);
-      g_assert_cmpint(bnode.next[1], ==, i+1);
+   for (int i = 11 ; i < 20 ; i++) {
+      node_t node = trie->nodes[i];
+      g_assert_cmpint(node.parent, ==, (i == 11 ? 0 : i-1));
+      g_assert_cmpint(node.child[1], ==, i+1);
+      for (int k = 0; k < TRIE_CHILDREN; k++) {
+         if (k != 1) g_assert_cmpint(node.child[k], ==, 0);
+      }
    }
-   bnode = trie->root[0];
-   g_assert_cmpint(bnode.next[0], ==, 1);
-   g_assert_cmpint(bnode.next[1], ==, 10);
-   bnode = trie->root[9];
-   g_assert_cmpint(bnode.next[0], ==, 4897892);
-   g_assert_cmpint(bnode.next[1], ==, 0);
-   bnode = trie->root[18];
-   g_assert_cmpint(bnode.next[0], ==, 0);
-   g_assert_cmpint(bnode.next[1], ==, 22923985);
+   node = trie->nodes[0];
+   g_assert_cmpint(node.child[0], ==, 1);
+   g_assert_cmpint(node.child[1], ==, 11);
+   node = trie->nodes[10];
+   g_assert_cmpint(node.child[0], ==, 4897892);
+   g_assert_cmpint(node.child[1], ==, 1205);
+   node = trie->nodes[20];
+   g_assert_cmpint(node.child[0], ==, 22923985);
+   g_assert_cmpint(node.child[1], ==, 834139423);
 
    // Insert middle branch in the trie.
-   trie_insert(trie, "\1\0\1\0\1\0\1\0\1\0", 9309871);
-   g_assert_cmpint(trie->pos, ==, 27);
+   id = trie_insert(&trie, "\1\0\1\0\1\0\1\0\1\0", 9309871, 394823344);
+   g_assert_cmpint(id, ==, 29);
+   g_assert_cmpint(trie->pos, ==, 30);
    g_assert_cmpint(trie->size, ==, 32);
-   for (int i = 1 ; i < 9 ; i++) {
-      bnode_t bnode = trie->root[i];
-      g_assert_cmpint(bnode.next[0], ==, i+1);
-      g_assert_cmpint(bnode.next[1], ==, 0);
-   }
-   for (int i = 11 ; i < 18 ; i++) {
-      bnode_t bnode = trie->root[i];
-      g_assert_cmpint(bnode.next[0], ==, 0);
-      g_assert_cmpint(bnode.next[1], ==, i+1);
-   }
-   for (int i = 19 ; i < 26 ; i++) {
-      bnode_t bnode = trie->root[i];
-      if (i % 2 == 1) {
-         g_assert_cmpint(bnode.next[0], ==, 0);
-         g_assert_cmpint(bnode.next[1], ==, i+1);
-      }
-      else {
-         g_assert_cmpint(bnode.next[0], ==, i+1);
-         g_assert_cmpint(bnode.next[1], ==, 0);
+   for (int i = 1 ; i < 10 ; i++) {
+      node_t node = trie->nodes[i];
+      g_assert_cmpint(node.parent, ==, i-1);
+      g_assert_cmpint(node.child[0], ==, i+1);
+      for (int k = 1; k < TRIE_CHILDREN; k++) {
+         g_assert_cmpint(node.child[k], ==, 0);
       }
    }
-   bnode = trie->root[0];
-   g_assert_cmpint(bnode.next[0], ==, 1);
-   g_assert_cmpint(bnode.next[1], ==, 10);
-   bnode = trie->root[9];
-   g_assert_cmpint(bnode.next[0], ==, 4897892);
-   g_assert_cmpint(bnode.next[1], ==, 0);
-   bnode = trie->root[10];
-   g_assert_cmpint(bnode.next[0], ==, 19);
-   g_assert_cmpint(bnode.next[1], ==, 11);
-   bnode = trie->root[18];
-   g_assert_cmpint(bnode.next[0], ==, 0);
-   g_assert_cmpint(bnode.next[1], ==, 22923985);
-   bnode = trie->root[26];
-   g_assert_cmpint(bnode.next[0], ==, 9309871);
-   g_assert_cmpint(bnode.next[1], ==, 0);
+   for (int i = 12 ; i < 20 ; i++) {
+      node_t node = trie->nodes[i];
+      g_assert_cmpint(node.parent, ==, i-1);
+      g_assert_cmpint(node.child[1], ==, i+1);
+      for (int k = 0; k < TRIE_CHILDREN; k++) {
+         if (k != 1) g_assert_cmpint(node.child[k], ==, 0);
+      }
+   }
 
-   trie_free(trie);
+   for (int i = 21 ; i < 29 ; i++) {
+      node_t node = trie->nodes[i];
+      for (int k = 0; k < TRIE_CHILDREN; k++) {
+         if (k != i%2) g_assert_cmpint(node.child[k], ==, 0);
+         else g_assert_cmpint(node.child[k], ==, i+1);
+      }
+      g_assert_cmpint(node.parent, ==, (i==21 ? 11 : i-1));
+   }
 
-   btrie_t *lowtrie = trie_new(1,1);
+   node = trie->nodes[0];
+   g_assert_cmpint(node.child[0], ==, 1);
+   g_assert_cmpint(node.child[1], ==, 11);
+   node = trie->nodes[10];
+   g_assert_cmpint(node.child[0], ==, 4897892);
+   g_assert_cmpint(node.child[1], ==, 1205);
+   node = trie->nodes[11];
+   g_assert_cmpint(node.child[0], ==, 21);
+   g_assert_cmpint(node.child[1], ==, 12);
+   node = trie->nodes[20];
+   g_assert_cmpint(node.child[0], ==, 22923985);
+   g_assert_cmpint(node.child[1], ==, 834139423);
+   node = trie->nodes[29];
+   g_assert_cmpint(node.child[0], ==, 9309871);
+   g_assert_cmpint(node.child[1], ==, 394823344);
+
+   free(trie);
+
+   // Small tree
+   trie_t *lowtrie = trie_new(1,1);
    g_assert(lowtrie != NULL);
 
    // Insert a path longer than trie height.
-   trie_insert(lowtrie, "\0\0\0", 1);
-   g_assert_cmpint(lowtrie->pos, ==, 1);
-   g_assert_cmpint(lowtrie->root->next[0], ==, 1);
+   id = trie_insert(&lowtrie, "\0\0\0", 123, 456);
+   g_assert_cmpint(id, ==, 1);
+   g_assert_cmpint(lowtrie->pos, ==, 2);
+   g_assert_cmpint(lowtrie->nodes[0].child[0], ==, 1);
+   g_assert_cmpint(lowtrie->nodes[1].parent, ==, 0);
+   g_assert_cmpint(lowtrie->nodes[1].child[0], ==, 123);
+   g_assert_cmpint(lowtrie->nodes[1].child[1], ==, 456);
 
-   trie_free(lowtrie);
+   id = trie_insert(&lowtrie, "\1\0\0", 789, 100);
+   g_assert_cmpint(id, ==, 2);
+   g_assert_cmpint(lowtrie->pos, ==, 3);
+   g_assert_cmpint(lowtrie->nodes[0].child[0], ==, 1);
+   g_assert_cmpint(lowtrie->nodes[0].child[1], ==, 2);
+   g_assert_cmpint(lowtrie->nodes[1].parent, ==, 0);
+   g_assert_cmpint(lowtrie->nodes[2].parent, ==, 0);
+   g_assert_cmpint(lowtrie->nodes[1].child[0], ==, 123);
+   g_assert_cmpint(lowtrie->nodes[1].child[1], ==, 456);
+   g_assert_cmpint(lowtrie->nodes[2].child[0], ==, 789);
+   g_assert_cmpint(lowtrie->nodes[2].child[1], ==, 100);
+
+   free(lowtrie);
+
+   // Smallest tree (leaf)
+   lowtrie = trie_new(1,0);
+   g_assert(lowtrie != NULL);
+
+   // Insert a path longer than trie height.
+   id = trie_insert(&lowtrie, "\0\0\0", 123, 456);
+   g_assert_cmpint(id, ==, 0);
+   g_assert_cmpint(lowtrie->pos, ==, 1);
+   g_assert_cmpint(lowtrie->nodes[0].child[0], ==, 123);
+   g_assert_cmpint(lowtrie->nodes[0].child[1], ==, 456);
+
+   free(lowtrie);
 
    return;
 
@@ -309,11 +258,11 @@ test_trie_insert
 
 
 void
-test_trie_search
+test_trie_search_getrow
 (void)
 {
 
-   btrie_t *trie = trie_new(1,10);
+   trie_t *trie = trie_new(1,10);
    g_assert(trie != NULL);
 
    char path[10] = {0};
@@ -321,61 +270,122 @@ test_trie_search
    srand48(123);
    for (int i = 0 ; i < 10000 ; i++) {
       for (int j = 0 ; j < 10 ; j++) {
-         path[j] = (drand48() < .5);
+         path[j] = (lrand48() % TRIE_CHILDREN);
       }
-      unsigned int value = (int) lrand48();
-      trie_insert(trie, path, value);
-      g_assert_cmpint(trie_search(trie, path), ==, value);
+      uint value = (uint) lrand48();
+      uint dfastate = (uint) lrand48();
+      uint retval, dfaval;
+      uint id = trie_insert(&trie, path, value, dfastate);
+      uint * row = trie_getrow(trie, id);
+
+      g_assert(trie_search(trie, path, &retval, &dfaval));
+      g_assert_cmpint(value, ==, retval);
+      g_assert_cmpint(dfastate, ==, dfaval);
+      g_assert_cmpint(row[trie->height], ==, value);
+      for (int i = trie->height - 1; i >= 0; i--) {
+         value += (path[i] == 0) - (path[i] == 2);
+         g_assert_cmpint(row[i], ==, value);
+      }
    }
 
-   trie_free(trie);
+   free(trie);
 
    return;
 
 }
 
- 
+
 void
 test_trie_reset
 (void)
 {
 
-   btrie_t *trie = trie_new(1,10);
+   trie_t *trie = trie_new(1,10);
    g_assert(trie != NULL);
 
-   bnode_t bnode = { .next = {0,0} };
-
    // Insert leftmost branch in the trie.
-   trie_insert(trie, "\0\0\0\0\0\0\0\0\0\0", 36636);
-   g_assert_cmpint(trie->pos, ==, 10);
+   trie_insert(&trie, "\0\0\0\0\0\0\0\0\0\0", 36636, 192438);
+   g_assert_cmpint(trie->pos, ==, 11);
    g_assert_cmpint(trie->size, ==, 16);
-   for (int i = 0 ; i < 9 ; i++) {
-      bnode_t bnode = trie->root[i];
-      g_assert_cmpint(bnode.next[0], ==, i+1);
+   for (int i = 0 ; i < 10 ; i++) {
+      node_t node = trie->nodes[i];
+      g_assert_cmpint(node.child[0], ==, i+1);
    }
-   bnode = trie->root[0];
-   g_assert_cmpint(bnode.next[0], ==, 1);
-   g_assert_cmpint(bnode.next[1], ==, 0);
-   bnode = trie->root[9];
-   g_assert_cmpint(bnode.next[0], ==, 36636);
-   g_assert_cmpint(bnode.next[1], ==, 0);
+   node_t node = trie->nodes[0];
+   g_assert_cmpint(node.child[0], ==, 1);
+   g_assert_cmpint(node.child[1], ==, 0);
+   node = trie->nodes[10];
+   g_assert_cmpint(node.child[0], ==, 36636);
+   g_assert_cmpint(node.child[1], ==, 192438);
 
    trie_reset(trie);
    g_assert(trie != NULL);
    g_assert_cmpint(trie->pos, ==, 0);
    g_assert_cmpint(trie->size, ==, 16);
-   for (int i = 0 ; i < 16 ; i++) {
-      bnode_t bnode = trie->root[i];
-      g_assert_cmpint(bnode.next[0], ==, 0);
-      g_assert_cmpint(bnode.next[1], ==, 0);
+   node = trie->nodes[0];
+   for (int k = 0; k < TRIE_CHILDREN; k++) {
+      g_assert_cmpint(node.child[k], ==, 0);
    }
 
-   trie_free(trie);
+   free(trie);
 
    return;
 
 }
 
+void
+test_dfa_new
+(void)
+{
+   dfa_t * dfa = dfa_new(1);
+   g_assert(dfa != NULL);
+   g_assert_cmpint(dfa->size, ==, 1);
+   g_assert_cmpint(dfa->pos, ==, 0);
+   free(dfa);
+
+   dfa = dfa_new(-100);
+   g_assert(dfa != NULL);
+   g_assert_cmpint(dfa->size, ==, 1);
+   g_assert_cmpint(dfa->pos, ==, 0);
+   free(dfa);
+
+   for (int i = -100; i < 1000; i++) {
+      dfa = dfa_new(i);
+      g_assert(dfa != NULL);
+      g_assert_cmpint(dfa->size, ==, (i < 1 ? 1 : i));
+      g_assert_cmpint(dfa->pos, ==, 0);
+      free(dfa);
+   }
+}
+
+
+void
+test_dfa_newvertex
+(void)
+{
+   dfa_t * dfa = dfa_new(1);
+   g_assert(dfa != NULL);
+   g_assert_cmpint(dfa->size, ==, 1);
+   g_assert_cmpint(dfa->pos, ==, 0);
+
+   for (int i = 0; i < 1000; i++) {
+      dfa_newvertex(&dfa, i);
+      g_assert_cmpint(dfa->pos, ==, i+1);
+      g_assert_cmpint(dfa->states[i].node_id, ==, i);
+      for (int j = 0; j < NBASES; j++) {
+         g_assert_cmpint(dfa->states[i].next[j].state, ==, 0);
+         g_assert_cmpint(dfa->states[i].next[j].match, ==, DFA_COMPUTE);
+      }
+   }
+   g_assert_cmpint(dfa->size, ==, 1024);
+}
+
+void
+test_dfa_step
+(void)
+{
+   return;
+}
 
 void
 test_parse
@@ -413,6 +423,13 @@ test_parse
    }
    free(keysp);
 
+   g_assert_cmpint(parse("Nn[]Nn[]NnN[]n", &keysp), ==, 8);
+   for (int i = 0 ; i < 8 ; i++) {
+      g_assert_cmpint(keysp[i], ==, 31);
+   }
+   free(keysp);
+
+
    g_assert_cmpint(parse("[GATC][gatc][GaTc][gAtC]", &keysp), ==, 4);
    for (int i = 0 ; i < 4 ; i++) {
       g_assert_cmpint(keysp[i], ==, 15);
@@ -423,6 +440,9 @@ test_parse
    free(keysp);
 
    g_assert_cmpint(parse("A]", &keysp), ==, -1);
+   free(keysp);
+
+   g_assert_cmpint(parse("[ATG[C]]", &keysp), ==, -1);
    free(keysp);
 
    g_assert_cmpint(parse("Z", &keysp), ==, -1);
@@ -443,13 +463,12 @@ main(
    BACKUP_FILE_DESCRIPTOR = dup(STDERR_FILENO);
 
    g_test_init(&argc, &argv, NULL);
-   g_test_add_func("/new_stack", test_new_stack);
-   g_test_add_func("/stack_add", test_stack_add);
-   g_test_add_func("/setactive", test_setactive);
-   g_test_add_func("/trie_new_free", test_trie_new_free);
+   g_test_add_func("/trie_new", test_trie_new);
    g_test_add_func("/trie_insert", test_trie_insert);
-   g_test_add_func("/trie_search", test_trie_search);
+   g_test_add_func("/trie_search_getrow", test_trie_search_getrow);
    g_test_add_func("/trie_reset", test_trie_reset);
+   g_test_add_func("/dfa_new", test_dfa_new);
+   g_test_add_func("/dfa_newvertex", test_dfa_newvertex);
    g_test_add_func("/parse", test_parse);
    return g_test_run();
 }

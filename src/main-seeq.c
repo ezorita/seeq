@@ -301,7 +301,7 @@ main(
    struct seeqarg_t args = {showdist_flag * maskinv, showpos_flag * maskinv,
                             showline_flag * maskcnt, printline_flag * maskinv,
                             matchonly_flag * maskinv, count_flag,
-                            compact_flag * maskinv, dist_flag * maskinv,
+                            compact_flag * maskinv, dist_flag,
                             verbose_flag, endline_flag * maskinv,
                             prefix_flag * maskinv, invert_flag * maskcnt};
 

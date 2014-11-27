@@ -215,37 +215,42 @@ parse
  char ** keysp
 )
 {
-   // FIXME: expressions containing unmatched closing brackets
-   // do not return -1 as they ought to. Either check the matching
-   // of brackets or use the IUPAC alphabet for degenerate positions.
    *keysp = calloc(strlen(expr),sizeof(char));
    char * keys = *keysp;
    int i = 0;
    int l = 0;
    int add = 0;
-   char c;
+   char c, lc = 0;
    while((c = expr[i]) != 0) {
       if      (c == 'A' || c == 'a') keys[l] |= 0x01;
       else if (c == 'C' || c == 'c') keys[l] |= 0x02;
       else if (c == 'G' || c == 'g') keys[l] |= 0x04;
       else if (c == 'T' || c == 't') keys[l] |= 0x08;
       else if (c == 'N' || c == 'n') keys[l] |= 0x1F;
-      else if (c == '[') add = 1;
-      else if (c == ']') add = 0;
-      else return 0;
+      else if (c == '[') {
+         if (add) return -1;
+         add = 1;
+      }
+      else if (c == ']') {
+         if (!add) return -1;
+         if (lc == '[') l--;
+         add = 0;
+      }
+      else return -1;
 
       if (!add) l++;
       i++;
+      lc = c;
    }
    
-   if (add == 1) return 0;
+   if (add == 1) return -1;
    else return l;
 }
 
 dfa_t *
 dfa_new
 (
- uint vertices
+ int vertices
 )
 {
    if (vertices < 1) vertices = 1;
@@ -284,7 +289,7 @@ dfa_step
    // Initialize first column.
    int nextold, prev, old = state[0];
    if (anchor) {
-      state[0] = prev = state[0] + 1;
+      state[0] = prev = min(tau + 1, state[0] + 1);
    } else {
       state[0] = prev = 0;
    }
@@ -300,7 +305,7 @@ dfa_step
 
    // Save match value.
    dfa->states[dfa_state].next[base].match = prev;
-
+   
    // Check if this state already exists.
    uint dfalink;
    int exists = trie_search(*trie, code, NULL, &dfalink);
@@ -311,27 +316,11 @@ dfa_step
    } else {
       // Insert new NFA state in the trie.
       uint nodeid = trie_insert(trie, code, prev, dfa->pos);
-
-      // Create new vertex in DFA network.
-      if (dfa->pos >= dfa->size) {
-         dfa->size *= 2;
-         *dfap = dfa = realloc(dfa, sizeof(dfa_t) + dfa->size * sizeof(vertex_t));
-         if (dfa == NULL) {
-            fprintf(stderr, "error (realloc) dfa in 'build_dfa_step': %s\n", strerror(errno));
-            exit(EXIT_FAILURE);
-         }
-      }
-
-      // Initialize DFA vertex.
-      dfa->states[dfa->pos].node_id = nodeid;
-      edge_t new = {.state = 0, .match = DFA_COMPUTE};
-      for (int j = 0; j < NBASES; j++) dfa->states[dfa->pos].next[j] = new;
-
-      // Connect vertices.
-      dfa->states[dfa_state].next[base].state = dfa->pos;
-      
-      // Increase counter.
-      dfa->pos++;
+      // Create new vertex in dfa network.
+      uint vertexid = dfa_newvertex(dfap, nodeid);
+      dfa = *dfap;
+      // Connect dfa vertices.
+      dfa->states[dfa_state].next[base].state = vertexid;
    }
 
    free(state);
@@ -340,16 +329,45 @@ dfa_step
    return dfa->states[dfa_state].next[base];
 }
 
+uint
+dfa_newvertex
+(
+ dfa_t ** dfap,
+ uint     nodeid
+)
+{
+   dfa_t * dfa = *dfap;
+
+   // Create new vertex in DFA network.
+   if (dfa->pos >= dfa->size) {
+      dfa->size *= 2;
+      *dfap = dfa = realloc(dfa, sizeof(dfa_t) + dfa->size * sizeof(vertex_t));
+      if (dfa == NULL) {
+         fprintf(stderr, "error (realloc) dfa in 'dfa_newnode': %s\n", strerror(errno));
+         exit(EXIT_FAILURE);
+      }
+   }
+
+   // Initialize DFA vertex.
+   dfa->states[dfa->pos].node_id = nodeid;
+   edge_t new = {.state = 0, .match = DFA_COMPUTE};
+   for (int j = 0; j < NBASES; j++) dfa->states[dfa->pos].next[j] = new;
+
+   // Increase counter.
+   return dfa->pos++;
+}
+
 trie_t *
 trie_new
 (
- uint initial_size,
- uint height
+ int initial_size,
+ int height
 )
 {
 
    // Allocate at least one node.
    if (initial_size < 1) initial_size = 1;
+   if (height < 0) height = 0;
 
    trie_t * trie = malloc(sizeof(trie_t) + initial_size*sizeof(node_t));
    if (trie == NULL) {
@@ -436,7 +454,8 @@ trie_insert
 
    int i;
    for (i = 0; i < trie->height; i++) {
-      if (path[i] > 2) return 0;
+      if (path[i] < 0 || path[i] >= TRIE_CHILDREN)
+         return 0;
       // Walk the tree.
       if (nodes[id].child[(int)path[i]] != 0) {
          id = nodes[id].child[(int)path[i]];
