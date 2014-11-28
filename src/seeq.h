@@ -118,11 +118,11 @@ static const int translate[256] = {
 
 static const char bases[NBASES] = "ACGTN";
 
-void        seeq          (char *, char *, struct seeqarg_t);
-int         parse         (char *, char **);
+int         seeq          (char *, char *, struct seeqarg_t);
+int         parse         (char *, char *);
 dfa_t     * dfa_new       (int);
 uint        dfa_newvertex (dfa_t **, uint);
-edge_t      dfa_step      (uint, uint, uint, uint, dfa_t **, trie_t **, char *, int);
+int         dfa_step      (uint, uint, uint, uint, dfa_t **, trie_t **, char *, int, edge_t *);
 trie_t    * trie_new      (int, int);
 uint        trie_search   (trie_t *, char*, uint*, uint*);
 uint        trie_insert   (trie_t **, char*, uint, uint);

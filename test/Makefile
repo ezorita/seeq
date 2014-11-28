@@ -18,12 +18,13 @@ libfaultymalloc.so: faultymalloc.c
 
 test: testset
 	gtester --verbose --keep-going testset
+	gcov *.gcda
 
 testperf: testset
 	#perf stat -B -e cache-references,cache-misses,cycles,instructions,branches,faults,migrations gtester --verbose --keep-going -m=perf testset
 	perf stat -d gtester --verbose --keep-going -m=perf testset
 	#gprof -F trie testset gmon.out > analysis.txt
-	#gcov *.gcda
+	gcov *.gcda
 
 debug: testset
 	gdb --command=debug.gdb --args testset -m=perf

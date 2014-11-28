@@ -24,7 +24,7 @@
 
 #include "seeq.h"
 
-void
+int
 seeq
 (
  char * expression,
@@ -42,59 +42,62 @@ seeq
 
    if (fdi == NULL) {
       fprintf(stderr,"error: could not open file: %s\n\n", strerror(errno));
-      exit(EXIT_FAILURE);
+      return EXIT_FAILURE;
    }
    
    if (verbose) fprintf(stderr, "parsing pattern\n");
 
    // ----- COMPUTE DFA -----
-   char * keys;
-   int    wlen = parse(expression, &keys);
+   char keys[strlen(expression)];
+   int  wlen = parse(expression, keys);
 
-   if (!wlen) {
+   if (wlen == -1) {
       fprintf(stderr, "error: invalid pattern expression.\n");
-      exit(EXIT_FAILURE);
+      return EXIT_FAILURE;
    }
    
    if (tau >= wlen) {
       fprintf(stderr, "error: expression must be longer than the maximum distance.\n");
-      exit(EXIT_FAILURE);
+      return EXIT_FAILURE;
    }
 
    // Reverse the query and build reverse DFA.
-   char * rkeys = malloc(wlen);
+   char rkeys[wlen];
    for (int i = 0; i < wlen; i++) rkeys[i] = keys[wlen-i-1];
 
    // Initialize NFA and DFA.
    dfa_t * dfa  = dfa_new(INITIAL_DFA_SIZE);
+   if (dfa == NULL) return EXIT_FAILURE;
    dfa_t * rdfa = dfa_new(INITIAL_DFA_SIZE);
-
-   // Initialize state 1.
-   edge_t new = {.state = 0, .match = DFA_COMPUTE};
-   for (int i = 0; i < NBASES; i++) {
-      dfa->states[0].next[i] = new;
-      rdfa->states[0].next[i] = new;
-   }
+   if (rdfa == NULL) return EXIT_FAILURE;
 
    // Initialize tries.
    trie_t * trie  = trie_new(INITIAL_TRIE_SIZE, wlen);
+   if (trie == NULL) return EXIT_FAILURE;
    trie_t * rtrie = trie_new(INITIAL_TRIE_SIZE, wlen);
+   if (rtrie == NULL) return EXIT_FAILURE;
 
    // Compute initial NFA state.
-   char * path = malloc(wlen+1);
+   char path[wlen+1];
    for (int i = 0; i <= tau; i++) path[i] = 2;
    for (int i = tau + 1; i < wlen; i++) path[i] = 1;
 
    // Insert initial state into forward DFA.
    uint nodeid = trie_insert(&trie, path, tau+1, 0);
-   dfa->states[dfa->pos++].node_id = nodeid;
+   if (nodeid == (uint)-1) return EXIT_FAILURE;
+   dfa->states[0].node_id = nodeid;
    // Insert initial state into reverse DFA.
    nodeid = trie_insert(&rtrie, path, tau+1, 0);
-   rdfa->states[rdfa->pos++].node_id = nodeid;
+   if (nodeid == (uint)-1) return EXIT_FAILURE;
+   rdfa->states[0].node_id = nodeid;
 
    // ----- PROCESS FILE -----
    // Text buffer
    char * data = malloc(INITIAL_LINE_SIZE);
+   if (data == NULL) {
+      fprintf(stderr, "error in 'seeq' (malloc:data): %s\n", strerror(errno));
+      return EXIT_FAILURE;
+   }
    size_t bufsz = INITIAL_LINE_SIZE;
    ssize_t readsz;
    // Counters.
@@ -118,9 +121,10 @@ seeq
          int cin = (int)translate[(int)data[i]];
          edge_t next;
          if(cin < NBASES) {
-            next  = dfa->states[current_node].next[cin];
+            next = dfa->states[current_node].next[cin];
             if (next.match == DFA_COMPUTE)
-               next = dfa_step(wlen, tau, current_node, cin, &dfa, &trie, keys, DFA_FORWARD);
+               if (dfa_step(current_node, cin, wlen, tau, &dfa, &trie, keys, DFA_FORWARD, &next))
+                  return EXIT_FAILURE;
             current_node = next.state;
          } else if (cin == 5) {
             next.match = tau+1;
@@ -152,7 +156,9 @@ seeq
                   do {
                      int c = (int)translate[(int)data[i-++j]];
                      edge_t next = rdfa->states[rnode].next[c];
-                     if (next.match == DFA_COMPUTE) next = dfa_step(wlen, tau, rnode, c, &rdfa, &rtrie, rkeys, DFA_REVERSE);
+                     if (next.match == DFA_COMPUTE)
+                        if (dfa_step(rnode, c, wlen, tau, &rdfa, &rtrie, rkeys, DFA_REVERSE, &next))
+                           return EXIT_FAILURE;
                      rnode = next.state;
                      d     = next.match;
                   } while (rnode && d > streak_dist && j < i);
@@ -205,6 +211,8 @@ seeq
    free(rdfa);
    free(dfa);
    free(data);
+
+   return EXIT_SUCCESS;
 }
 
 
@@ -212,11 +220,12 @@ int
 parse
 (
  char * expr,
- char ** keysp
+ char * keys
 )
 {
-   *keysp = calloc(strlen(expr),sizeof(char));
-   char * keys = *keysp;
+   // Initialize keys to 0.
+   for (int i = 0; i < strlen(expr); i++) keys[i] = 0;
+
    int i = 0;
    int l = 0;
    int add = 0;
@@ -257,29 +266,44 @@ dfa_new
    dfa_t * dfa = malloc(sizeof(dfa_t) + vertices * sizeof(vertex_t));
    if (dfa == NULL) {
       fprintf(stderr, "error in dfa_new (malloc): %s.\n", strerror(errno));
-      exit(EXIT_FAILURE);
+      return NULL;
    }
+
+   // Initialize state 0.
+   edge_t new = {.state = 0, .match = DFA_COMPUTE};
+   for (int i = 0; i < NBASES; i++) {
+      dfa->states[0].next[i] = new;
+   }
+
    dfa->size = vertices;
-   dfa->pos  = 0;
+   dfa->pos  = 1;
 
    return dfa;
 }
 
 
-edge_t
+int
 dfa_step
 (
- uint      plen,
- uint      tau,
  uint      dfa_state,
  uint      base,
+ uint      plen,
+ uint      tau,
  dfa_t  ** dfap,
  trie_t ** trie,
  char   *  exp,
- int       anchor
+ int       anchor,
+ edge_t *  nextedge
 )
 {
    dfa_t  * dfa   = *dfap;
+
+   // Return next vertex if already computed.
+   if (dfa->states[dfa_state].next[base].match != DFA_COMPUTE) {
+      *nextedge = dfa->states[dfa_state].next[base];
+      return 0;
+   }
+
    int      value = 1 << base;
 
    // Explore the trie backwards to find out the NFA state.
@@ -316,8 +340,10 @@ dfa_step
    } else {
       // Insert new NFA state in the trie.
       uint nodeid = trie_insert(trie, code, prev, dfa->pos);
+      if (nodeid == (uint)-1) return -1;
       // Create new vertex in dfa network.
       uint vertexid = dfa_newvertex(dfap, nodeid);
+      if (vertexid == (uint)-1) return -1;
       dfa = *dfap;
       // Connect dfa vertices.
       dfa->states[dfa_state].next[base].state = vertexid;
@@ -326,7 +352,8 @@ dfa_step
    free(state);
    free(code);
    
-   return dfa->states[dfa_state].next[base];
+   *nextedge = dfa->states[dfa_state].next[base];
+   return 0;
 }
 
 uint
@@ -344,7 +371,7 @@ dfa_newvertex
       *dfap = dfa = realloc(dfa, sizeof(dfa_t) + dfa->size * sizeof(vertex_t));
       if (dfa == NULL) {
          fprintf(stderr, "error (realloc) dfa in 'dfa_newnode': %s\n", strerror(errno));
-         exit(EXIT_FAILURE);
+         return -1;
       }
    }
 
@@ -372,7 +399,7 @@ trie_new
    trie_t * trie = malloc(sizeof(trie_t) + initial_size*sizeof(node_t));
    if (trie == NULL) {
       fprintf(stderr, "error (malloc) trie_t in trie_new: %s\n", strerror(errno));
-      exit(EXIT_FAILURE);
+      return NULL;
    }
 
    // Initialize root node.
@@ -451,11 +478,15 @@ trie_insert
    trie_t * trie  = *triep;
    node_t * nodes = &(trie->nodes[0]);
    uint id = 0;
+   uint initial_pos = trie->pos;
 
    int i;
    for (i = 0; i < trie->height; i++) {
-      if (path[i] < 0 || path[i] >= TRIE_CHILDREN)
-         return 0;
+      if (path[i] < 0 || path[i] >= TRIE_CHILDREN) {
+         // Bad path, revert trie and return.
+         trie->pos = initial_pos;
+         return -1;
+      }
       // Walk the tree.
       if (nodes[id].child[(int)path[i]] != 0) {
          id = nodes[id].child[(int)path[i]];
@@ -468,7 +499,7 @@ trie_insert
          *triep = trie = realloc(trie, sizeof(trie_t) + newsize * sizeof(node_t));
          if (trie == NULL) {
             fprintf(stderr, "error (realloc) in trie_insert: %s\n", strerror(errno));
-            exit(EXIT_FAILURE);
+            return -1;
          }
          // Update pointers.
          nodes = &(trie->nodes[0]);

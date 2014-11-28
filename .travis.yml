@@ -1,5 +1,14 @@
 language: c
+
 compiler:
   - clang
   - gcc
-script: make && make -C test test
+
+branches:
+  only:
+    - master
+
+script: make && cd test && make test
+
+after_success:
+  coveralls

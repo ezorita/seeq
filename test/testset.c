@@ -12,7 +12,26 @@ typedef struct {
 // --  ERROR MESSAGE HANDLING FUNCTIONS  -- //
 
 char ERROR_BUFFER[1024];
+char OUTPUT_BUFFER[1024];
 int BACKUP_FILE_DESCRIPTOR;
+int BACKUP_STDOUT;
+
+void
+redirect_stdout_to
+(
+   char buffer[]
+)
+{
+   // Flush stderr, redirect to /dev/null and set buffer.
+   fflush(stdout);
+   int temp = open("/dev/null", O_WRONLY);
+   dup2(temp, STDOUT_FILENO);
+   memset(buffer, '\0', 1024 * sizeof(char));
+   setvbuf(stdout, buffer, _IOFBF, 1024);
+   close(temp);
+   fflush(stdout);
+}
+
 
 void
 redirect_stderr_to
@@ -43,7 +62,7 @@ unredirect_sderr
 
 
 // --  SET UP AND TEAR DOWN TEST CASES  -- //
-
+/*
 void
 setup(
    fixture *f,
@@ -63,7 +82,7 @@ teardown(
 {
    return;
 }
-
+*/
 
 
 // --  TEST FUNCTIONS -- //
@@ -210,9 +229,15 @@ test_trie_insert
    g_assert_cmpint(node.child[0], ==, 9309871);
    g_assert_cmpint(node.child[1], ==, 394823344);
 
+   // Bad insertion.
+   uint pos = trie->pos;
+   id = trie_insert(&trie, "\1\0\0\0\0\1\2\0\3\0", 3948234, 845722);
+   g_assert_cmpint(id, ==, (uint)-1);
+   g_assert_cmpint(trie->pos, ==, pos);
+
    free(trie);
 
-   // Small tree
+   // Small tree.
    trie_t *lowtrie = trie_new(1,1);
    g_assert(lowtrie != NULL);
 
@@ -340,20 +365,20 @@ test_dfa_new
    dfa_t * dfa = dfa_new(1);
    g_assert(dfa != NULL);
    g_assert_cmpint(dfa->size, ==, 1);
-   g_assert_cmpint(dfa->pos, ==, 0);
+   g_assert_cmpint(dfa->pos, ==, 1);
    free(dfa);
 
    dfa = dfa_new(-100);
    g_assert(dfa != NULL);
    g_assert_cmpint(dfa->size, ==, 1);
-   g_assert_cmpint(dfa->pos, ==, 0);
+   g_assert_cmpint(dfa->pos, ==, 1);
    free(dfa);
 
    for (int i = -100; i < 1000; i++) {
       dfa = dfa_new(i);
       g_assert(dfa != NULL);
       g_assert_cmpint(dfa->size, ==, (i < 1 ? 1 : i));
-      g_assert_cmpint(dfa->pos, ==, 0);
+      g_assert_cmpint(dfa->pos, ==, 1);
       free(dfa);
    }
 }
@@ -366,9 +391,9 @@ test_dfa_newvertex
    dfa_t * dfa = dfa_new(1);
    g_assert(dfa != NULL);
    g_assert_cmpint(dfa->size, ==, 1);
-   g_assert_cmpint(dfa->pos, ==, 0);
+   g_assert_cmpint(dfa->pos, ==, 1);
 
-   for (int i = 0; i < 1000; i++) {
+   for (int i = 1; i < 1000; i++) {
       dfa_newvertex(&dfa, i);
       g_assert_cmpint(dfa->pos, ==, i+1);
       g_assert_cmpint(dfa->states[i].node_id, ==, i);
@@ -384,6 +409,118 @@ void
 test_dfa_step
 (void)
 {
+   char   * pattern = "CATG";
+   char   * text = "ATCCTCATGA";
+   uint     tau = 1;
+   char     exp[strlen(pattern)];
+   uint     plen = parse(pattern, exp);
+   g_assert_cmpint(plen, ==, 4);
+
+   dfa_t  * dfa = dfa_new(1);
+   trie_t * trie = trie_new(1, plen);
+   g_assert(dfa != NULL);
+   g_assert(trie != NULL);
+
+   // Insert row 0
+   g_assert_cmpint(trie_insert(&trie, "\2\2\1\1", tau+1, 0), ==, 4);
+   dfa->states[0].node_id = 4;
+
+   edge_t transition;   
+   // text[0]
+   g_assert(0 == dfa_step(0, translate[(int)text[0]], plen, tau, &dfa, &trie, exp, DFA_FORWARD, &transition));
+   g_assert_cmpint(transition.state, ==, 1);
+   g_assert_cmpint(transition.match, ==, 2);
+   // text[1]
+   g_assert(0 == dfa_step(transition.state, translate[(int)text[1]], plen, tau, &dfa, &trie, exp, DFA_FORWARD, &transition));
+   g_assert_cmpint(transition.state, ==, 2);
+   g_assert_cmpint(transition.match, ==, 2);
+   // text[2]
+   g_assert(0 == dfa_step(transition.state, translate[(int)text[2]], plen, tau, &dfa, &trie, exp, DFA_FORWARD, &transition));
+   g_assert_cmpint(transition.state, ==, 3);
+   g_assert_cmpint(transition.match, ==, 2);
+   // text[3]
+   g_assert(0 == dfa_step(transition.state, translate[(int)text[3]], plen, tau, &dfa, &trie, exp, DFA_FORWARD, &transition));
+   g_assert_cmpint(transition.state, ==, 3);
+   g_assert_cmpint(transition.match, ==, 2);
+   // text[4]
+   g_assert(0 == dfa_step(transition.state, translate[(int)text[4]], plen, tau, &dfa, &trie, exp, DFA_FORWARD, &transition));
+   g_assert_cmpint(transition.state, ==, 4);
+   g_assert_cmpint(transition.match, ==, 2);
+   // text[5]
+   g_assert(0 == dfa_step(transition.state, translate[(int)text[5]], plen, tau, &dfa, &trie, exp, DFA_FORWARD, &transition));
+   g_assert_cmpint(transition.state, ==, 3);
+   g_assert_cmpint(transition.match, ==, 2);
+   // text[6]
+   g_assert(0 == dfa_step(transition.state, translate[(int)text[6]], plen, tau, &dfa, &trie, exp, DFA_FORWARD, &transition));
+   g_assert_cmpint(transition.state, ==, 5);
+   g_assert_cmpint(transition.match, ==, 2);
+   // text[7]
+   g_assert(0 == dfa_step(transition.state, translate[(int)text[7]], plen, tau, &dfa, &trie, exp, DFA_FORWARD, &transition));
+   g_assert_cmpint(transition.state, ==, 6);
+   g_assert_cmpint(transition.match, ==, 1);
+   // text[8]
+   g_assert(0 == dfa_step(transition.state, translate[(int)text[8]], plen, tau, &dfa, &trie, exp, DFA_FORWARD, &transition));
+   g_assert_cmpint(transition.state, ==, 7);
+   g_assert_cmpint(transition.match, ==, 0);
+   // text[9]
+   g_assert(0 == dfa_step(transition.state, translate[(int)text[9]], plen, tau, &dfa, &trie, exp, DFA_FORWARD, &transition));
+   g_assert_cmpint(transition.state, ==, 8);
+   g_assert_cmpint(transition.match, ==, 1);
+
+
+   // Reverse DFA
+   char * rpattern = "GTAC";
+   char * matchedtext = "CATG";
+   char   rexp[strlen(rpattern)];
+   plen = parse(rpattern, rexp);
+   g_assert_cmpint(plen, ==, 4);
+   
+   dfa_t  * rdfa = dfa_new(1);
+   trie_t * rtrie = trie_new(1, plen);
+   g_assert(rdfa != NULL);
+   g_assert(rtrie != NULL);
+
+   // Insert row 0
+   g_assert_cmpint(trie_insert(&rtrie, "\2\2\1\1", tau+1, 0), ==, 4);
+   rdfa->states[0].node_id = 4;
+
+   // Perfect reverse match.
+   // match[3]
+   g_assert(0 == dfa_step(0, translate[(int)matchedtext[3]], plen, tau, &rdfa, &rtrie, rexp, DFA_REVERSE, &transition));
+   g_assert_cmpint(transition.state, ==, 1);
+   g_assert_cmpint(transition.match, ==, 2);
+   // match[2]
+   g_assert(0 == dfa_step(transition.state, translate[(int)matchedtext[2]], plen, tau, &rdfa, &rtrie, rexp, DFA_REVERSE, &transition));
+   g_assert_cmpint(transition.state, ==, 2);
+   g_assert_cmpint(transition.match, ==, 2);
+   // match[1]
+   g_assert(0 == dfa_step(transition.state, translate[(int)matchedtext[1]], plen, tau, &rdfa, &rtrie, rexp, DFA_REVERSE, &transition));
+   g_assert_cmpint(transition.state, ==, 3);
+   g_assert_cmpint(transition.match, ==, 1);
+   // match[0]
+   g_assert(0 == dfa_step(transition.state, translate[(int)matchedtext[0]], plen, tau, &rdfa, &rtrie, rexp, DFA_REVERSE, &transition));
+   g_assert_cmpint(transition.state, ==, 4);
+   g_assert_cmpint(transition.match, ==, 0);
+   
+   // Reverse match finding with 1 mismatch.
+   matchedtext = "CAGG";
+   // match[3]
+   g_assert(0 == dfa_step(0, translate[(int)matchedtext[3]], plen, tau, &rdfa, &rtrie, rexp, DFA_REVERSE, &transition));
+   g_assert_cmpint(transition.state, ==, 1);
+   g_assert_cmpint(transition.match, ==, 2);
+   // match[2]
+   g_assert(0 == dfa_step(transition.state, translate[(int)matchedtext[2]], plen, tau, &rdfa, &rtrie, rexp, DFA_REVERSE, &transition));
+   g_assert_cmpint(transition.state, ==, 5);
+   g_assert_cmpint(transition.match, ==, 2);
+   // match[1]
+   g_assert(0 == dfa_step(transition.state, translate[(int)matchedtext[1]], plen, tau, &rdfa, &rtrie, rexp, DFA_REVERSE, &transition));
+   g_assert_cmpint(transition.state, ==, 6);
+   g_assert_cmpint(transition.match, ==, 2);
+   // match[0]
+   g_assert(0 == dfa_step(transition.state, translate[(int)matchedtext[0]], plen, tau, &rdfa, &rtrie, rexp, DFA_REVERSE, &transition));
+   g_assert_cmpint(transition.state, ==, 7);
+   g_assert_cmpint(transition.match, ==, 1);
+
    return;
 }
 
@@ -392,64 +529,174 @@ test_parse
 (void)
 {
 
-   char *keysp;
-   g_assert_cmpint(parse("AaAaAaAa", &keysp), ==, 8);
+   char keys[100];
+   g_assert_cmpint(parse("AaAaAaAa", keys), ==, 8);
    for (int i = 0 ; i < 8 ; i++) {
-      g_assert_cmpint(keysp[i], ==, 1);
+      g_assert_cmpint(keys[i], ==, 1);
    }
-   free(keysp);
 
-   g_assert_cmpint(parse("CcCcCcCc", &keysp), ==, 8);
+   g_assert_cmpint(parse("CcCcCcCc", keys), ==, 8);
    for (int i = 0 ; i < 8 ; i++) {
-      g_assert_cmpint(keysp[i], ==, 2);
+      g_assert_cmpint(keys[i], ==, 2);
    }
-   free(keysp);
 
-   g_assert_cmpint(parse("GgGgGgGg", &keysp), ==, 8);
+   g_assert_cmpint(parse("GgGgGgGg", keys), ==, 8);
    for (int i = 0 ; i < 8 ; i++) {
-      g_assert_cmpint(keysp[i], ==, 4);
+      g_assert_cmpint(keys[i], ==, 4);
    }
-   free(keysp);
 
-   g_assert_cmpint(parse("TtTtTtTt", &keysp), ==, 8);
+   g_assert_cmpint(parse("TtTtTtTt", keys), ==, 8);
    for (int i = 0 ; i < 8 ; i++) {
-      g_assert_cmpint(keysp[i], ==, 8);
+      g_assert_cmpint(keys[i], ==, 8);
    }
-   free(keysp);
 
-   g_assert_cmpint(parse("NnNnNnNn", &keysp), ==, 8);
+   g_assert_cmpint(parse("NnNnNnNn", keys), ==, 8);
    for (int i = 0 ; i < 8 ; i++) {
-      g_assert_cmpint(keysp[i], ==, 31);
+      g_assert_cmpint(keys[i], ==, 31);
    }
-   free(keysp);
 
-   g_assert_cmpint(parse("Nn[]Nn[]NnN[]n", &keysp), ==, 8);
+   g_assert_cmpint(parse("Nn[]Nn[]NnN[]n", keys), ==, 8);
    for (int i = 0 ; i < 8 ; i++) {
-      g_assert_cmpint(keysp[i], ==, 31);
+      g_assert_cmpint(keys[i], ==, 31);
    }
-   free(keysp);
 
-
-   g_assert_cmpint(parse("[GATC][gatc][GaTc][gAtC]", &keysp), ==, 4);
+   g_assert_cmpint(parse("[GATC][gatc][GaTc][gAtC]", keys), ==, 4);
    for (int i = 0 ; i < 4 ; i++) {
-      g_assert_cmpint(keysp[i], ==, 15);
+      g_assert_cmpint(keys[i], ==, 15);
    }
-   free(keysp);
 
-   g_assert_cmpint(parse("[GATCgatc", &keysp), ==, -1);
-   free(keysp);
-
-   g_assert_cmpint(parse("A]", &keysp), ==, -1);
-   free(keysp);
-
-   g_assert_cmpint(parse("[ATG[C]]", &keysp), ==, -1);
-   free(keysp);
-
-   g_assert_cmpint(parse("Z", &keysp), ==, -1);
-   free(keysp);
+   g_assert_cmpint(parse("[GATCgatc", keys), ==, -1);
+   g_assert_cmpint(parse("A]", keys), ==, -1);
+   g_assert_cmpint(parse("[ATG[C]]", keys), ==, -1);
+   g_assert_cmpint(parse("Z", keys), ==, -1);
 
    return;
 
+}
+
+void
+test_seeq
+(void)
+{
+
+   /* All tests from this section are based on an input file called
+      testdata.txt placed in the test folder with the following content:
+
+      GTATGTACCACAGATGTCGATCGAC
+      TCTATCATCCGTACTCTGATCTCAT
+      LCACAGATCACAGATCACAGATCAC
+   */
+
+   redirect_stdout_to(OUTPUT_BUFFER);
+   redirect_stderr_to(ERROR_BUFFER);
+   int offset = 0;
+   int eoffset = 0;
+
+   struct seeqarg_t args = {
+      .showdist  = 0,
+      .showpos   = 0,
+      .showline  = 0,
+      .printline = 1,
+      .matchonly = 0,
+      .count     = 0,
+      .compact   = 0,
+      .dist      = 0,
+      .verbose   = 0,
+      .endline   = 0,
+      .prefix    = 0,
+      .invert    = 0 };
+
+   // Test 1: tau=0, default output.
+   char * pattern = "CACAGAT";
+   char * input   = "testdata.txt";
+   char * answer  = "GTATGTACCACAGATGTCGATCGAC\n";
+   
+   seeq(pattern, input, args);
+   g_assert_cmpint(strcmp(OUTPUT_BUFFER+offset, answer), ==, 0);
+   offset = strlen(OUTPUT_BUFFER);
+
+   // Test 2: tau=0, show line, distance, position.
+   args.showdist = args.showpos = args.showline = 1;
+   answer = "1 8-14 0 GTATGTACCACAGATGTCGATCGAC\n";
+   seeq(pattern, input, args);
+   g_assert_cmpint(strcmp(OUTPUT_BUFFER+offset, answer), ==, 0);
+   offset = strlen(OUTPUT_BUFFER);
+
+   // Test 3: tau=3, compact output.
+   args.showdist = args.showpos = args.showline = 0;
+   args.compact = 1;
+   args.dist = 3;
+   answer = "1:8-14:0\n2:8-11:3\n";
+   seeq(pattern, input, args);
+   g_assert_cmpstr(OUTPUT_BUFFER+offset, ==, answer);
+   offset = strlen(OUTPUT_BUFFER);
+
+   // Test 4: tau=0, count.
+   args.dist = args.compact = 0;
+   args.count = 1;
+   answer = "1\n";
+   seeq(pattern, input, args);
+   g_assert_cmpstr(OUTPUT_BUFFER+offset, ==, answer);
+   offset = strlen(OUTPUT_BUFFER);
+
+   // Test 5: tau=0, inverse.
+   args.count = 0;
+   args.invert = 1;
+   answer = "TCTATCATCCGTACTCTGATCTCAT\n";
+   seeq(pattern, input, args);
+   g_assert_cmpstr(OUTPUT_BUFFER+offset, ==, answer);
+   offset = strlen(OUTPUT_BUFFER);
+
+   // Test 6: tau=0, inverse+lines.
+   args.showline = 1;
+   answer = "2 TCTATCATCCGTACTCTGATCTCAT\n";
+   seeq(pattern, input, args);
+   g_assert_cmpstr(OUTPUT_BUFFER+offset, ==, answer);
+   offset = strlen(OUTPUT_BUFFER);
+   
+   // Test 7: tau=3, match only.
+   args.invert = args.showline = 0;
+   args.matchonly = 1;
+   args.dist = 3;
+   answer = "CACAGAT\nCCGT\n";
+   seeq(pattern, input, args);
+   g_assert_cmpstr(OUTPUT_BUFFER+offset, ==, answer);
+   offset = strlen(OUTPUT_BUFFER);
+
+   // Test 8: tau=3, prefix.
+   args.matchonly = args.printline = 0;
+   args.prefix = 1;
+   answer = "GTATGTAC\nTCTATCAT\n";
+   seeq(pattern, input, args);
+   g_assert_cmpstr(OUTPUT_BUFFER+offset, ==, answer);
+   offset = strlen(OUTPUT_BUFFER);
+
+   // Test 9: tau=3, suffix (endline).
+   args.prefix = 0;
+   args.endline = 1;
+   answer = "GTCGATCGAC\nACTCTGATCTCAT\n";
+   seeq(pattern, input, args);
+   g_assert_cmpstr(OUTPUT_BUFFER+offset, ==, answer);
+   offset = strlen(OUTPUT_BUFFER);
+
+   // Test 10: incorrect pattern.
+   g_assert(seeq("CACAG[AT", input, args) == EXIT_FAILURE);
+   g_assert_cmpstr(ERROR_BUFFER + eoffset, ==, "error: invalid pattern expression.\n");
+   eoffset = strlen(ERROR_BUFFER);
+
+   // Test 11: tau > pattern length.
+   args.dist = 7;
+   g_assert(seeq(pattern, input, args) == EXIT_FAILURE);
+   g_assert_cmpstr(ERROR_BUFFER + eoffset, ==, "error: expression must be longer than the maximum distance.\n");
+   eoffset = strlen(ERROR_BUFFER);
+
+   // Test 12: file does not exist.
+   args.dist = 0;
+   g_assert(seeq(pattern, "invented.txt", args) == EXIT_FAILURE);
+   g_assert_cmpint(strncmp(ERROR_BUFFER + eoffset, "error: could not open file:", 27), ==, 0);
+   eoffset = strlen(ERROR_BUFFER);
+
+   return;
 }
 
 
@@ -461,6 +708,7 @@ main(
 {
    // Save the stderr file descriptor upon start.
    BACKUP_FILE_DESCRIPTOR = dup(STDERR_FILENO);
+   BACKUP_STDOUT = dup(STDOUT_FILENO);
 
    g_test_init(&argc, &argv, NULL);
    g_test_add_func("/trie_new", test_trie_new);
@@ -469,6 +717,8 @@ main(
    g_test_add_func("/trie_reset", test_trie_reset);
    g_test_add_func("/dfa_new", test_dfa_new);
    g_test_add_func("/dfa_newvertex", test_dfa_newvertex);
+   g_test_add_func("/dfa_step", test_dfa_step);
    g_test_add_func("/parse", test_parse);
+   g_test_add_func("/seeq", test_seeq);
    return g_test_run();
 }

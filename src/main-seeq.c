@@ -305,6 +305,5 @@ main(
                             verbose_flag, endline_flag * maskinv,
                             prefix_flag * maskinv, invert_flag * maskcnt};
 
-   seeq(expr, input, args);
-   return EXIT_SUCCESS;
+   return seeq(expr, input, args);
 }
