@@ -14,4 +14,4 @@ before_install:
 script: make && cd test && make test
 
 after_success:
-  - coveralls -n
+  - coveralls -e faultymalloc.gcno -e testset.gcno --gcov-options '\-lp'
