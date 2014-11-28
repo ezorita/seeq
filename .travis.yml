@@ -11,4 +11,4 @@ branches:
 script: make && cd test && make test
 
 after_success:
-  coveralls
+  - coveralls
