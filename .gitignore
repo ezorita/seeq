@@ -5,5 +5,4 @@
 *.gcno
 *.gcov
 *\#*
-test/*
 seeq
