@@ -9,7 +9,7 @@ INCLUDES= $(addprefix -I, $(INC_DIR))
 
 CFLAGS= -std=c99 -g -Wall
 LDLIBS=
-CC= gcc
+#CC= gcc
 
 all: seeq
 

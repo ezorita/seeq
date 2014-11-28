@@ -8,7 +8,10 @@ branches:
   only:
     - master
 
+before_install:
+  - sudo pip install cpp-coveralls
+
 script: make && cd test && make test
 
 after_success:
-  - coveralls
+  - coveralls --gcov-options '\-lp'

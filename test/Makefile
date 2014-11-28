@@ -1,9 +1,12 @@
 vpath %.c ../src
 vpath %.h ../src
 
-CC= gcc
+#CC= gcc
 P= testset
+
 OBJECTS= seeq.o
+COVERAGE= seeq.gcno
+
 CFLAGS= -I../src `pkg-config --cflags glib-2.0` -g -Wall -std=gnu99 \
 	-fprofile-arcs -ftest-coverage -O0
 LDLIBS= -L`pwd` -Wl,-rpath=`pwd` `pkg-config --libs glib-2.0` \
@@ -18,7 +21,7 @@ libfaultymalloc.so: faultymalloc.c
 
 test: testset
 	gtester --verbose --keep-going testset
-	gcov *.gcda
+	gcov $(COVERAGE)
 
 testperf: testset
 	#perf stat -B -e cache-references,cache-misses,cycles,instructions,branches,faults,migrations gtester --verbose --keep-going -m=perf testset
