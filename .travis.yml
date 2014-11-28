@@ -14,4 +14,4 @@ before_install:
 script: make && cd test && make test
 
 after_success:
-  - coveralls -E 'faultymalloc\|testset' --gcov-options '\-lp'
+  - coveralls --verbose -E 'faultymalloc\|testset' --gcov-options '\-lp'
