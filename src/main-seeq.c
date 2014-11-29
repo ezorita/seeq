@@ -59,14 +59,15 @@ void SIGSEGV_handler(int sig) {
 }
 
 int
-main(
-   int argc,
-   char **argv
+parse_params
+(
+ int argc,
+ char ** argv,
+ char ** expr,
+ char ** input,
+ struct seeqarg_t * args
 )
 {
-   // Backtrace handler
-   signal(SIGSEGV, SIGSEGV_handler); 
-
    // Unset flags (value -1).
    int showdist_flag  = -1;
    int showpos_flag   = -1;
@@ -82,12 +83,12 @@ main(
    int prefix_flag    = -1;
 
    // Unset options (value 'UNSET').
-   char *input = NULL;
+   *input = NULL;
 
    if (argc == 1) {
       say_version();
       say_usage();
-      exit(EXIT_SUCCESS);
+      return 1;
    }
 
    int c;
@@ -125,7 +126,7 @@ main(
          else {
             fprintf(stderr, "distance option set more than once\n");
             say_usage();
-            return EXIT_FAILURE;
+            return -1;
          }
          break;
 
@@ -140,7 +141,7 @@ main(
          else {
             fprintf(stderr, "verbose option set more than once\n");
             say_usage();
-            return EXIT_FAILURE;
+            return -1;
          }
          break;
 
@@ -153,7 +154,7 @@ main(
          else {
             fprintf(stderr, "prefix option set more than once\n");
             say_usage();
-            return EXIT_FAILURE;
+            return -1;
          }
          break;
 
@@ -165,7 +166,7 @@ main(
          else {
             fprintf(stderr, "line-end option set more than once\n");
             say_usage();
-            return EXIT_FAILURE;
+            return -1;
          }
          break;
 
@@ -176,7 +177,7 @@ main(
          else {
             fprintf(stderr, "show-position option set more than once\n");
             say_usage();
-            return EXIT_FAILURE;
+            return -1;
          }
          break;
 
@@ -187,7 +188,7 @@ main(
          else {
             fprintf(stderr, "match-only option set more than once\n");
             say_usage();
-            return EXIT_FAILURE;
+            return -1;
          }
          break;
 
@@ -198,7 +199,7 @@ main(
          else {
             fprintf(stderr, "no-printline option set more than once\n");
             say_usage();
-            return EXIT_FAILURE;
+            return -1;
          }
          break;
 
@@ -209,7 +210,7 @@ main(
          else {
             fprintf(stderr, "show-distance option set more than once\n");
             say_usage();
-            return EXIT_FAILURE;
+            return -1;
          }
          break;
 
@@ -220,7 +221,7 @@ main(
          else {
             fprintf(stderr, "show-line option set more than once\n");
             say_usage();
-            return EXIT_FAILURE;
+            return -1;
          }
          break;
 
@@ -231,7 +232,7 @@ main(
          else {
             fprintf(stderr, "count option set more than once\n");
             say_usage();
-            return EXIT_FAILURE;
+            return -1;
          }
          break;
 
@@ -242,7 +243,7 @@ main(
          else {
             fprintf(stderr, "invert option set more than once\n");
             say_usage();
-            return EXIT_FAILURE;
+            return -1;
          }
          break;
 
@@ -253,7 +254,7 @@ main(
          else {
             fprintf(stderr, "format-compact option set more than once\n");
             say_usage();
-            return EXIT_FAILURE;
+            return -1;
          }
          break;
 
@@ -265,16 +266,16 @@ main(
       }
    }
 
-   char * expr = argv[optind++];
+   *expr = argv[optind++];
 
    if (optind < argc) {
       if ((optind == argc - 1) && (input == NULL)) {
-         input = argv[optind];
+         *input = argv[optind];
       }
       else {
          fprintf(stderr, "too many options\n");
          say_usage();
-         return EXIT_FAILURE;
+         return -1;
       }
    }
    if (count_flag == -1) count_flag = 0;
@@ -298,12 +299,34 @@ main(
    int maskcnt = !count_flag;
    int maskinv = !invert_flag * maskcnt;
 
-   struct seeqarg_t args = {showdist_flag * maskinv, showpos_flag * maskinv,
-                            showline_flag * maskcnt, printline_flag * maskinv,
-                            matchonly_flag * maskinv, count_flag,
-                            compact_flag * maskinv, dist_flag,
-                            verbose_flag, endline_flag * maskinv,
-                            prefix_flag * maskinv, invert_flag * maskcnt};
+   args->showdist  = showdist_flag * maskinv;
+   args->showpos   = showpos_flag * maskinv;
+   args->showline  = showline_flag * maskcnt;
+   args->printline = printline_flag * maskinv;
+   args->matchonly = matchonly_flag * maskinv;
+   args->count     = count_flag;
+   args->compact   = compact_flag * maskinv;
+   args->dist      = dist_flag;
+   args->verbose   = verbose_flag;
+   args->endline   = endline_flag * maskinv;
+   args->prefix    = prefix_flag * maskinv;
+   args->invert    =invert_flag * maskcnt;
 
+   return 0;
+}
+
+int
+main(
+   int argc,
+   char **argv
+)
+{
+   // Backtrace handler
+   signal(SIGSEGV, SIGSEGV_handler); 
+   char *expr, *input;
+   struct seeqarg_t args;
+   int err = parse_params(argc, argv, &expr, &input, &args);
+   if (err == -1) return EXIT_FAILURE;
+   else if (err == 1) return EXIT_SUCCESS;
    return seeq(expr, input, args);
 }
