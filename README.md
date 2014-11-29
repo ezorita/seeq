@@ -1,4 +1,5 @@
 ## Seeq: DNA/RNA pattern matching algorithm
+[![Build Status](https://travis-ci.org/ezorita/seeq.svg?branch=master)](https://travis-ci.org/ezorita/seeq) [![Coverage Status](https://img.shields.io/coveralls/ezorita/seeq.svg)](https://coveralls.io/r/ezorita/seeq?branch=master)
 ---
 ## Contents: ##
     1. What is seeq?
