@@ -44,8 +44,8 @@
 #define INITIAL_TRIE_SIZE  256
 #define INITIAL_DFA_SIZE   256
 #define INITIAL_LINE_SIZE  50
-#define DFA_FORWARD        0
-#define DFA_REVERSE        1
+#define DFA_FORWARD        1
+#define DFA_REVERSE        0
 #define DFA_COMPUTE        -1
 #define NBASES 5 // Should never be set larger than 32.
 #define TRIE_CHILDREN 3
@@ -124,7 +124,7 @@ dfa_t     * dfa_new       (int);
 uint        dfa_newvertex (dfa_t **, uint);
 int         dfa_step      (uint, uint, uint, uint, dfa_t **, trie_t **, char *, int, edge_t *);
 trie_t    * trie_new      (int, int);
-uint        trie_search   (trie_t *, char*, uint*, uint*);
+int         trie_search   (trie_t *, char*, uint*, uint*);
 uint        trie_insert   (trie_t **, char*, uint, uint);
 uint      * trie_getrow   (trie_t *, uint);
 void        trie_reset    (trie_t *);

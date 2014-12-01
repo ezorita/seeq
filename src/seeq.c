@@ -31,6 +31,40 @@ seeq
  char * input,
  struct seeqarg_t args
 )
+// SYNOPSIS:                                                              
+//   Sequentially searches for a given pattern in the file name
+//   passed in "input", or from the standard input if the input argu-
+//   ment is set to NULL. The output generated is sent to the standard
+//   output and depends on the flags enabled in the 'args' struct.
+//   The matching metric is the Levenshtein distance. The input sequences
+//   must be a succession of DNA/RNA nucleotides ('A','C','T','G','U','N')
+//   separated by newline characters '\n'.
+//                                                                        
+// PARAMETERS:                                                            
+//   expression: the pattern to match.
+//   input: string containing the filename or NULL pointer for stdin.
+//   args: properly filled seeqarg_t struct to customize the output format.
+//     struct seeqarg_t:
+//     - showdist: Prints the levenshtein distance of the match.
+//     - showpos: Prints the position (stard-end) of the matched nucleotides.
+//     - showline: Prints the line number of the matched line.
+//     - printline: Prints the matched line.
+//     - matchonly: Prints only the matched nucleotides.
+//     - count: The only output is the count of matched lines.
+//     - compact: Prints matches in compact format.
+//     - dist: Match distance threshold.
+//     - verbose: Print verbose messages.
+//     - endline: Prints only the end of the line starting after the match.
+//     - prefix: Prints only the beginnig of the line ending before the match.
+//     - invert: Prints only the non-matched lines.
+//     ** All format options are enabled setting its value to 1, except dist,
+//     ** which must contain a positive integer value.
+//                                                                        
+// RETURN:                                                                
+//   seeq returns 0 on success, or -1 if an error occurred.
+//
+// SIDE EFFECTS:
+//   None.
 {
    int verbose = args.verbose;
    //----- PARSE PARAMS -----
@@ -47,7 +81,7 @@ seeq
    
    if (verbose) fprintf(stderr, "parsing pattern\n");
 
-   // ----- COMPUTE DFA -----
+   // ----- INITIALIZE DFA AND NFA -----
    char keys[strlen(expression)];
    int  wlen = parse(expression, keys);
 
@@ -58,6 +92,11 @@ seeq
    
    if (tau >= wlen) {
       fprintf(stderr, "error: expression must be longer than the maximum distance.\n");
+      return EXIT_FAILURE;
+   }
+
+   if (tau < 0) {
+      fprintf(stderr, "error: invalid distance.\n");
       return EXIT_FAILURE;
    }
 
@@ -141,6 +180,8 @@ seeq
          if (streak_dist > next.match) {
             // Tau is decreasing, track new streak.
             streak_dist   = next.match;
+          
+   // ----- FORMAT OUTPUT -----
          } else if (streak_dist < next.match) {
             if (args.invert) break;
             // FORMAT OUTPUT
@@ -208,6 +249,8 @@ seeq
    }
    if (verbose) fprintf(stderr, "done\n");
    if (args.count) fprintf(stdout, "%lu\n", count);
+
+   // ----- FREE MEMORY -----
    free(rdfa);
    free(dfa);
    free(data);
@@ -222,6 +265,45 @@ parse
  char * expr,
  char * keys
 )
+// SYNOPSIS:                                                              
+//   Parses a pattern expression converting them into bytes, one for each
+//   matching position. The key byte is defined as follows:
+//
+//      bit0 (LSB): match 'A' or 'a'.
+//      bit1      : match 'C' or 'c'.
+//      bit2      : match 'G' or 'g'.
+//      bit3      : match 'T', 't', 'U' or 'u'.
+//      bit4      : match 'N' or 'n'.
+//      bit5..7   : not used.
+//
+//   Each key may have one or more bits set if different bases are allowed
+//   to match a single position. The expected input expression is a string
+//   containing nucleotides 'A','C','G','T','U' and 'N'. If one matching
+//   position allows more than one base, the matching bases must be enclosed
+//   in square brackets '[' ']'. For instance,
+//
+//      AC[AT]
+//
+//   would match a sequence containing A in the 1st position, C in the 2nd
+//   position and either A or T in the 3rd position. The associated keys
+//   would be
+//
+//      keys("AC[AT]") = {0x01, 0x02, 0x09}
+//
+//   If the expression contains 'N', that position will match any nucleotide,
+//   including 'N'.
+//                                                                        
+// PARAMETERS:                                                            
+//   expr: A null-terminated string containing the matching expression.
+//   keys: pointer to a previously allocated vector of chars. The size of the
+//         allocated region should be equal to strlen(expr).
+//                                                                        
+// RETURN:                                                                
+//   On success, parse returns the number of matching positions (keys) for the
+//   given expression, or -1 if an error occurred.
+//
+// SIDE EFFECTS:
+//   The contents of the pointer 'keys' are overwritten.
 {
    // Initialize keys to 0.
    for (int i = 0; i < strlen(expr); i++) keys[i] = 0;
@@ -234,7 +316,7 @@ parse
       if      (c == 'A' || c == 'a') keys[l] |= 0x01;
       else if (c == 'C' || c == 'c') keys[l] |= 0x02;
       else if (c == 'G' || c == 'g') keys[l] |= 0x04;
-      else if (c == 'T' || c == 't') keys[l] |= 0x08;
+      else if (c == 'T' || c == 't' || c == 'U' || c == 'u') keys[l] |= 0x08;
       else if (c == 'N' || c == 'n') keys[l] |= 0x1F;
       else if (c == '[') {
          if (add) return -1;
@@ -261,6 +343,19 @@ dfa_new
 (
  int vertices
 )
+// SYNOPSIS:                                                              
+//   Creates and initializes a new dfa network preallocated with the specified
+//   number of vertices.
+//                                                                        
+// PARAMETERS:                                                            
+//   vertices: the number of preallocated vertices.
+//                                                                        
+// RETURN:                                                                
+//   On success, the function returns a pointer to the new dfa_t structure.
+//   A NULL pointer is returned in case of error.
+//
+// SIDE EFFECTS:
+//   The returned dfa_t struct is allocated using malloc and must be manually freed.
 {
    if (vertices < 1) vertices = 1;
    dfa_t * dfa = malloc(sizeof(dfa_t) + vertices * sizeof(vertex_t));
@@ -295,6 +390,29 @@ dfa_step
  int       anchor,
  edge_t *  nextedge
 )
+// SYNOPSIS:                                                              
+//   Updates the current status of DFA network. Based on the parameters passed,
+//   the function will compute the next row of the Needleman-Wunsch matrix and
+//   update the network accordingly. If the new row points to an already-known
+//   state, the two existing vertices will be linked with an edge. Otherwise,
+//   a new vertex will be created for the new row.
+//                                                                        
+// PARAMETERS:                                                            
+//   dfa_state : current state of the DFA.
+//   base      : next base to resolve (0 for 'A', 1 for 'C', 2 for 'G', '3' for 'T'/'U' and 4 for 'N).
+//   plen      : length of the pattern, as returned by parse.
+//   tau       : Levenshtein distance threshold.
+//   dfap      : pointer to a memory space containing the address of the DFA.
+//   trie      : pointer to a memory space containing the address of the associated trie.
+//   exp       : expression keys, as returned by parse.
+//   anchor    : if set to 1, the first NW column is always initialized with 0.
+//   nextedge  : a pointer to an edge_t struct where the computed transition will be placed,
+//                                                                        
+// RETURN:                                                                
+//   dfa_step returns 0 on success, or -1 if an error occurred.
+//
+// SIDE EFFECTS:
+//   The returned dfa_t struct is allocated using malloc and must be manually freed.
 {
    dfa_t  * dfa   = *dfap;
 
@@ -304,7 +422,7 @@ dfa_step
       return 0;
    }
 
-   int      value = 1 << base;
+   int  value = 1 << base;
 
    // Explore the trie backwards to find out the NFA state.
    uint * state = trie_getrow(*trie, dfa->states[dfa_state].node_id);
@@ -313,9 +431,9 @@ dfa_step
    // Initialize first column.
    int nextold, prev, old = state[0];
    if (anchor) {
-      state[0] = prev = min(tau + 1, state[0] + 1);
-   } else {
       state[0] = prev = 0;
+   } else {
+      state[0] = prev = min(tau + 1, state[0] + 1);
    }
 
    // Update row.
@@ -334,10 +452,10 @@ dfa_step
    uint dfalink;
    int exists = trie_search(*trie, code, NULL, &dfalink);
 
-   if (exists) {
+   if (exists == 1) {
       // If exists, just link with the existing state.
       dfa->states[dfa_state].next[base].state = dfalink;
-   } else {
+   } else if (exists == 0) {
       // Insert new NFA state in the trie.
       uint nodeid = trie_insert(trie, code, prev, dfa->pos);
       if (nodeid == (uint)-1) return -1;
@@ -347,6 +465,9 @@ dfa_step
       dfa = *dfap;
       // Connect dfa vertices.
       dfa->states[dfa_state].next[base].state = vertexid;
+   } else {
+      fprintf(stderr, "error in 'trie_search': incorrect path.\n");
+      return -1;
    }
 
    free(state);
@@ -362,6 +483,23 @@ dfa_newvertex
  dfa_t ** dfap,
  uint     nodeid
 )
+// SYNOPSIS:                                                              
+//   Adds a new vertex to the dfa network. The new vertex is not linked to any other
+//   vertex in any way, so the connection must be done manually.
+//                                                                        
+// PARAMETERS:                                                            
+//   dfap   : pointer to a memory space containing the address of the DFA.
+//   nodeid : id of the associated node in the NW row trie, i.e. where the
+//            NW row corresponding to this state is stored.
+//                                                                        
+// RETURN:                                                                
+//   On success, the function returns the id of the new vertex. In case of error
+//   the function returns (uint)-1.
+//
+// SIDE EFFECTS:
+//   If the dfa has reached its maximum size, the dfa will be reallocated
+//   doubling its current size. The address of the dfa may have changed after
+//   calling dfa_newvertex.
 {
    dfa_t * dfa = *dfap;
 
@@ -390,6 +528,21 @@ trie_new
  int initial_size,
  int height
 )
+// SYNOPSIS:                                                              
+//   Creates and initializes a new NW-row trie preallocated with the specified
+//   number of nodes.
+//                                                                        
+// PARAMETERS:                                                            
+//   initial_size : the number of preallocated nodes.
+//   height       : height of the trie. It must be equal to the number of keys
+//                  as returned by parse.
+//                                                                        
+// RETURN:                                                                
+//   On success, the function returns a pointer to the new trie_t structure.
+//   A NULL pointer is returned in case of error.
+//
+// SIDE EFFECTS:
+//   The returned trie_t struct is allocated using malloc and must be manually freed.
 {
 
    // Allocate at least one node.
@@ -413,7 +566,7 @@ trie_new
    return trie;
 }
 
-uint
+int
 trie_search
 (
  trie_t * trie,
@@ -421,9 +574,26 @@ trie_search
  uint   * value,
  uint   * dfastate
  )
+// SYNOPSIS:                                                              
+//   Searches the trie following a specified path and returns the values stored
+//   at the leaf.
+//                                                                        
+// PARAMETERS:                                                            
+//   trie     : Pointer to the trie.
+//   path     : The path as an array of chars containing values {0,1,2}
+//   value    : Pointer where the leaf value will be placed (if found).
+//   dfastate : Pointer where the leaf dfastate will be placed (if found).
+//                                                                        
+// RETURN:                                                                
+//   trie_search returns 1 if the path was found, and 0 otherwise. If an
+//   error occurred during the search, -1 is returned.
+//
+// SIDE EFFECTS:
+//   None.
 {
    uint id = 0;
    for (int i = 0; i < trie->height; i++) {
+      if (path[i] >= TRIE_CHILDREN || path[i] < 0) return -1;
       id = trie->nodes[id].child[(int)path[i]];
       if (id == 0) return 0;
    }
@@ -440,6 +610,22 @@ trie_getrow
  trie_t * trie,
  uint     nodeid
 )
+// SYNOPSIS:                                                              
+//   Recomputes the NW row that terminates at nodeid ('nodeid' must point
+//   to a trie leaf).
+//                                                                        
+// PARAMETERS:                                                            
+//   trie   : Pointer to the trie.
+//   nodeid : Id of the leaf at which the NW row terminates.
+//                                                                        
+// RETURN:                                                                
+//   trie_getrow returns a pointer to the start of the NW row. If an
+//   error occurred during the row computation or nodeid did not point
+//   to a leaf node, a NULL pointer is returned.
+//
+// SIDE EFFECTS:
+//   An array containing the NW row is allocated using malloc and must be
+//   manually freed.
 {
    node_t * nodes = &(trie->nodes[0]);
    uint   * path  = malloc((trie->height + 1) * sizeof(uint));
@@ -474,6 +660,24 @@ trie_insert
  uint      value,
  uint      dfastate
 )
+// SYNOPSIS:                                                              
+//   Inserts the specified path in the trie and stores the end value and
+//   the dfa state at the leaf (last node of the path). If the path already
+//   exists, its leaf values will be overwritten.
+//                                                                        
+// PARAMETERS:                                                            
+//   trie      : pointer to a memory space containing the address of the trie.
+//   path     : The path as an array of chars containing values {0,1,2}
+//   value    : The value of the last column of the NW row.
+//   dfastate : The NW-row-associated DFA state. 
+//                                                                        
+// RETURN:                                                                
+//   On success, dfa_insert returns the id of the leaf where the values were
+//   stored, -1 is returned if an error occurred.
+//
+// SIDE EFFECTS:
+//   If the trie has reached its limit of allocated nodes, it will be reallocated
+//   doubling its size. The address of the trie may have changed after calling dfa_insert.
 {
    trie_t * trie  = *triep;
    node_t * nodes = &(trie->nodes[0]);
@@ -530,7 +734,19 @@ void
 trie_reset
 (
  trie_t * trie
- )
+)
+// SYNOPSIS:                                                              
+//   Resets the trie by pruning the root node. The size of the trie, in terms
+//   of preallocated nodes is maintained.
+//                                                                        
+// PARAMETERS:                                                            
+//   trie   : Pointer to the trie.
+//                                                                        
+// RETURN:                                                                
+//   void.
+//
+// SIDE EFFECTS:
+//   None.
 {
    trie->pos = 0;
    memset(&(trie->nodes[0]), 0, sizeof(node_t));
