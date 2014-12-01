@@ -120,6 +120,12 @@ test_trie_new
    }
    }
 
+   // Alloc test.
+   /*
+   set_alloc_failure_rate_to(1.1);
+   g_assert(trie_new(1, 10) == NULL);
+   reset_alloc();
+   */
    return;
 
 }
@@ -237,8 +243,21 @@ test_trie_insert
 
    free(trie);
 
+   // Smallest tree (leaf)
+   trie_t * lowtrie = trie_new(1,0);
+   g_assert(lowtrie != NULL);
+
+   // Insert a path longer than trie height.
+   id = trie_insert(&lowtrie, "\0\0\0", 123, 456);
+   g_assert_cmpint(id, ==, 0);
+   g_assert_cmpint(lowtrie->pos, ==, 1);
+   g_assert_cmpint(lowtrie->nodes[0].child[0], ==, 123);
+   g_assert_cmpint(lowtrie->nodes[0].child[1], ==, 456);
+
+   free(lowtrie);
+
    // Small tree.
-   trie_t *lowtrie = trie_new(1,1);
+   lowtrie = trie_new(1,1);
    g_assert(lowtrie != NULL);
 
    // Insert a path longer than trie height.
@@ -262,20 +281,15 @@ test_trie_insert
    g_assert_cmpint(lowtrie->nodes[2].child[0], ==, 789);
    g_assert_cmpint(lowtrie->nodes[2].child[1], ==, 100);
 
+   // Alloc test.
+   /*
+   set_alloc_failure_rate_to(1.0);
+   g_assert(trie_insert(&lowtrie, "\2\0", 20, 20) == 3);
+   g_assert(trie_insert(&lowtrie, "\0\2", 2, 2) == -1);
+   reset_alloc();
+   */
    free(lowtrie);
 
-   // Smallest tree (leaf)
-   lowtrie = trie_new(1,0);
-   g_assert(lowtrie != NULL);
-
-   // Insert a path longer than trie height.
-   id = trie_insert(&lowtrie, "\0\0\0", 123, 456);
-   g_assert_cmpint(id, ==, 0);
-   g_assert_cmpint(lowtrie->pos, ==, 1);
-   g_assert_cmpint(lowtrie->nodes[0].child[0], ==, 123);
-   g_assert_cmpint(lowtrie->nodes[0].child[1], ==, 456);
-
-   free(lowtrie);
 
    return;
 
@@ -311,7 +325,13 @@ test_trie_search_getrow
          value += (path[i] == 0) - (path[i] == 2);
          g_assert_cmpint(row[i], ==, value);
       }
+      free(row);
    }
+
+   // Getrow starting from a wrong leaf.
+   g_assert(trie_getrow(trie, 15) == NULL);
+   g_assert(trie_getrow(trie, 4) == NULL);
+   
 
    free(trie);
 
@@ -381,6 +401,14 @@ test_dfa_new
       g_assert_cmpint(dfa->pos, ==, 1);
       free(dfa);
    }
+
+   // Alloc test.
+   /*
+   set_alloc_failure_rate_to(1.1);
+   dfa = dfa_new(1);
+   g_assert(dfa == NULL);
+   reset_alloc();
+   */
 }
 
 
@@ -393,7 +421,7 @@ test_dfa_newvertex
    g_assert_cmpint(dfa->size, ==, 1);
    g_assert_cmpint(dfa->pos, ==, 1);
 
-   for (int i = 1; i < 1000; i++) {
+   for (int i = 1; i < 1023; i++) {
       dfa_newvertex(&dfa, i);
       g_assert_cmpint(dfa->pos, ==, i+1);
       g_assert_cmpint(dfa->states[i].node_id, ==, i);
@@ -403,6 +431,13 @@ test_dfa_newvertex
       }
    }
    g_assert_cmpint(dfa->size, ==, 1024);
+
+   // Alloc test.
+   /*
+   set_alloc_failure_rate_to(1.1);
+   g_assert_cmpint(dfa_newvertex(&dfa, 1024), ==, -1);
+   reset_alloc();
+   */
 }
 
 void
@@ -696,6 +731,19 @@ test_seeq
    g_assert_cmpint(strncmp(ERROR_BUFFER + eoffset, "error: could not open file:", 27), ==, 0);
    eoffset = strlen(ERROR_BUFFER);
 
+   // Test 13: invalid distance.
+   args.dist = -1;
+   g_assert(seeq(pattern, input, args) == EXIT_FAILURE);
+   g_assert_cmpstr(ERROR_BUFFER + eoffset, ==, "error: invalid distance.\n");
+   eoffset = strlen(ERROR_BUFFER);
+
+   // ALLOC FAILURE TESTS.
+   /*
+   set_alloc_failure_rate_to(1.1);
+   args.dist = 0;
+   g_assert(seeq(pattern, input, args) == EXIT_FAILURE);
+   reset_alloc();
+   */
    return;
 }
 

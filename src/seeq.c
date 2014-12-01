@@ -134,7 +134,7 @@ seeq
    // Text buffer
    char * data = malloc(INITIAL_LINE_SIZE);
    if (data == NULL) {
-      fprintf(stderr, "error in 'seeq' (malloc:data): %s\n", strerror(errno));
+      fprintf(stderr, "error in 'seeq' (malloc) data: %s\n", strerror(errno));
       return EXIT_FAILURE;
    }
    size_t bufsz = INITIAL_LINE_SIZE;
@@ -344,8 +344,8 @@ dfa_new
  int vertices
 )
 // SYNOPSIS:                                                              
-//   Creates and initializes a new dfa network preallocated with the specified
-//   number of vertices.
+//   Creates and initializes a new dfa network with a root vertex and the specified
+//   number of preallocated vertices. 
 //                                                                        
 // PARAMETERS:                                                            
 //   vertices: the number of preallocated vertices.
@@ -360,7 +360,7 @@ dfa_new
    if (vertices < 1) vertices = 1;
    dfa_t * dfa = malloc(sizeof(dfa_t) + vertices * sizeof(vertex_t));
    if (dfa == NULL) {
-      fprintf(stderr, "error in dfa_new (malloc): %s.\n", strerror(errno));
+      fprintf(stderr, "error in 'dfa_new' (malloc) dfa_t: %s.\n", strerror(errno));
       return NULL;
    }
 
@@ -508,7 +508,7 @@ dfa_newvertex
       dfa->size *= 2;
       *dfap = dfa = realloc(dfa, sizeof(dfa_t) + dfa->size * sizeof(vertex_t));
       if (dfa == NULL) {
-         fprintf(stderr, "error (realloc) dfa in 'dfa_newnode': %s\n", strerror(errno));
+         fprintf(stderr, "error in 'dfa_newnode' (realloc) dfa_t: %s\n", strerror(errno));
          return -1;
       }
    }
@@ -551,7 +551,7 @@ trie_new
 
    trie_t * trie = malloc(sizeof(trie_t) + initial_size*sizeof(node_t));
    if (trie == NULL) {
-      fprintf(stderr, "error (malloc) trie_t in trie_new: %s\n", strerror(errno));
+      fprintf(stderr, "error in 'trie_new' (malloc) trie_t: %s\n", strerror(errno));
       return NULL;
    }
 
@@ -702,7 +702,7 @@ trie_insert
          size_t newsize = trie->size * 2;
          *triep = trie = realloc(trie, sizeof(trie_t) + newsize * sizeof(node_t));
          if (trie == NULL) {
-            fprintf(stderr, "error (realloc) in trie_insert: %s\n", strerror(errno));
+            fprintf(stderr, "error in 'trie_insert' (realloc) trie_t: %s\n", strerror(errno));
             return -1;
          }
          // Update pointers.
