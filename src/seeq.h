@@ -47,8 +47,8 @@
 #define DFA_FORWARD        1
 #define DFA_REVERSE        0
 #define DFA_COMPUTE        -1
-#define NBASES 5 // Should never be set larger than 32.
-#define TRIE_CHILDREN 3
+#define NBASES             5 // Should never be set larger than 32.
+#define TRIE_CHILDREN      3
 
 #define min(a,b) (((a) < (b)) ? (a) : (b))
 
@@ -129,8 +129,6 @@ uint        trie_insert   (trie_t **, char*, uint, uint);
 uint      * trie_getrow   (trie_t *, uint);
 void        trie_reset    (trie_t *);
 
-int         parse_params  (int, char **, char **, char **, struct seeqarg_t *);
-
-#define RESET   "\033[0m"
+#define RESET       "\033[0m"
 #define BOLDRED     "\033[1m\033[31m"      /* Bold Red */
 #define BOLDGREEN   "\033[1m\033[32m"      /* Bold Green */

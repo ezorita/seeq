@@ -33,12 +33,12 @@ char *USAGE = "Usage:\n"
 "    -i --invert          return only the non-matching lines\n"
 "    -m --match-only      print only the matched part of the matched lines\n"
 "    -n --no-printline    does not print the matching line\n"
-"    -l --lines           prints the original line of the match\n"
+"    -l --lines           prints the original line number of the match\n"
 "    -p --positions       prints the position of the match within the matched line\n"
-"    -s --print-dist      prints the Levenshtein distance of each match\n"
-"    -f --compact         prints output in compact format\n"
-"    -e --end             print only the end of the line starting after the match\n"
-"    -b --prefix          print only the prefix of the matching line\n";
+"    -s --print-dist      prints the Levenshtein distance wrt the pattern\n"
+"    -f --compact         prints output in compact format (line:pos:dist)\n"
+"    -e --end             print only the end of the line, starting after the match\n"
+"    -b --prefix          print only the prefix, ending before the match\n";
 
 
 

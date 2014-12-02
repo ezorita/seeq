@@ -104,7 +104,7 @@ seeq
    char rkeys[wlen];
    for (int i = 0; i < wlen; i++) rkeys[i] = keys[wlen-i-1];
 
-   // Initialize NFA and DFA.
+   // Initialize DFA and RDFA graphs.
    dfa_t * dfa  = dfa_new(INITIAL_DFA_SIZE);
    if (dfa == NULL) return EXIT_FAILURE;
    dfa_t * rdfa = dfa_new(INITIAL_DFA_SIZE);
@@ -338,13 +338,14 @@ parse
    else return l;
 }
 
+
 dfa_t *
 dfa_new
 (
  int vertices
 )
 // SYNOPSIS:                                                              
-//   Creates and initializes a new dfa network with a root vertex and the specified
+//   Creates and initializes a new dfa graph with a root vertex and the specified
 //   number of preallocated vertices. 
 //                                                                        
 // PARAMETERS:                                                            
@@ -391,9 +392,9 @@ dfa_step
  edge_t *  nextedge
 )
 // SYNOPSIS:                                                              
-//   Updates the current status of DFA network. Based on the parameters passed,
+//   Updates the current status of DFA graph. Based on the parameters passed,
 //   the function will compute the next row of the Needleman-Wunsch matrix and
-//   update the network accordingly. If the new row points to an already-known
+//   update the graph accordingly. If the new row points to an already-known
 //   state, the two existing vertices will be linked with an edge. Otherwise,
 //   a new vertex will be created for the new row.
 //                                                                        
@@ -459,7 +460,7 @@ dfa_step
       // Insert new NFA state in the trie.
       uint nodeid = trie_insert(trie, code, prev, dfa->pos);
       if (nodeid == (uint)-1) return -1;
-      // Create new vertex in dfa network.
+      // Create new vertex in dfa graph.
       uint vertexid = dfa_newvertex(dfap, nodeid);
       if (vertexid == (uint)-1) return -1;
       dfa = *dfap;
@@ -477,6 +478,7 @@ dfa_step
    return 0;
 }
 
+
 uint
 dfa_newvertex
 (
@@ -484,7 +486,7 @@ dfa_newvertex
  uint     nodeid
 )
 // SYNOPSIS:                                                              
-//   Adds a new vertex to the dfa network. The new vertex is not linked to any other
+//   Adds a new vertex to the dfa graph. The new vertex is not linked to any other
 //   vertex in any way, so the connection must be done manually.
 //                                                                        
 // PARAMETERS:                                                            
@@ -503,7 +505,7 @@ dfa_newvertex
 {
    dfa_t * dfa = *dfap;
 
-   // Create new vertex in DFA network.
+   // Create new vertex in DFA graph.
    if (dfa->pos >= dfa->size) {
       dfa->size *= 2;
       *dfap = dfa = realloc(dfa, sizeof(dfa_t) + dfa->size * sizeof(vertex_t));
@@ -521,6 +523,7 @@ dfa_newvertex
    // Increase counter.
    return dfa->pos++;
 }
+
 
 trie_t *
 trie_new
@@ -565,6 +568,7 @@ trie_new
 
    return trie;
 }
+
 
 int
 trie_search
