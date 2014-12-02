@@ -24,7 +24,7 @@
 
 #include "seeq.h"
 
-char *USAGE = "Usage:\n"
+char *USAGE = "Usage:"
 "  seeq [options] pattern inputfile\n"
 "    -v --version         print version\n"
 "    -z --verbose         verbose using stderr\n"
@@ -44,6 +44,7 @@ char *USAGE = "Usage:\n"
 
 void say_usage(void) { fprintf(stderr, "%s\n", USAGE); }
 void say_version(void) { fprintf(stderr, VERSION "\n"); }
+void say_help(void) { fprintf(stderr, "use '-h' for help.\n"); }
 
 void SIGSEGV_handler(int sig) {
    void *array[10];
@@ -123,15 +124,17 @@ main(
          if (dist_flag < 0) {
             int dist = atoi(optarg);
             if (dist < 0) {
-               fprintf(stderr, "distance must be a positive integer.\n");
-               say_usage();
+               say_version();
+               fprintf(stderr, "error: distance must be a positive integer.\n");
+               say_help();
                return EXIT_FAILURE;
             }
             dist_flag = atoi(optarg);
          }
          else {
-            fprintf(stderr, "distance option set more than once\n");
-            say_usage();
+            say_version();
+            fprintf(stderr, "error: distance option set more than once.\n");
+            say_help();
             return EXIT_FAILURE;
          }
          break;
@@ -145,8 +148,9 @@ main(
             verbose_flag = 1;
          }
          else {
-            fprintf(stderr, "verbose option set more than once\n");
-            say_usage();
+            say_version();
+            fprintf(stderr, "error: verbose option set more than once.\n");
+            say_help();
             return EXIT_FAILURE;
          }
          break;
@@ -158,8 +162,9 @@ main(
             prefix_flag = 1;
          }
          else {
-            fprintf(stderr, "prefix option set more than once\n");
-            say_usage();
+            say_version();
+            fprintf(stderr, "error: prefix option set more than once.\n");
+            say_help();
             return EXIT_FAILURE;
          }
          break;
@@ -170,8 +175,9 @@ main(
             endline_flag = 1;
          }
          else {
-            fprintf(stderr, "line-end option set more than once\n");
-            say_usage();
+            say_version();
+            fprintf(stderr, "error: line-end option set more than once.\n");
+            say_help();
             return EXIT_FAILURE;
          }
          break;
@@ -181,8 +187,9 @@ main(
             showpos_flag = 1;
          }
          else {
-            fprintf(stderr, "show-position option set more than once\n");
-            say_usage();
+            say_version();
+            fprintf(stderr, "error: show-position option set more than once.\n");
+            say_help();
             return EXIT_FAILURE;
          }
          break;
@@ -192,8 +199,9 @@ main(
             matchonly_flag = 1;
          }
          else {
-            fprintf(stderr, "match-only option set more than once\n");
-            say_usage();
+            say_version();
+            fprintf(stderr, "error: match-only option set more than once.\n");
+            say_help();
             return EXIT_FAILURE;
          }
          break;
@@ -203,8 +211,9 @@ main(
             printline_flag = 0;
          }
          else {
-            fprintf(stderr, "no-printline option set more than once\n");
-            say_usage();
+            say_version();
+            fprintf(stderr, "error: no-printline option set more than once.\n");
+            say_help();
             return EXIT_FAILURE;
          }
          break;
@@ -214,8 +223,9 @@ main(
             showdist_flag = 1;
          }
          else {
-            fprintf(stderr, "show-distance option set more than once\n");
-            say_usage();
+            say_version();
+            fprintf(stderr, "error: show-distance option set more than once.\n");
+            say_help();
             return EXIT_FAILURE;
          }
          break;
@@ -225,8 +235,9 @@ main(
             showline_flag = 1;
          }
          else {
-            fprintf(stderr, "show-line option set more than once\n");
-            say_usage();
+            say_version();
+            fprintf(stderr, "error: show-line option set more than once.\n");
+            say_help();
             return EXIT_FAILURE;
          }
          break;
@@ -236,8 +247,9 @@ main(
             count_flag = 1;
          }
          else {
-            fprintf(stderr, "count option set more than once\n");
-            say_usage();
+            say_version();
+            fprintf(stderr, "error: count option set more than once.\n");
+            say_help();
             return EXIT_FAILURE;
          }
          break;
@@ -247,8 +259,9 @@ main(
             invert_flag = 1;
          }
          else {
-            fprintf(stderr, "invert option set more than once\n");
-            say_usage();
+            say_version();
+            fprintf(stderr, "error: invert option set more than once.\n");
+            say_help();
             return EXIT_FAILURE;
          }
          break;
@@ -258,8 +271,9 @@ main(
             compact_flag = 1;
          }
          else {
-            fprintf(stderr, "format-compact option set more than once\n");
-            say_usage();
+            say_version();
+            fprintf(stderr, "error: format-compact option set more than once.\n");
+            say_help();
             return EXIT_FAILURE;
          }
          break;
@@ -272,6 +286,12 @@ main(
       }
    }
 
+   if (optind == argc) {
+      say_version();
+      fprintf(stderr, "error: not enough arguments.\n");
+      say_help();
+      return EXIT_FAILURE;
+   }
    expr = argv[optind++];
 
    if (optind < argc) {
@@ -279,8 +299,9 @@ main(
          input = argv[optind];
       }
       else {
-         fprintf(stderr, "too many options\n");
-         say_usage();
+         say_version();
+         fprintf(stderr, "error: too many options.\n");
+         say_help();
          return EXIT_FAILURE;
       }
    }
@@ -298,8 +319,10 @@ main(
    if (printline_flag == -1) printline_flag = (!matchonly_flag && !endline_flag && !prefix_flag);
 
    if (!showdist_flag && !showpos_flag && !printline_flag && !matchonly_flag && !showline_flag && !count_flag && !compact_flag && !prefix_flag && !endline_flag) {
+      say_version();
       fprintf(stderr, "Invalid options: No output will be generated.\n");
-      exit(1);
+      say_help();
+      return EXIT_FAILURE;
    }
 
    int maskcnt = !count_flag;
