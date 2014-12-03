@@ -92,7 +92,7 @@ List of arguments:
      Defines the maximum Levenshtein distance for pattern matching.
      Default is 0.
 
-  **-c or --count** *threads*
+  **-c or --count**
 
      Returns only the count of matching lines. When specified, all other
      options are ignored.
