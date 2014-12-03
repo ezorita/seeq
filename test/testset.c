@@ -4,6 +4,18 @@
 #include "faultymalloc.h"
 #include "seeq.h"
 
+void SIGSEGV_handler(int sig) {
+   void *array[10];
+   size_t size;
+
+   // get void*'s for all entries on the stack
+   size = backtrace(array, 10);
+
+   // print out all the frames to stderr
+   fprintf(stderr, "Error: signal %d:\n", sig);
+   backtrace_symbols_fd(array, size, STDERR_FILENO);
+   exit(1);
+}
 
 typedef struct {
 } fixture;
@@ -15,6 +27,24 @@ char ERROR_BUFFER[1024];
 char OUTPUT_BUFFER[1024];
 int BACKUP_FILE_DESCRIPTOR;
 int BACKUP_STDOUT;
+
+void
+mute_stderr
+(void)
+{
+   fflush(stderr);
+   int fd = open("/dev/null", O_WRONLY);
+   dup2(fd, STDERR_FILENO);
+}
+
+void
+mute_stdout
+(void)
+{
+   fflush(stderr);
+   int fd = open("/dev/null", O_WRONLY);
+   dup2(fd, STDOUT_FILENO);
+}
 
 void
 redirect_stdout_to
@@ -121,11 +151,12 @@ test_trie_new
    }
 
    // Alloc test.
-   /*
+   mute_stderr();
    set_alloc_failure_rate_to(1.1);
-   g_assert(trie_new(1, 10) == NULL);
+   trie_t * ret = trie_new(1, 10);
    reset_alloc();
-   */
+   g_assert(ret == NULL);
+
    return;
 
 }
@@ -281,13 +312,23 @@ test_trie_insert
    g_assert_cmpint(lowtrie->nodes[2].child[0], ==, 789);
    g_assert_cmpint(lowtrie->nodes[2].child[1], ==, 100);
 
+   free(lowtrie);
+
    // Alloc test.
-   /*
+   mute_stderr();
+   lowtrie = trie_new(1,2);
+   g_assert(lowtrie != NULL);
+   id = trie_insert(&lowtrie, "\0\0", 20, 20);
+   g_assert_cmpint(id, ==, 2);
+
    set_alloc_failure_rate_to(1.0);
-   g_assert(trie_insert(&lowtrie, "\2\0", 20, 20) == 3);
-   g_assert(trie_insert(&lowtrie, "\0\2", 2, 2) == -1);
+   int ret1 = trie_insert(&lowtrie, "\0\2", 2, 2);
+   int ret2 = trie_insert(&lowtrie, "\1\2", 2, 2);
    reset_alloc();
-   */
+
+   g_assert_cmpint(ret1, ==, 3);
+   g_assert_cmpint(ret2, ==, -1);
+
    free(lowtrie);
 
 
@@ -339,7 +380,6 @@ test_trie_search_getrow
 
 }
 
-
 void
 test_trie_reset
 (void)
@@ -382,33 +422,59 @@ void
 test_dfa_new
 (void)
 {
-   dfa_t * dfa = dfa_new(1);
+   dfa_t * dfa = dfa_new(10, 3, 1, 1);
    g_assert(dfa != NULL);
+   g_assert(dfa->trie != NULL);
    g_assert_cmpint(dfa->size, ==, 1);
    g_assert_cmpint(dfa->pos, ==, 1);
+   g_assert_cmpint(dfa->trie->size, ==, 16);
+   uint * nwrow = trie_getrow(dfa->trie, dfa->states[0].node_id);
+   for (int i = 0; i <= 10; i++) {
+      g_assert_cmpint(nwrow[i], ==, (i < 4 ? i : 4));
+   }
+
    free(dfa);
 
-   dfa = dfa_new(-100);
+   dfa = dfa_new(10, 3, -100, -100);
    g_assert(dfa != NULL);
+   g_assert(dfa->trie != NULL);
    g_assert_cmpint(dfa->size, ==, 1);
    g_assert_cmpint(dfa->pos, ==, 1);
+   g_assert_cmpint(dfa->trie->size, ==, 16);
+
    free(dfa);
 
    for (int i = -100; i < 1000; i++) {
-      dfa = dfa_new(i);
+      dfa = dfa_new(10, 3, i, i);
       g_assert(dfa != NULL);
+      g_assert(dfa->trie != NULL);
       g_assert_cmpint(dfa->size, ==, (i < 1 ? 1 : i));
       g_assert_cmpint(dfa->pos, ==, 1);
       free(dfa);
    }
 
-   // Alloc test.
-   /*
-   set_alloc_failure_rate_to(1.1);
-   dfa = dfa_new(1);
+
+   dfa = dfa_new(10, -1, 10, 10);
    g_assert(dfa == NULL);
+
+   dfa = dfa_new(-1, 3, 10, 10);
+   g_assert(dfa == NULL);
+
+   // Alloc test.
+   mute_stderr();
+   set_alloc_failure_rate_to(1.1);
+   dfa = dfa_new(10, 3, 1, 1);
    reset_alloc();
-   */
+   g_assert(dfa == NULL);
+
+   // Exhaustive alloc test
+   set_alloc_failure_rate_to(0.1);
+   for (int i = 0; i < 10000; i++) {
+      dfa = dfa_new(10, 3, 1, 1);
+      if (dfa != NULL) dfa_free(dfa);
+   }
+   reset_alloc();
+
 }
 
 
@@ -416,12 +482,12 @@ void
 test_dfa_newvertex
 (void)
 {
-   dfa_t * dfa = dfa_new(1);
+   dfa_t * dfa = dfa_new(10, 3, 1, 1);
    g_assert(dfa != NULL);
    g_assert_cmpint(dfa->size, ==, 1);
    g_assert_cmpint(dfa->pos, ==, 1);
 
-   for (int i = 1; i < 1023; i++) {
+   for (int i = 1; i < 1024; i++) {
       dfa_newvertex(&dfa, i);
       g_assert_cmpint(dfa->pos, ==, i+1);
       g_assert_cmpint(dfa->states[i].node_id, ==, i);
@@ -433,12 +499,51 @@ test_dfa_newvertex
    g_assert_cmpint(dfa->size, ==, 1024);
 
    // Alloc test.
-   /*
+   mute_stderr();
    set_alloc_failure_rate_to(1.1);
-   g_assert_cmpint(dfa_newvertex(&dfa, 1024), ==, -1);
+   int ret = dfa_newvertex(&dfa, 1024);
    reset_alloc();
-   */
+   g_assert_cmpint(ret, ==, -1);
+
 }
+
+
+void
+test_dfa_newstate
+(void)
+{
+   dfa_t * dfa = dfa_new(5, 2, 1, 1);
+   g_assert(dfa != NULL);
+   g_assert(dfa->trie != NULL);
+   g_assert_cmpint(dfa->size, ==, 1);
+   g_assert_cmpint(dfa->pos, ==, 1);
+   g_assert_cmpint(dfa->trie->size, ==, 8);
+   uint * nwrow = trie_getrow(dfa->trie, dfa->states[0].node_id);
+   for (int i = 0; i <= 5; i++) {
+      g_assert_cmpint(nwrow[i], ==, (i < 3 ? i : 3));
+   }
+
+   // Insert states.
+   char * code = "\1\2\2\2\1";
+   g_assert(dfa_newstate(&dfa, code, 3, 0, 0) == 0);
+   g_assert_cmpint(dfa->states[0].next[0].state, ==, 1);
+   g_assert_cmpint(dfa->trie->size, ==, 16);
+   g_assert_cmpint(dfa->trie->nodes[dfa->states[1].node_id].child[0], ==, 3);
+   g_assert_cmpint(dfa->trie->nodes[dfa->states[1].node_id].child[1], ==, 1);
+
+   // Wrong code.
+   code = "\1\2\2\3\1";
+   g_assert(dfa_newstate(&dfa, code, 3, 0, 0) == -1);
+
+   // Alloc error when extending dfa.
+   mute_stderr();
+   code = "\1\2\1\2\2"; 
+   set_alloc_failure_rate_to(1.1);
+   int ret = dfa_newstate(&dfa, code, 3, 0, 0);
+   reset_alloc();
+   g_assert_cmpint(ret, ==, -1);
+}
+
 
 void
 test_dfa_step
@@ -451,110 +556,75 @@ test_dfa_step
    uint     plen = parse(pattern, exp);
    g_assert_cmpint(plen, ==, 4);
 
-   dfa_t  * dfa = dfa_new(1);
-   trie_t * trie = trie_new(1, plen);
+   dfa_t  * dfa = dfa_new(plen, tau, 1, 1);
    g_assert(dfa != NULL);
-   g_assert(trie != NULL);
-
-   // Insert row 0
-   g_assert_cmpint(trie_insert(&trie, "\2\2\1\1", tau+1, 0), ==, 4);
-   dfa->states[0].node_id = 4;
 
    edge_t transition;   
    // text[0]
-   g_assert(0 == dfa_step(0, translate[(int)text[0]], plen, tau, &dfa, &trie, exp, DFA_FORWARD, &transition));
+   g_assert(0 == dfa_step(0, translate[(int)text[0]], plen, tau, &dfa, exp, &transition));
    g_assert_cmpint(transition.state, ==, 1);
    g_assert_cmpint(transition.match, ==, 2);
    // text[1]
-   g_assert(0 == dfa_step(transition.state, translate[(int)text[1]], plen, tau, &dfa, &trie, exp, DFA_FORWARD, &transition));
+   g_assert(0 == dfa_step(transition.state, translate[(int)text[1]], plen, tau, &dfa, exp, &transition));
    g_assert_cmpint(transition.state, ==, 2);
    g_assert_cmpint(transition.match, ==, 2);
    // text[2]
-   g_assert(0 == dfa_step(transition.state, translate[(int)text[2]], plen, tau, &dfa, &trie, exp, DFA_FORWARD, &transition));
+   g_assert(0 == dfa_step(transition.state, translate[(int)text[2]], plen, tau, &dfa, exp, &transition));
    g_assert_cmpint(transition.state, ==, 3);
    g_assert_cmpint(transition.match, ==, 2);
    // text[3]
-   g_assert(0 == dfa_step(transition.state, translate[(int)text[3]], plen, tau, &dfa, &trie, exp, DFA_FORWARD, &transition));
+   g_assert(0 == dfa_step(transition.state, translate[(int)text[3]], plen, tau, &dfa, exp, &transition));
    g_assert_cmpint(transition.state, ==, 3);
    g_assert_cmpint(transition.match, ==, 2);
    // text[4]
-   g_assert(0 == dfa_step(transition.state, translate[(int)text[4]], plen, tau, &dfa, &trie, exp, DFA_FORWARD, &transition));
+   g_assert(0 == dfa_step(transition.state, translate[(int)text[4]], plen, tau, &dfa, exp, &transition));
    g_assert_cmpint(transition.state, ==, 4);
    g_assert_cmpint(transition.match, ==, 2);
    // text[5]
-   g_assert(0 == dfa_step(transition.state, translate[(int)text[5]], plen, tau, &dfa, &trie, exp, DFA_FORWARD, &transition));
+   g_assert(0 == dfa_step(transition.state, translate[(int)text[5]], plen, tau, &dfa, exp, &transition));
    g_assert_cmpint(transition.state, ==, 3);
    g_assert_cmpint(transition.match, ==, 2);
    // text[6]
-   g_assert(0 == dfa_step(transition.state, translate[(int)text[6]], plen, tau, &dfa, &trie, exp, DFA_FORWARD, &transition));
+   g_assert(0 == dfa_step(transition.state, translate[(int)text[6]], plen, tau, &dfa, exp, &transition));
    g_assert_cmpint(transition.state, ==, 5);
    g_assert_cmpint(transition.match, ==, 2);
    // text[7]
-   g_assert(0 == dfa_step(transition.state, translate[(int)text[7]], plen, tau, &dfa, &trie, exp, DFA_FORWARD, &transition));
+   g_assert(0 == dfa_step(transition.state, translate[(int)text[7]], plen, tau, &dfa, exp, &transition));
    g_assert_cmpint(transition.state, ==, 6);
    g_assert_cmpint(transition.match, ==, 1);
    // text[8]
-   g_assert(0 == dfa_step(transition.state, translate[(int)text[8]], plen, tau, &dfa, &trie, exp, DFA_FORWARD, &transition));
+   g_assert(0 == dfa_step(transition.state, translate[(int)text[8]], plen, tau, &dfa, exp, &transition));
    g_assert_cmpint(transition.state, ==, 7);
    g_assert_cmpint(transition.match, ==, 0);
    // text[9]
-   g_assert(0 == dfa_step(transition.state, translate[(int)text[9]], plen, tau, &dfa, &trie, exp, DFA_FORWARD, &transition));
+   g_assert(0 == dfa_step(transition.state, translate[(int)text[9]], plen, tau, &dfa, exp, &transition));
    g_assert_cmpint(transition.state, ==, 8);
    g_assert_cmpint(transition.match, ==, 1);
-
-
-   // Reverse DFA
-   char * rpattern = "GTAC";
-   char * matchedtext = "CATG";
-   char   rexp[strlen(rpattern)];
-   plen = parse(rpattern, rexp);
-   g_assert_cmpint(plen, ==, 4);
-   
-   dfa_t  * rdfa = dfa_new(1);
-   trie_t * rtrie = trie_new(1, plen);
-   g_assert(rdfa != NULL);
-   g_assert(rtrie != NULL);
-
-   // Insert row 0
-   g_assert_cmpint(trie_insert(&rtrie, "\2\2\1\1", tau+1, 0), ==, 4);
-   rdfa->states[0].node_id = 4;
-
-   // Perfect reverse match.
-   // match[3]
-   g_assert(0 == dfa_step(0, translate[(int)matchedtext[3]], plen, tau, &rdfa, &rtrie, rexp, DFA_REVERSE, &transition));
+   // recover existing step.
+   g_assert(0 == dfa_step(0, translate[(int)text[0]], plen, tau, &dfa, exp, &transition));
    g_assert_cmpint(transition.state, ==, 1);
    g_assert_cmpint(transition.match, ==, 2);
-   // match[2]
-   g_assert(0 == dfa_step(transition.state, translate[(int)matchedtext[2]], plen, tau, &rdfa, &rtrie, rexp, DFA_REVERSE, &transition));
-   g_assert_cmpint(transition.state, ==, 2);
-   g_assert_cmpint(transition.match, ==, 2);
-   // match[1]
-   g_assert(0 == dfa_step(transition.state, translate[(int)matchedtext[1]], plen, tau, &rdfa, &rtrie, rexp, DFA_REVERSE, &transition));
-   g_assert_cmpint(transition.state, ==, 3);
-   g_assert_cmpint(transition.match, ==, 1);
-   // match[0]
-   g_assert(0 == dfa_step(transition.state, translate[(int)matchedtext[0]], plen, tau, &rdfa, &rtrie, rexp, DFA_REVERSE, &transition));
-   g_assert_cmpint(transition.state, ==, 4);
-   g_assert_cmpint(transition.match, ==, 0);
-   
-   // Reverse match finding with 1 mismatch.
-   matchedtext = "CAGG";
-   // match[3]
-   g_assert(0 == dfa_step(0, translate[(int)matchedtext[3]], plen, tau, &rdfa, &rtrie, rexp, DFA_REVERSE, &transition));
-   g_assert_cmpint(transition.state, ==, 1);
-   g_assert_cmpint(transition.match, ==, 2);
-   // match[2]
-   g_assert(0 == dfa_step(transition.state, translate[(int)matchedtext[2]], plen, tau, &rdfa, &rtrie, rexp, DFA_REVERSE, &transition));
-   g_assert_cmpint(transition.state, ==, 5);
-   g_assert_cmpint(transition.match, ==, 2);
-   // match[1]
-   g_assert(0 == dfa_step(transition.state, translate[(int)matchedtext[1]], plen, tau, &rdfa, &rtrie, rexp, DFA_REVERSE, &transition));
-   g_assert_cmpint(transition.state, ==, 6);
-   g_assert_cmpint(transition.match, ==, 2);
-   // match[0]
-   g_assert(0 == dfa_step(transition.state, translate[(int)matchedtext[0]], plen, tau, &rdfa, &rtrie, rexp, DFA_REVERSE, &transition));
-   g_assert_cmpint(transition.state, ==, 7);
-   g_assert_cmpint(transition.match, ==, 1);
+   dfa_free(dfa);
+
+   // Alloc exhaustive test.
+   /*
+   pattern = "ATCGATCGATCGACG";
+   char exp2[strlen(pattern)];
+   plen = parse(pattern, exp2);
+   dfa = dfa_new(plen, tau, 1, 1);
+
+   mute_stderr();
+   set_alloc_failure_rate_to(0.1);
+   transition.state = 0;
+   for (int i = 0; i < 1000; i++) {
+      int base = lrand48() % NBASES;
+      if (dfa_step(transition.state, base, plen, tau, &dfa, exp2, &transition) == -1) {
+         dfa = dfa_new(plen, tau, 1, 1);
+         transition.state = 0;
+      }
+   }
+   reset_alloc();
+   */
 
    return;
 }
@@ -621,11 +691,7 @@ test_seeq
       TCTATCATCCGTACTCTGATCTCAT
       LCACAGATCACAGATCACAGATCAC
    */
-
-   redirect_stdout_to(OUTPUT_BUFFER);
-   redirect_stderr_to(ERROR_BUFFER);
-   int offset = 0;
-   int eoffset = 0;
+   signal(SIGSEGV, SIGSEGV_handler);
 
    struct seeqarg_t args = {
       .showdist  = 0,
@@ -645,6 +711,12 @@ test_seeq
    char * pattern = "CACAGAT";
    char * input   = "testdata.txt";
    char * answer  = "GTATGTACCACAGATGTCGATCGAC\n";
+
+   // Redirect outputs.
+   redirect_stdout_to(OUTPUT_BUFFER);
+   redirect_stderr_to(ERROR_BUFFER);
+   int offset = 0;
+   int eoffset = 0;
    
    seeq(pattern, input, args);
    g_assert_cmpint(strcmp(OUTPUT_BUFFER+offset, answer), ==, 0);
@@ -738,12 +810,20 @@ test_seeq
    eoffset = strlen(ERROR_BUFFER);
 
    // ALLOC FAILURE TESTS.
-   /*
-   set_alloc_failure_rate_to(1.1);
+   mute_stderr();
+   mute_stdout();
    args.dist = 0;
-   g_assert(seeq(pattern, input, args) == EXIT_FAILURE);
+   set_alloc_failure_rate_to(1.0);
+   int ret = seeq(pattern, input, args);
    reset_alloc();
-   */
+   g_assert_cmpint(ret, ==, EXIT_FAILURE);
+
+
+   // Exhaustive alloc test.
+   set_alloc_failure_rate_to(0.05);
+   for (int i = 0; i < 10000; i++) seeq(pattern, input, args);
+   reset_alloc();
+
    return;
 }
 
@@ -765,6 +845,7 @@ main(
    g_test_add_func("/trie_reset", test_trie_reset);
    g_test_add_func("/dfa_new", test_dfa_new);
    g_test_add_func("/dfa_newvertex", test_dfa_newvertex);
+   g_test_add_func("/dfa_newstate", test_dfa_newstate);
    g_test_add_func("/dfa_step", test_dfa_step);
    g_test_add_func("/parse", test_parse);
    g_test_add_func("/seeq", test_seeq);

@@ -104,9 +104,10 @@ struct vertex_t {
 };
 
 struct dfa_t {
-   uint     pos;
-   uint     size;
-   vertex_t states[];
+   uint      pos;
+   uint      size;
+   trie_t  * trie;
+   vertex_t  states[];
 };
 
 
@@ -120,9 +121,11 @@ static const char bases[NBASES] = "ACGTN";
 
 int         seeq          (char *, char *, struct seeqarg_t);
 int         parse         (char *, char *);
-dfa_t     * dfa_new       (int);
+dfa_t     * dfa_new       (int, int, int, int);
 uint        dfa_newvertex (dfa_t **, uint);
-int         dfa_step      (uint, uint, uint, uint, dfa_t **, trie_t **, char *, int, edge_t *);
+int         dfa_newstate  (dfa_t **, char *, uint, uint, int); 
+int         dfa_step      (uint, uint, uint, uint, dfa_t **, char *, edge_t *);
+void        dfa_free      (dfa_t *);
 trie_t    * trie_new      (int, int);
 int         trie_search   (trie_t *, char*, uint*, uint*);
 uint        trie_insert   (trie_t **, char*, uint, uint);

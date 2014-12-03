@@ -69,6 +69,10 @@ seeq
    int verbose = args.verbose;
    //----- PARSE PARAMS -----
    int tau = args.dist;
+   
+   dfa_t * dfa  = NULL;
+   dfa_t * rdfa = NULL;
+   char  * data = NULL;
 
    if (verbose) fprintf(stderr, "opening input file\n");
 
@@ -76,6 +80,9 @@ seeq
 
    if (fdi == NULL) {
       fprintf(stderr,"error: could not open file: %s\n\n", strerror(errno));
+      if (dfa != NULL)  dfa_free(dfa);
+      if (rdfa != NULL) dfa_free(rdfa);
+      if (data != NULL) free(data);
       return EXIT_FAILURE;
    }
    
@@ -87,16 +94,28 @@ seeq
 
    if (wlen == -1) {
       fprintf(stderr, "error: invalid pattern expression.\n");
+      if (fdi != stdin) fclose(fdi);
+      if (dfa != NULL) dfa_free(dfa);
+      if (rdfa != NULL) dfa_free(rdfa);
+      if (data != NULL) free(data);
       return EXIT_FAILURE;
    }
    
    if (tau >= wlen) {
       fprintf(stderr, "error: expression must be longer than the maximum distance.\n");
+      if (fdi != stdin) fclose(fdi);
+      if (dfa != NULL) dfa_free(dfa);
+      if (rdfa != NULL) dfa_free(rdfa);
+      if (data != NULL) free(data);
       return EXIT_FAILURE;
    }
 
    if (tau < 0) {
       fprintf(stderr, "error: invalid distance.\n");
+      if (fdi != stdin) fclose(fdi);
+      if (dfa != NULL) dfa_free(dfa);
+      if (rdfa != NULL) dfa_free(rdfa);
+      if (data != NULL) free(data);
       return EXIT_FAILURE;
    }
 
@@ -105,36 +124,32 @@ seeq
    for (int i = 0; i < wlen; i++) rkeys[i] = keys[wlen-i-1];
 
    // Initialize DFA and RDFA graphs.
-   dfa_t * dfa  = dfa_new(INITIAL_DFA_SIZE);
-   if (dfa == NULL) return EXIT_FAILURE;
-   dfa_t * rdfa = dfa_new(INITIAL_DFA_SIZE);
-   if (rdfa == NULL) return EXIT_FAILURE;
-
-   // Initialize tries.
-   trie_t * trie  = trie_new(INITIAL_TRIE_SIZE, wlen);
-   if (trie == NULL) return EXIT_FAILURE;
-   trie_t * rtrie = trie_new(INITIAL_TRIE_SIZE, wlen);
-   if (rtrie == NULL) return EXIT_FAILURE;
-
-   // Compute initial NFA state.
-   char path[wlen+1];
-   for (int i = 0; i <= tau; i++) path[i] = 2;
-   for (int i = tau + 1; i < wlen; i++) path[i] = 1;
-
-   // Insert initial state into forward DFA.
-   uint nodeid = trie_insert(&trie, path, tau+1, 0);
-   if (nodeid == (uint)-1) return EXIT_FAILURE;
-   dfa->states[0].node_id = nodeid;
-   // Insert initial state into reverse DFA.
-   nodeid = trie_insert(&rtrie, path, tau+1, 0);
-   if (nodeid == (uint)-1) return EXIT_FAILURE;
-   rdfa->states[0].node_id = nodeid;
+   dfa  = dfa_new(wlen, tau, INITIAL_DFA_SIZE, INITIAL_TRIE_SIZE);
+   if (dfa == NULL) {
+      if (fdi != stdin) fclose(fdi);
+      if (dfa != NULL) dfa_free(dfa);
+      if (rdfa != NULL) dfa_free(rdfa);
+      if (data != NULL) free(data);
+      return EXIT_FAILURE;
+   }
+   rdfa = dfa_new(wlen, tau, INITIAL_DFA_SIZE, INITIAL_TRIE_SIZE);
+   if (rdfa == NULL) {
+      if (fdi != stdin) fclose(fdi);
+      if (dfa != NULL) dfa_free(dfa);
+      if (rdfa != NULL) dfa_free(rdfa);
+      if (data != NULL) free(data);
+      return EXIT_FAILURE;
+   }
 
    // ----- PROCESS FILE -----
    // Text buffer
-   char * data = malloc(INITIAL_LINE_SIZE);
+   data = malloc(INITIAL_LINE_SIZE);
    if (data == NULL) {
       fprintf(stderr, "error in 'seeq' (malloc) data: %s\n", strerror(errno));
+      if (fdi != stdin) fclose(fdi);
+      if (dfa != NULL) dfa_free(dfa);
+      if (rdfa != NULL) dfa_free(rdfa);
+      if (data != NULL) free(data);
       return EXIT_FAILURE;
    }
    size_t bufsz = INITIAL_LINE_SIZE;
@@ -162,8 +177,13 @@ seeq
          if(cin < NBASES) {
             next = dfa->states[current_node].next[cin];
             if (next.match == DFA_COMPUTE)
-               if (dfa_step(current_node, cin, wlen, tau, &dfa, &trie, keys, DFA_FORWARD, &next))
+               if (dfa_step(current_node, cin, wlen, tau, &dfa, keys, &next)) {
+                  if (fdi != stdin) fclose(fdi);
+                  if (dfa != NULL) dfa_free(dfa);
+                  if (rdfa != NULL) dfa_free(rdfa);
+                  if (data != NULL) free(data);
                   return EXIT_FAILURE;
+               }
             current_node = next.state;
          } else if (cin == 5) {
             next.match = tau+1;
@@ -198,8 +218,13 @@ seeq
                      int c = (int)translate[(int)data[i-++j]];
                      edge_t next = rdfa->states[rnode].next[c];
                      if (next.match == DFA_COMPUTE)
-                        if (dfa_step(rnode, c, wlen, tau, &rdfa, &rtrie, rkeys, DFA_REVERSE, &next))
+                        if (dfa_step(rnode, c, wlen, tau, &rdfa, rkeys, &next)) {
+                           if (fdi != stdin) fclose(fdi);
+                           if (dfa != NULL) dfa_free(dfa);
+                           if (rdfa != NULL) dfa_free(rdfa);
+                           if (data != NULL) free(data);
                            return EXIT_FAILURE;
+                        }
                      rnode = next.state;
                      d     = next.match;
                   } while (rnode && d > streak_dist && j < i);
@@ -254,6 +279,8 @@ seeq
    free(rdfa);
    free(dfa);
    free(data);
+   
+   if (fdi != stdin) fclose(fdi);
 
    return EXIT_SUCCESS;
 }
@@ -342,14 +369,22 @@ parse
 dfa_t *
 dfa_new
 (
- int vertices
+ int wlen,
+ int tau,
+ int vertices,
+ int trienodes
 )
 // SYNOPSIS:                                                              
 //   Creates and initializes a new dfa graph with a root vertex and the specified
-//   number of preallocated vertices. 
+//   number of preallocated vertices. Initializes a trie to keep the alignment rows
+//   with height wlen and some preallocated nodes. The DFA network is initialized
+//   with the first NW-alignment row [0 1 2 ... tau tau+1 tau+1 ... tau+1].
 //                                                                        
 // PARAMETERS:                                                            
+//   wlen: length of the pattern as regurned by 'parse'.
+//   tau: mismatch threshold.
 //   vertices: the number of preallocated vertices.
+//   trienodes: initial size of the trie.
 //                                                                        
 // RETURN:                                                                
 //   On success, the function returns a pointer to the new dfa_t structure.
@@ -359,6 +394,8 @@ dfa_new
 //   The returned dfa_t struct is allocated using malloc and must be manually freed.
 {
    if (vertices < 1) vertices = 1;
+   if (wlen < 1 || tau < 0) return NULL;
+
    dfa_t * dfa = malloc(sizeof(dfa_t) + vertices * sizeof(vertex_t));
    if (dfa == NULL) {
       fprintf(stderr, "error in 'dfa_new' (malloc) dfa_t: %s.\n", strerror(errno));
@@ -371,8 +408,32 @@ dfa_new
       dfa->states[0].next[i] = new;
    }
 
+   trie_t * trie = trie_new(trienodes, wlen);
+   if (trie == NULL) {
+      free(dfa);
+      return NULL;
+   }
+
+   // Compute initial NFA state.
+   char path[wlen+1];
+   for (int i = 0; i <= tau; i++) path[i] = 2;
+   for (int i = tau + 1; i < wlen; i++) path[i] = 1;
+
+   // Insert initial state into trie.
+   uint nodeid = trie_insert(&trie, path, tau+1, 0);
+   if (nodeid == (uint)-1) {
+      free(trie);
+      free(dfa);
+      return NULL;
+   }
+
+   // Fill struct.
    dfa->size = vertices;
    dfa->pos  = 1;
+   dfa->trie = trie;
+
+   // Link trie leaf with DFA vertex.
+   dfa->states[0].node_id = nodeid;
 
    return dfa;
 }
@@ -386,9 +447,7 @@ dfa_step
  uint      plen,
  uint      tau,
  dfa_t  ** dfap,
- trie_t ** trie,
  char   *  exp,
- int       anchor,
  edge_t *  nextedge
 )
 // SYNOPSIS:                                                              
@@ -406,9 +465,8 @@ dfa_step
 //   dfap      : pointer to a memory space containing the address of the DFA.
 //   trie      : pointer to a memory space containing the address of the associated trie.
 //   exp       : expression keys, as returned by parse.
-//   anchor    : if set to 1, the first NW column is always initialized with 0.
 //   nextedge  : a pointer to an edge_t struct where the computed transition will be placed,
-//                                                                        
+//
 // RETURN:                                                                
 //   dfa_step returns 0 on success, or -1 if an error occurred.
 //
@@ -426,16 +484,19 @@ dfa_step
    int  value = 1 << base;
 
    // Explore the trie backwards to find out the NFA state.
-   uint * state = trie_getrow(*trie, dfa->states[dfa_state].node_id);
+   uint * state = trie_getrow(dfa->trie, dfa->states[dfa_state].node_id);
    char * code  = calloc(plen + 1, sizeof(char));
+
+   if (state == NULL) return -1;
+
+   if (code == NULL) {
+      fprintf(stderr, "error in 'dfa_step' (calloc) code: %s\n", strerror(errno));
+      return -1;
+   }
 
    // Initialize first column.
    int nextold, prev, old = state[0];
-   if (anchor) {
-      state[0] = prev = 0;
-   } else {
-      state[0] = prev = min(tau + 1, state[0] + 1);
-   }
+   state[0] = prev = 0;
 
    // Update row.
    for (int i = 1; i < plen+1; i++) {
@@ -451,21 +512,15 @@ dfa_step
    
    // Check if this state already exists.
    uint dfalink;
-   int exists = trie_search(*trie, code, NULL, &dfalink);
+   int exists = trie_search(dfa->trie, code, NULL, &dfalink);
 
    if (exists == 1) {
       // If exists, just link with the existing state.
       dfa->states[dfa_state].next[base].state = dfalink;
    } else if (exists == 0) {
-      // Insert new NFA state in the trie.
-      uint nodeid = trie_insert(trie, code, prev, dfa->pos);
-      if (nodeid == (uint)-1) return -1;
-      // Create new vertex in dfa graph.
-      uint vertexid = dfa_newvertex(dfap, nodeid);
-      if (vertexid == (uint)-1) return -1;
+      if (dfa_newstate(dfap, code, prev, dfa_state, base) == -1)
+         return -1;
       dfa = *dfap;
-      // Connect dfa vertices.
-      dfa->states[dfa_state].next[base].state = vertexid;
    } else {
       fprintf(stderr, "error in 'trie_search': incorrect path.\n");
       return -1;
@@ -510,7 +565,7 @@ dfa_newvertex
       dfa->size *= 2;
       *dfap = dfa = realloc(dfa, sizeof(dfa_t) + dfa->size * sizeof(vertex_t));
       if (dfa == NULL) {
-         fprintf(stderr, "error in 'dfa_newnode' (realloc) dfa_t: %s\n", strerror(errno));
+         fprintf(stderr, "error in 'dfa_newvertex' (realloc) dfa_t: %s\n", strerror(errno));
          return -1;
       }
    }
@@ -524,6 +579,54 @@ dfa_newvertex
    return dfa->pos++;
 }
 
+int
+dfa_newstate
+(
+ dfa_t ** dfap,
+ char   * code,
+ uint     alignval,
+ uint     dfa_state,
+ int      edge
+)
+// SYNOPSIS:                                                              
+//   Creates a new vertex to allocate a new DFA state, which represents an 
+//   unseen NW alignment row. This function inserts the new NW alignment row in
+//   the trie and connects the new vertex with its origin (the current DFA state).
+//                                                                        
+// PARAMETERS:                                                            
+//   dfap      : pointer to a memory space containing the address of the DFA.
+//   code      : path of the trie that represents the new NW alignment.
+//   alignval  : last column of the NW alignment.
+//   dfa_state : current DFA state.
+//   edge      : the edge slot to use of the current DFA state.
+//                                                                        
+// RETURN:                                                                
+//   On success, the function returns 0, or -1 if an error occurred.
+//
+// SIDE EFFECTS:
+//   The dfa may be reallocated, so the content of *dfap may be different
+//   at the end of the funcion.
+{
+   // Insert new NFA state in the trie.
+   uint nodeid = trie_insert(&((*dfap)->trie), code, alignval, (*dfap)->pos);
+   if (nodeid == (uint)-1) return -1;
+   // Create new vertex in dfa graph.
+   uint vertexid = dfa_newvertex(dfap, nodeid);
+   if (vertexid == (uint)-1) return -1;
+   // Connect dfa vertices.
+   (*dfap)->states[dfa_state].next[edge].state = vertexid;
+   return 0;
+}
+
+void
+dfa_free
+(
+ dfa_t * dfa
+)
+{
+   if (dfa->trie != NULL) free(dfa->trie);
+   free(dfa);
+}
 
 trie_t *
 trie_new
@@ -636,6 +739,11 @@ trie_getrow
    int      i     = trie->height;
    uint     id    = nodeid;
 
+   if (path == NULL) {
+      fprintf(stderr, "error in 'trie_getrow' (malloc) path: %s\n", strerror(errno));
+      return NULL;
+   }
+
    // Match value.
    path[i] = nodes[id].child[0];
    
@@ -649,6 +757,7 @@ trie_getrow
    // Control.
    if (i != 0) {
       free(path);
+      fprintf(stderr, "error in 'trie_getrow': nodeid is not a leaf.\n");
       return NULL;
    }
 

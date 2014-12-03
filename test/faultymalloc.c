@@ -5,15 +5,18 @@
 #include <stddef.h>
 extern void *__libc_malloc(size_t size);
 extern void *__libc_realloc(void *, size_t size);
+extern void *__libc_calloc(size_t nmemb, size_t size);
 
 double drand48(void);
 double PERR = 0.0;
 
 void *(*MALLOC_CALL)(size_t) = __libc_malloc;
 void *(*REALLOC_CALL)(void *, size_t) = __libc_realloc;
+void *(*CALLOC_CALL)(size_t, size_t) = __libc_calloc;
 
 void *malloc(size_t size) { return (*MALLOC_CALL)(size); }
 void *realloc(void *ptr, size_t size) { return (*REALLOC_CALL)(ptr, size); }
+void *calloc(size_t nmemb, size_t size) { return (*CALLOC_CALL)(nmemb, size); }
 
 void *
 fail_prone_malloc(size_t size)
@@ -27,6 +30,12 @@ fail_prone_realloc(void *ptr, size_t size)
    return drand48() < PERR ? NULL : __libc_realloc(ptr, size);
 }
 
+void *
+fail_prone_calloc(size_t nmemb, size_t size)
+{
+   return drand48() < PERR ? NULL : __libc_calloc(nmemb, size);
+}
+
 
 void
 set_alloc_failure_rate_to(double p)
@@ -34,6 +43,7 @@ set_alloc_failure_rate_to(double p)
    PERR = p;
    MALLOC_CALL = fail_prone_malloc;
    REALLOC_CALL = fail_prone_realloc;
+   CALLOC_CALL  = fail_prone_calloc;
 }
 
 void
@@ -42,4 +52,5 @@ reset_alloc(void)
    PERR = 0.0;
    MALLOC_CALL = __libc_malloc;
    REALLOC_CALL = __libc_realloc;
+   CALLOC_CALL = __libc_calloc;
 }
