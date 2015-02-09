@@ -227,7 +227,7 @@ seeq
                         }
                      rnode = next.state;
                      d     = next.match;
-                  } while (rnode && d > streak_dist && j < i);
+                  } while (d > streak_dist && j < i);
 
                   // Compute match length and print match.
                   j = i - j;
