@@ -50,8 +50,15 @@
 #define NBASES             5 // Should never be set larger than 32.
 #define TRIE_CHILDREN      3
 
+// Define options
+#define SQ_MATCH   0x01
+#define SQ_NOMATCH 0x02
+#define SQ_COUNT   0x04
+
 #define min(a,b) (((a) < (b)) ? (a) : (b))
 
+typedef struct seeq_t   seeq_t;
+typedef struct sqmatch_t sqmatch_t;
 typedef struct match_t  match_t;
 typedef struct dfa_t    dfa_t;
 typedef struct vertex_t vertex_t;
@@ -60,6 +67,27 @@ typedef struct trie_t   trie_t;
 typedef struct node_t   node_t;
 
 typedef unsigned int uint;
+
+struct seeq_t {
+   int     tau;
+   int     wlen;
+   long    line;
+   long    count;
+   char  * keys;
+   char  * rkeys;
+   dfa_t * dfa;
+   dfa_t * rdfa;
+   FILE  * fdi;
+};
+
+// TODO: Join these two structures (seeq_t and sqmatch_t)
+struct sqmatch_t {
+   int    start;
+   int    end;
+   int    dist;
+   long   line;
+   char * match;
+};
 
 struct seeqarg_t {
    int showdist;
