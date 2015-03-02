@@ -26,15 +26,8 @@
 #define _SEEQCORE_H_
 
 #include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <execinfo.h>
-#include <signal.h>
-#include <fcntl.h>
 #include <string.h>
 #include <errno.h>
-#include <unistd.h>
-#include <getopt.h>
 
 #define INITIAL_STACK_SIZE 256
 #define INITIAL_TRIE_SIZE  256
@@ -45,11 +38,6 @@
 #define DFA_COMPUTE        -1
 #define NBASES             5 // Should never be set larger than 32.
 #define TRIE_CHILDREN      3
-
-// Define options
-#define SQ_MATCH   0x01
-#define SQ_NOMATCH 0x02
-#define SQ_COUNT   0x04
 
 #define min(a,b) (((a) < (b)) ? (a) : (b))
 

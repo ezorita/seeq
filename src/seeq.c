@@ -23,11 +23,15 @@
 */
 
 #include "libseeq.h"
+#include <unistd.h>
+#include <signal.h>
+#include <execinfo.h>
 #include <string.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
+#include <getopt.h>
 
 char *USAGE = "Usage:"
 "  seeq [options] pattern inputfile\n"

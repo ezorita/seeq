@@ -30,7 +30,12 @@
 #define VERSION "seeq-1.0"
 #define COLOR_TERMINAL 1
 
-#include "seeqcore.h"
+// Match options.
+#define SQ_MATCH   0x01
+#define SQ_NOMATCH 0x02
+#define SQ_COUNT   0x04
+
+#include <stdio.h>
 
 extern int seeqerr;
 
@@ -53,8 +58,8 @@ struct seeq_t {
    long    count;
    char  * keys;
    char  * rkeys;
-   dfa_t * dfa;
-   dfa_t * rdfa;
+   void  * dfa;
+   void  * rdfa;
    FILE  * fdi;
 };
 

@@ -23,20 +23,20 @@
 */
 
 #include "libseeq.h"
+#include "seeqcore.h"
 
 int seeqerr = 0;
 
-char * seeq_strerror[10] = {"Check errno",
-                         "Illegal matching distance value",
-                         "Incorrect pattern (double opening brackets)",
-                         "Incorrect pattern (double closing brackets)",
-                         "Incorrect pattern (illegal character)",
-                         "Incorrect pattern (missing closing bracket)",
-                         "Illegal path value passed to 'trie_search'",
-                         "Illegal nodeid passed to 'trie_getrow' (specified node is not a leaf).\n",
-                         "Illegal path value passed to 'trie_insert'",
-                         "Pattern length must be larger than matching distance" };
-
+char * seeq_strerror[10] = {   "Check errno",
+                               "Illegal matching distance value",
+                               "Incorrect pattern (double opening brackets)",
+                               "Incorrect pattern (double closing brackets)",
+                               "Incorrect pattern (illegal character)",
+                               "Incorrect pattern (missing closing bracket)",
+                               "Illegal path value passed to 'trie_search'",
+                               "Illegal nodeid passed to 'trie_getrow' (specified node is not a leaf).\n",
+                               "Illegal path value passed to 'trie_insert'",
+                               "Pattern length must be larger than matching distance" };
 
 seeq_t *
 seeqOpen
@@ -113,8 +113,8 @@ seeqOpen
    sqfile->count = 0;
    sqfile->keys  = keys;
    sqfile->rkeys = rkeys;
-   sqfile->dfa   = dfa;
-   sqfile->rdfa  = rdfa;
+   sqfile->dfa   = (void *) dfa;
+   sqfile->rdfa  = (void *) rdfa;
    sqfile->fdi   = fdi;
    // Initialize match_t struct.
    sqfile->match.start  = 0;
@@ -152,6 +152,7 @@ seeqMatch
 {
    // Set error to 0.
    seeqerr = 0;
+
    // Count replaces all other options.
    if (options & SQ_COUNT) options = 0;
    else if (options == 0) options = SQ_MATCH | SQ_NOMATCH;
@@ -181,9 +182,9 @@ seeqMatch
          int cin = (int)translate[(int)data[i]];
          edge_t next;
          if(cin < NBASES) {
-            next = sqfile->dfa->states[current_node].next[cin];
+            next = ((dfa_t *) sqfile->dfa)->states[current_node].next[cin];
             if (next.match == DFA_COMPUTE)
-               if (dfa_step(current_node, cin, sqfile->wlen, sqfile->tau, &(sqfile->dfa), sqfile->keys, &next)) return -1;
+               if (dfa_step(current_node, cin, sqfile->wlen, sqfile->tau, (dfa_t **) &(sqfile->dfa), sqfile->keys, &next)) return -1;
             current_node = next.state;
          } else if (cin == 5) {
             next.match = sqfile->tau+1;
@@ -217,9 +218,9 @@ seeqMatch
                // Find match start with RDFA.
                do {
                   int c = (int)translate[(int)data[i-++j]];
-                  edge_t next = sqfile->rdfa->states[rnode].next[c];
+                  edge_t next = ((dfa_t *) sqfile->rdfa)->states[rnode].next[c];
                   if (next.match == DFA_COMPUTE)
-                     if (dfa_step(rnode, c, sqfile->wlen, sqfile->tau, &(sqfile->rdfa), sqfile->rkeys, &next)) return -1;
+                     if (dfa_step(rnode, c, sqfile->wlen, sqfile->tau, (dfa_t **) &(sqfile->rdfa), sqfile->rkeys, &next)) return -1;
                   rnode = next.state;
                   d     = next.match;
                } while (d > streak_dist && j < i);
