@@ -1,10 +1,10 @@
 /*
-** Copyright 2014 Eduard Valera Zorita.
+** Copyright 2015 Eduard Valera Zorita.
 **
 ** File authors:
 **  Eduard Valera Zorita (eduardvalera@gmail.com)
 **
-** Last modified: November 25, 2014
+** Last modified: March 2, 2015
 **
 ** License: 
 **  This program is free software: you can redistribute it and/or modify
@@ -22,18 +22,14 @@
 **
 */
 
-#define _GNU_SOURCE
-
-#define VERSION "seeq-1.0"
+#ifndef _SEEQCORE_H_
+#define _SEEQCORE_H_
 
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <execinfo.h>
 #include <signal.h>
-#include <sys/mman.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
 #include <string.h>
 #include <errno.h>
@@ -50,9 +46,13 @@
 #define NBASES             5 // Should never be set larger than 32.
 #define TRIE_CHILDREN      3
 
+// Define options
+#define SQ_MATCH   0x01
+#define SQ_NOMATCH 0x02
+#define SQ_COUNT   0x04
+
 #define min(a,b) (((a) < (b)) ? (a) : (b))
 
-typedef struct match_t  match_t;
 typedef struct dfa_t    dfa_t;
 typedef struct vertex_t vertex_t;
 typedef struct edge_t   edge_t;
@@ -60,26 +60,6 @@ typedef struct trie_t   trie_t;
 typedef struct node_t   node_t;
 
 typedef unsigned int uint;
-
-struct seeqarg_t {
-   int showdist;
-   int showpos;
-   int showline;
-   int printline;
-   int matchonly;
-   int count;
-   int compact;
-   int dist;
-   int verbose;
-   int endline;
-   int prefix;
-   int invert;
-};
-
-struct match_t {
-   uint dist;
-   uint start;
-};
 
 struct node_t {
    uint child[TRIE_CHILDREN];
@@ -119,7 +99,6 @@ static const int translate[256] = {
 
 static const char bases[NBASES] = "ACGTN";
 
-int         seeq          (char *, char *, struct seeqarg_t);
 int         parse         (char *, char *);
 dfa_t     * dfa_new       (int, int, int, int);
 uint        dfa_newvertex (dfa_t **, uint);
@@ -135,3 +114,5 @@ void        trie_reset    (trie_t *);
 #define RESET       "\033[0m"
 #define BOLDRED     "\033[1m\033[31m"      /* Bold Red */
 #define BOLDGREEN   "\033[1m\033[32m"      /* Bold Green */
+
+#endif
