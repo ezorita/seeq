@@ -30,6 +30,8 @@
 
 #include "seeqcore.h"
 
+extern int seeqerr;
+
 typedef struct seeq_t   seeq_t;
 typedef struct match_t  match_t;
 
@@ -63,8 +65,5 @@ int         seeqGetStart    (seeq_t *);
 int         seeqGetEnd      (seeq_t *);
 char      * seeqGetString   (seeq_t *);
 char      * seeqPrintError  (void);
-
-// Errors.
-extern int seeqerr;
 
 #endif
