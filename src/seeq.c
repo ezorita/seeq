@@ -126,7 +126,7 @@ seeq
    if (verbose) fprintf(stderr, "opening input file... ");
    seeq_t * sq = seeqOpen(input, expression, tau);
    if (sq == NULL) {
-      fprintf(stderr, "error in 'seeqOpen()': %s\n", strerror(errno));
+      fprintf(stderr, "error in 'seeqOpen()': %s\n", seeqPrintError());
       return EXIT_FAILURE;
    }
 
@@ -143,7 +143,8 @@ seeq
       if (args.invert) match_options = SQ_NOMATCH;
       else match_options = SQ_MATCH;
 
-      while (seeqMatch(sq, match_options) > 0) {
+      int retval;
+      while ((retval = seeqMatch(sq, match_options)) > 0) {
          if (args.compact) fprintf(stdout, "%ld:%d-%d:%d\n",sq->match.line, sq->match.start, sq->match.end-1, sq->match.dist);
          else {
             if (args.showline) fprintf(stdout, "%ld ", sq->match.line);
@@ -160,6 +161,9 @@ seeq
                fprintf(stdout, "%s\n", sq->match.string + sq->match.end);
             }
          }
+      }
+      if (retval == -1) {
+         fprintf(stderr, "error in 'seeqMatch()': %s\n", seeqPrintError());
       }
    }
    

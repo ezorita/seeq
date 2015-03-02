@@ -54,8 +54,17 @@ struct seeq_t {
    FILE  * fdi;
 };
 
-seeq_t    * seeqOpen      (char *, char *, int);
-int         seeqClose     (seeq_t *);
-long        seeqMatch     (seeq_t *, int);
+seeq_t    * seeqOpen        (char *, char *, int);
+int         seeqClose       (seeq_t *);
+long        seeqMatch       (seeq_t *, int);
+long        seeqGetLine     (seeq_t *);
+int         seeqGetDistance (seeq_t *);
+int         seeqGetStart    (seeq_t *);
+int         seeqGetEnd      (seeq_t *);
+char      * seeqGetString   (seeq_t *);
+char      * seeqPrintError  (void);
+
+// Errors.
+extern int seeqerr;
 
 #endif

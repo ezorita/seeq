@@ -24,6 +24,20 @@
 
 #include "libseeq.h"
 
+int seeqerr = 0;
+
+char * seeq_strerror[10] = {"Check errno",
+                         "Illegal matching distance value",
+                         "Incorrect pattern (double opening brackets)",
+                         "Incorrect pattern (double closing brackets)",
+                         "Incorrect pattern (illegal character)",
+                         "Incorrect pattern (missing closing bracket)",
+                         "Illegal path value passed to 'trie_search'",
+                         "Illegal nodeid passed to 'trie_getrow' (specified node is not a leaf).\n",
+                         "Illegal path value passed to 'trie_insert'",
+                         "Pattern length must be larger than matching distance" };
+
+
 seeq_t *
 seeqOpen
 (
@@ -32,8 +46,14 @@ seeqOpen
  int    mismatches
 )
 {
+   // Set error to 0.
+   seeqerr = 0;
+
    // Check parameters.
-   if (mismatches < 0) return NULL;
+   if (mismatches < 0) {
+      seeqerr = 1;
+      return NULL;
+   }
 
    // Parse pattern
    char *  keys = malloc(strlen(pattern));
@@ -54,6 +74,7 @@ seeqOpen
 
    // Check parameters.
    if (mismatches >= wlen) {
+      seeqerr = 9;
       free(keys); free(rkeys);
       return NULL;
    }
@@ -111,8 +132,13 @@ seeqClose
  seeq_t * sqfile
 )
 {
+   // Set error to 0.
+   seeqerr = 0;
+   // Close file.
    if (sqfile->fdi != stdin) if (fclose(sqfile->fdi) != 0) return -1;
+   // Free string if allocated.
    if (sqfile->match.string != NULL) free(sqfile->match.string);
+   // Free structure.
    free(sqfile);
    return 0;
 }
@@ -124,12 +150,14 @@ seeqMatch
  int         options
 )
 {
+   // Set error to 0.
+   seeqerr = 0;
    // Count replaces all other options.
    if (options & SQ_COUNT) options = 0;
    else if (options == 0) options = SQ_MATCH | SQ_NOMATCH;
 
    // Set structure to non-matched.
-   sqfile->match.start = -1;
+   sqfile->match.start = sqfile->match.end = sqfile->match.line = -1;
 
    // Aux vars.
    long startline = sqfile->line;
@@ -211,9 +239,67 @@ seeqMatch
    }
 
    // If nothing was read, return -1.
-   if (sqfile->line == startline) return -1;
+   if (sqfile->line == startline) return 0;
    else return count;
 }
+
+long
+seeqGetLine
+(
+ seeq_t * sq
+)
+{
+   return sq->match.line;
+}
+
+int
+seeqGetDistance
+(
+ seeq_t * sq
+)
+{
+   return sq->match.dist;
+}
+
+int
+seeqGetStart
+(
+ seeq_t * sq
+)
+{
+   return sq->match.start;
+}
+
+int
+seeqGetEnd
+(
+ seeq_t * sq
+)
+{
+   return sq->match.end;
+}
+
+char *
+seeqGetString
+(
+ seeq_t * sq
+)
+{
+   if (sq->match.string == NULL) return NULL;
+   return strdup(sq->match.string);
+}
+
+char *
+seeqPrintError
+(
+ void
+)
+{
+   if (seeqerr == 0) return strerror(errno);
+   else return seeq_strerror[seeqerr];
+}
+
+ 
 
 int
 parse
@@ -261,6 +347,8 @@ parse
 // SIDE EFFECTS:
 //   The contents of the pointer 'keys' are overwritten.
 {
+   // Set error to 0.
+   seeqerr = 0;
    // Initialize keys to 0.
    for (int i = 0; i < strlen(expr); i++) keys[i] = 0;
 
@@ -275,22 +363,34 @@ parse
       else if (c == 'T' || c == 't' || c == 'U' || c == 'u') keys[l] |= 0x08;
       else if (c == 'N' || c == 'n') keys[l] |= 0x1F;
       else if (c == '[') {
-         if (add) return -1;
+         if (add) {
+            seeqerr = 2;
+            return -1;
+         }
          add = 1;
       }
       else if (c == ']') {
-         if (!add) return -1;
+         if (!add) {
+            seeqerr = 3;
+            return -1;
+         }
          if (lc == '[') l--;
          add = 0;
       }
-      else return -1;
+      else {
+         seeqerr = 4;
+         return -1;
+      }
 
       if (!add) l++;
       i++;
       lc = c;
    }
    
-   if (add == 1) return -1;
+   if (add == 1) {
+      seeqerr = 5;
+      return -1;
+   }
    else return l;
 }
 
@@ -322,6 +422,9 @@ dfa_new
 // SIDE EFFECTS:
 //   The returned dfa_t struct is allocated using malloc and must be manually freed.
 {
+   // Set error to 0.
+   seeqerr = 0;
+
    if (vertices < 1) vertices = 1;
    if (wlen < 1 || tau < 0) return NULL;
 
@@ -402,6 +505,9 @@ dfa_step
 // SIDE EFFECTS:
 //   The returned dfa_t struct is allocated using malloc and must be manually freed.
 {
+   // Set error to 0.
+   seeqerr = 0;
+
    dfa_t  * dfa   = *dfap;
 
    // Return next vertex if already computed.
@@ -418,10 +524,7 @@ dfa_step
 
    if (state == NULL) return -1;
 
-   if (code == NULL) {
-      fprintf(stderr, "error in 'dfa_step' (calloc) code: %s\n", strerror(errno));
-      return -1;
-   }
+   if (code == NULL) return -1;
 
    // Initialize first column.
    int nextold, prev, old = state[0];
@@ -450,10 +553,7 @@ dfa_step
       if (dfa_newstate(dfap, code, prev, dfa_state, base) == -1)
          return -1;
       dfa = *dfap;
-   } else {
-      fprintf(stderr, "error in 'trie_search': incorrect path.\n");
-      return -1;
-   }
+   } else return -1;
 
    free(state);
    free(code);
@@ -487,16 +587,16 @@ dfa_newvertex
 //   doubling its current size. The address of the dfa may have changed after
 //   calling dfa_newvertex.
 {
+   // Set error to 0.
+   seeqerr = 0;
+
    dfa_t * dfa = *dfap;
 
    // Create new vertex in DFA graph.
    if (dfa->pos >= dfa->size) {
       dfa->size *= 2;
       *dfap = dfa = realloc(dfa, sizeof(dfa_t) + dfa->size * sizeof(vertex_t));
-      if (dfa == NULL) {
-         fprintf(stderr, "error in 'dfa_newvertex' (realloc) dfa_t: %s\n", strerror(errno));
-         return -1;
-      }
+      if (dfa == NULL) return -1;
    }
 
    // Initialize DFA vertex.
@@ -536,6 +636,9 @@ dfa_newstate
 //   The dfa may be reallocated, so the content of *dfap may be different
 //   at the end of the funcion.
 {
+   // Set error to 0.
+   seeqerr = 0;
+
    // Insert new NFA state in the trie.
    uint nodeid = trie_insert(&((*dfap)->trie), code, alignval, (*dfap)->pos);
    if (nodeid == (uint)-1) return -1;
@@ -579,16 +682,15 @@ trie_new
 // SIDE EFFECTS:
 //   The returned trie_t struct is allocated using malloc and must be manually freed.
 {
+   // Set error to 0.
+   seeqerr = 0;
 
    // Allocate at least one node.
    if (initial_size < 1) initial_size = 1;
    if (height < 0) height = 0;
 
    trie_t * trie = malloc(sizeof(trie_t) + initial_size*sizeof(node_t));
-   if (trie == NULL) {
-      fprintf(stderr, "error in 'trie_new' (malloc) trie_t: %s\n", strerror(errno));
-      return NULL;
-   }
+   if (trie == NULL) return NULL;
 
    // Initialize root node.
    memset(&(trie->nodes[0]), 0, initial_size*sizeof(node_t));
@@ -627,9 +729,15 @@ trie_search
 // SIDE EFFECTS:
 //   None.
 {
+   // Set error to 0.
+   seeqerr = 0;
+
    uint id = 0;
    for (int i = 0; i < trie->height; i++) {
-      if (path[i] >= TRIE_CHILDREN || path[i] < 0) return -1;
+      if (path[i] >= TRIE_CHILDREN || path[i] < 0) {
+         seeqerr = 6;
+         return -1;
+      }
       id = trie->nodes[id].child[(int)path[i]];
       if (id == 0) return 0;
    }
@@ -663,15 +771,15 @@ trie_getrow
 //   An array containing the NW row is allocated using malloc and must be
 //   manually freed.
 {
+   // Set error to 0.
+   seeqerr = 0;
+
    node_t * nodes = &(trie->nodes[0]);
    uint   * path  = malloc((trie->height + 1) * sizeof(uint));
    int      i     = trie->height;
    uint     id    = nodeid;
 
-   if (path == NULL) {
-      fprintf(stderr, "error in 'trie_getrow' (malloc) path: %s\n", strerror(errno));
-      return NULL;
-   }
+   if (path == NULL) return NULL;
 
    // Match value.
    path[i] = nodes[id].child[0];
@@ -686,7 +794,7 @@ trie_getrow
    // Control.
    if (i != 0) {
       free(path);
-      fprintf(stderr, "error in 'trie_getrow': nodeid is not a leaf.\n");
+      seeqerr = 7;
       return NULL;
    }
 
@@ -721,6 +829,9 @@ trie_insert
 //   If the trie has reached its limit of allocated nodes, it will be reallocated
 //   doubling its size. The address of the trie may have changed after calling dfa_insert.
 {
+   // Set error to 0.
+   seeqerr = 0;
+
    trie_t * trie  = *triep;
    node_t * nodes = &(trie->nodes[0]);
    uint id = 0;
@@ -731,6 +842,7 @@ trie_insert
       if (path[i] < 0 || path[i] >= TRIE_CHILDREN) {
          // Bad path, revert trie and return.
          trie->pos = initial_pos;
+         seeqerr = 8;
          return -1;
       }
       // Walk the tree.
@@ -743,10 +855,7 @@ trie_insert
       if (trie->pos >= trie->size) {
          size_t newsize = trie->size * 2;
          *triep = trie = realloc(trie, sizeof(trie_t) + newsize * sizeof(node_t));
-         if (trie == NULL) {
-            fprintf(stderr, "error in 'trie_insert' (realloc) trie_t: %s\n", strerror(errno));
-            return -1;
-         }
+         if (trie == NULL) return -1;
          // Update pointers.
          nodes = &(trie->nodes[0]);
          // Initialize new nodes.
