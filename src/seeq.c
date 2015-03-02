@@ -150,7 +150,24 @@ seeq
             if (args.showline) fprintf(stdout, "%ld ", sq->match.line);
             if (args.showpos)  fprintf(stdout, "%d-%d ", sq->match.start, sq->match.end);
             if (args.showdist) fprintf(stdout, "%d ", sq->match.dist);
-            if (args.printline) fprintf(stdout, "%s\n", sq->match.string);
+            if (args.printline) {
+               if (COLOR_TERMINAL && isatty(fileno(stdout))) {
+                  // Prefix.
+                  char tmp = sq->match.string[sq->match.start];
+                  sq->match.string[sq->match.start] = 0;
+                  fprintf(stdout, "%s", sq->match.string);
+                  sq->match.string[sq->match.start] = tmp;
+                  // Color match.
+                  fprintf(stdout, (sq->match.dist ? BOLDRED : BOLDGREEN));
+                  tmp = sq->match.string[sq->match.end];
+                  sq->match.string[sq->match.end] = 0;
+                  fprintf(stdout, "%s" RESET, sq->match.string + sq->match.start);
+                  sq->match.string[sq->match.end] = tmp;
+                  fprintf(stdout, "%s\n", sq->match.string + sq->match.end);
+               }
+               else fprintf(stdout, "%s\n", sq->match.string);
+
+            }
             else if (args.matchonly) {
                sq->match.string[sq->match.end] = 0;
                fprintf(stdout, "%s\n", sq->match.string + sq->match.start);

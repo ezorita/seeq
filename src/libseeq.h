@@ -26,7 +26,9 @@
 
 #ifndef _SEEQLIB_H_
 #define _SEEQLIB_H_
+
 #define VERSION "seeq-1.0"
+#define COLOR_TERMINAL 1
 
 #include "seeqcore.h"
 
@@ -65,5 +67,9 @@ int         seeqGetStart    (seeq_t *);
 int         seeqGetEnd      (seeq_t *);
 char      * seeqGetString   (seeq_t *);
 char      * seeqPrintError  (void);
+
+#define RESET       "\033[0m"
+#define BOLDRED     "\033[1m\033[31m"      /* Bold Red */
+#define BOLDGREEN   "\033[1m\033[32m"      /* Bold Green */
 
 #endif

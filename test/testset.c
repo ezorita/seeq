@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "faultymalloc.h"
-#include "seeq.h"
+#include "libseeq.h"
 
 void SIGSEGV_handler(int sig) {
    void *array[10];
