@@ -1,10 +1,10 @@
 /*
-** Copyright 2014 Eduard Valera Zorita.
+** Copyright 2015 Eduard Valera Zorita.
 **
 ** File authors:
 **  Eduard Valera Zorita (eduardvalera@gmail.com)
 **
-** Last modified: November 25, 2014
+** Last modified: March 2, 2015
 **
 ** License: 
 **  This program is free software: you can redistribute it and/or modify
@@ -22,7 +22,61 @@
 **
 */
 
-#include "seeq.h"
+#include "libseeq.h"
+#include <string.h>
+#include <errno.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <time.h>
+
+char *USAGE = "Usage:"
+"  seeq [options] pattern inputfile\n"
+"    -v --version         print version\n"
+"    -z --verbose         verbose using stderr\n"
+"    -d --distance        maximum Levenshtein distance (default 0)\n"
+"    -c --count           returns the count of matching lines\n"
+"    -i --invert          return only the non-matching lines\n"
+"    -m --match-only      print only the matched part of the matched lines\n"
+"    -n --no-printline    does not print the matching line\n"
+"    -l --lines           prints the original line number of the match\n"
+"    -p --positions       prints the position of the match within the matched line\n"
+"    -s --print-dist      prints the Levenshtein distance wrt the pattern\n"
+"    -f --compact         prints output in compact format (line:pos:dist)\n"
+"    -e --end             print only the end of the line, starting after the match\n"
+"    -b --prefix          print only the prefix, ending before the match\n";
+
+struct seeqarg_t {
+   int showdist;
+   int showpos;
+   int showline;
+   int printline;
+   int matchonly;
+   int count;
+   int compact;
+   int dist;
+   int verbose;
+   int endline;
+   int prefix;
+   int invert;
+};
+
+
+void say_usage(void) { fprintf(stderr, "%s\n", USAGE); }
+void say_version(void) { fprintf(stderr, VERSION "\n"); }
+void say_help(void) { fprintf(stderr, "use '-h' for help.\n"); }
+
+void SIGSEGV_handler(int sig) {
+   void *array[10];
+   size_t size;
+
+   // get void*'s for all entries on the stack
+   size = backtrace(array, 10);
+
+   // print out all the frames to stderr
+   fprintf(stderr, "Error: signal %d:\n", sig);
+   backtrace_symbols_fd(array, size, STDERR_FILENO);
+   exit(1);
+}
 
 int
 seeq
@@ -66,801 +120,345 @@ seeq
 // SIDE EFFECTS:
 //   None.
 {
-   int verbose = args.verbose;
-   //----- PARSE PARAMS -----
-   int tau = args.dist;
-   
-   dfa_t * dfa  = NULL;
-   dfa_t * rdfa = NULL;
-   char  * data = NULL;
+   const int verbose = args.verbose;
+   const int tau = args.dist;
 
-   if (verbose) fprintf(stderr, "opening input file\n");
-
-   FILE * fdi = (input == NULL ? stdin : fopen(input, "r"));
-
-   if (fdi == NULL) {
-      fprintf(stderr,"error: could not open file: %s\n\n", strerror(errno));
-      if (dfa != NULL)  dfa_free(dfa);
-      if (rdfa != NULL) dfa_free(rdfa);
-      if (data != NULL) free(data);
+   if (verbose) fprintf(stderr, "opening input file... ");
+   seeq_t * sq = seeqOpen(input, expression, tau);
+   if (sq == NULL) {
+      fprintf(stderr, "error in 'seeqOpen()': %s\n", strerror(errno));
       return EXIT_FAILURE;
+   }
+
+   clock_t clk = 0;
+   if (verbose) {
+      fprintf(stderr, "\nmatching...\n");
+      clk = clock();
    }
    
-   if (verbose) fprintf(stderr, "parsing pattern\n");
+   if (args.count) {
+      fprintf(stdout, "%ld\n", seeqMatch(sq, SQ_COUNT));
+   } else {
+      int match_options = 0;
+      if (args.invert) match_options = SQ_NOMATCH;
+      else match_options = SQ_MATCH;
 
-   // ----- INITIALIZE DFA AND NFA -----
-   char keys[strlen(expression)];
-   int  wlen = parse(expression, keys);
-
-   if (wlen == -1) {
-      fprintf(stderr, "error: invalid pattern expression.\n");
-      if (fdi != stdin) fclose(fdi);
-      if (dfa != NULL) dfa_free(dfa);
-      if (rdfa != NULL) dfa_free(rdfa);
-      if (data != NULL) free(data);
-      return EXIT_FAILURE;
-   }
-   
-   if (tau >= wlen) {
-      fprintf(stderr, "error: expression must be longer than the maximum distance.\n");
-      if (fdi != stdin) fclose(fdi);
-      if (dfa != NULL) dfa_free(dfa);
-      if (rdfa != NULL) dfa_free(rdfa);
-      if (data != NULL) free(data);
-      return EXIT_FAILURE;
-   }
-
-   if (tau < 0) {
-      fprintf(stderr, "error: invalid distance.\n");
-      if (fdi != stdin) fclose(fdi);
-      if (dfa != NULL) dfa_free(dfa);
-      if (rdfa != NULL) dfa_free(rdfa);
-      if (data != NULL) free(data);
-      return EXIT_FAILURE;
-   }
-
-   // Reverse the query and build reverse DFA.
-   char rkeys[wlen];
-   for (int i = 0; i < wlen; i++) rkeys[i] = keys[wlen-i-1];
-
-   // Initialize DFA and RDFA graphs.
-   dfa  = dfa_new(wlen, tau, INITIAL_DFA_SIZE, INITIAL_TRIE_SIZE);
-   if (dfa == NULL) {
-      if (fdi != stdin) fclose(fdi);
-      if (dfa != NULL) dfa_free(dfa);
-      if (rdfa != NULL) dfa_free(rdfa);
-      if (data != NULL) free(data);
-      return EXIT_FAILURE;
-   }
-   rdfa = dfa_new(wlen, tau, INITIAL_DFA_SIZE, INITIAL_TRIE_SIZE);
-   if (rdfa == NULL) {
-      if (fdi != stdin) fclose(fdi);
-      if (dfa != NULL) dfa_free(dfa);
-      if (rdfa != NULL) dfa_free(rdfa);
-      if (data != NULL) free(data);
-      return EXIT_FAILURE;
-   }
-
-   // ----- PROCESS FILE -----
-   // Text buffer
-   data = malloc(INITIAL_LINE_SIZE);
-   if (data == NULL) {
-      fprintf(stderr, "error in 'seeq' (malloc) data: %s\n", strerror(errno));
-      if (fdi != stdin) fclose(fdi);
-      if (dfa != NULL) dfa_free(dfa);
-      if (rdfa != NULL) dfa_free(rdfa);
-      if (data != NULL) free(data);
-      return EXIT_FAILURE;
-   }
-   size_t bufsz = INITIAL_LINE_SIZE;
-   ssize_t readsz;
-   // Counters.
-   unsigned long lines = 0;
-   unsigned long count = 0;
-
-   if (verbose) fprintf(stderr, "processing data\n");
-
-   while ((readsz = getline(&data, &bufsz, fdi)) > 0) {
-      // Remove newline.
-      if (data[readsz-1] == '\n') data[readsz---1] = 0;
-
-      // Reset search variables
-      int streak_dist = tau+1;
-      int current_node = 0;
-      lines++;
-
-      // DFA state.
-      for (unsigned long i = 0; i <= readsz; i++) {
-         // Update DFA.
-         int cin = (int)translate[(int)data[i]];
-         edge_t next;
-         if(cin < NBASES) {
-            next = dfa->states[current_node].next[cin];
-            if (next.match == DFA_COMPUTE)
-               if (dfa_step(current_node, cin, wlen, tau, &dfa, keys, &next)) {
-                  if (fdi != stdin) fclose(fdi);
-                  if (dfa != NULL) dfa_free(dfa);
-                  if (rdfa != NULL) dfa_free(rdfa);
-                  if (data != NULL) free(data);
-                  return EXIT_FAILURE;
-               }
-            current_node = next.state;
-         } else if (cin == 5) {
-            next.match = tau+1;
-            if (args.invert && streak_dist >= next.match) {
-               if (args.showline) fprintf(stdout, "%lu %s\n", lines, data);
-               else fprintf(stdout, "%s\n", data);
-               break;
+      while (seeqMatch(sq, match_options) > 0) {
+         if (args.compact) fprintf(stdout, "%ld:%d-%d:%d\n",sq->match.line, sq->match.start, sq->match.end-1, sq->match.dist);
+         else {
+            if (args.showline) fprintf(stdout, "%ld ", sq->match.line);
+            if (args.showpos)  fprintf(stdout, "%d-%d ", sq->match.start, sq->match.end);
+            if (args.showdist) fprintf(stdout, "%d ", sq->match.dist);
+            if (args.printline) fprintf(stdout, "%s\n", sq->match.string);
+            else if (args.matchonly) {
+               sq->match.string[sq->match.end] = 0;
+               fprintf(stdout, "%s\n", sq->match.string + sq->match.start);
+            } else if (args.prefix) {
+               sq->match.string[sq->match.start] = 0;
+               fprintf(stdout, "%s\n", sq->match.string);
+            } else if (args.endline) {
+               fprintf(stdout, "%s\n", sq->match.string + sq->match.end);
             }
-         } else {
-            break;
-         }
-
-         // Update streak.
-         if (streak_dist > next.match) {
-            // Tau is decreasing, track new streak.
-            streak_dist   = next.match;
-          
-   // ----- FORMAT OUTPUT -----
-         } else if (streak_dist < next.match) {
-            if (args.invert) break;
-            // FORMAT OUTPUT
-            if (args.count) {
-               count++;
-               break;
-            } else {
-               long j = 0;
-               if (args.showpos || args.compact || args.matchonly || args.prefix) {
-                  int rnode = 0;
-                  int d = tau + 1;
-                  // Find match start with RDFA.
-                  do {
-                     int c = (int)translate[(int)data[i-++j]];
-                     edge_t next = rdfa->states[rnode].next[c];
-                     if (next.match == DFA_COMPUTE)
-                        if (dfa_step(rnode, c, wlen, tau, &rdfa, rkeys, &next)) {
-                           if (fdi != stdin) fclose(fdi);
-                           if (dfa != NULL) dfa_free(dfa);
-                           if (rdfa != NULL) dfa_free(rdfa);
-                           if (data != NULL) free(data);
-                           return EXIT_FAILURE;
-                        }
-                     rnode = next.state;
-                     d     = next.match;
-                  } while (d > streak_dist && j < i);
-
-                  // Compute match length and print match.
-                  j = i - j;
-               }
-               if (args.compact) {
-                  fprintf(stdout, "%lu:%ld-%ld:%d\n",lines, j, i-1, streak_dist);
-               } else {
-                  if (args.showline) fprintf(stdout, "%lu ", lines);
-                  if (args.showpos)  fprintf(stdout, "%ld-%ld ", j, i-1);
-                  if (args.showdist) fprintf(stdout, "%d ", streak_dist);
-                  if (args.matchonly) {
-                     data[i] = 0;
-                     fprintf(stdout, "%s", data+j);
-                  } else if (args.printline) {
-                     if(isatty(fileno(stdout)) && args.showpos) {
-                        char tmp = data[j];
-                        data[j] = 0;
-                        fprintf(stdout, "%s", data);
-                        data[j] = tmp;
-                        tmp = data[i];
-                        data[i] = 0;
-                        fprintf(stdout, (streak_dist > 0 ? BOLDRED : BOLDGREEN));
-                        fprintf(stdout, "%s" RESET, data+j);
-                        data[i] = tmp;
-                        fprintf(stdout, "%s", data+i);
-                     } else {
-                        fprintf(stdout, "%s", data);
-                     }
-                  } else {
-                     if (args.prefix) {
-                        data[j] = 0;
-                        fprintf(stdout, "%s", data);
-                     }
-                     if (args.endline) {
-                        fprintf(stdout, "%s", data+i);
-                     }
-                  }
-                  fprintf(stdout, "\n");
-               }
-            }
-            break;
          }
       }
    }
-   if (verbose) fprintf(stderr, "done\n");
-   if (args.count) fprintf(stdout, "%lu\n", count);
-
-   // ----- FREE MEMORY -----
-   free(rdfa);
-   free(dfa);
-   free(data);
    
-   if (fdi != stdin) fclose(fdi);
+   if (verbose) {
+      fprintf(stderr, "done in %.3fs\n", (clock()-clk)*1.0/CLOCKS_PER_SEC);
+   }
+   
+   seeqClose(sq);
 
    return EXIT_SUCCESS;
 }
 
 
 int
-parse
+main
 (
- char * expr,
- char * keys
-)
-// SYNOPSIS:                                                              
-//   Parses a pattern expression converting them into bytes, one for each
-//   matching position. The key byte is defined as follows:
-//
-//      bit0 (LSB): match 'A' or 'a'.
-//      bit1      : match 'C' or 'c'.
-//      bit2      : match 'G' or 'g'.
-//      bit3      : match 'T', 't', 'U' or 'u'.
-//      bit4      : match 'N' or 'n'.
-//      bit5..7   : not used.
-//
-//   Each key may have one or more bits set if different bases are allowed
-//   to match a single position. The expected input expression is a string
-//   containing nucleotides 'A','C','G','T','U' and 'N'. If one matching
-//   position allows more than one base, the matching bases must be enclosed
-//   in square brackets '[' ']'. For instance,
-//
-//      AC[AT]
-//
-//   would match a sequence containing A in the 1st position, C in the 2nd
-//   position and either A or T in the 3rd position. The associated keys
-//   would be
-//
-//      keys("AC[AT]") = {0x01, 0x02, 0x09}
-//
-//   If the expression contains 'N', that position will match any nucleotide,
-//   including 'N'.
-//                                                                        
-// PARAMETERS:                                                            
-//   expr: A null-terminated string containing the matching expression.
-//   keys: pointer to a previously allocated vector of chars. The size of the
-//         allocated region should be equal to strlen(expr).
-//                                                                        
-// RETURN:                                                                
-//   On success, parse returns the number of matching positions (keys) for the
-//   given expression, or -1 if an error occurred.
-//
-// SIDE EFFECTS:
-//   The contents of the pointer 'keys' are overwritten.
-{
-   // Initialize keys to 0.
-   for (int i = 0; i < strlen(expr); i++) keys[i] = 0;
-
-   int i = 0;
-   int l = 0;
-   int add = 0;
-   char c, lc = 0;
-   while((c = expr[i]) != 0) {
-      if      (c == 'A' || c == 'a') keys[l] |= 0x01;
-      else if (c == 'C' || c == 'c') keys[l] |= 0x02;
-      else if (c == 'G' || c == 'g') keys[l] |= 0x04;
-      else if (c == 'T' || c == 't' || c == 'U' || c == 'u') keys[l] |= 0x08;
-      else if (c == 'N' || c == 'n') keys[l] |= 0x1F;
-      else if (c == '[') {
-         if (add) return -1;
-         add = 1;
-      }
-      else if (c == ']') {
-         if (!add) return -1;
-         if (lc == '[') l--;
-         add = 0;
-      }
-      else return -1;
-
-      if (!add) l++;
-      i++;
-      lc = c;
-   }
-   
-   if (add == 1) return -1;
-   else return l;
-}
-
-
-dfa_t *
-dfa_new
-(
- int wlen,
- int tau,
- int vertices,
- int trienodes
-)
-// SYNOPSIS:                                                              
-//   Creates and initializes a new dfa graph with a root vertex and the specified
-//   number of preallocated vertices. Initializes a trie to keep the alignment rows
-//   with height wlen and some preallocated nodes. The DFA network is initialized
-//   with the first NW-alignment row [0 1 2 ... tau tau+1 tau+1 ... tau+1].
-//                                                                        
-// PARAMETERS:                                                            
-//   wlen: length of the pattern as regurned by 'parse'.
-//   tau: mismatch threshold.
-//   vertices: the number of preallocated vertices.
-//   trienodes: initial size of the trie.
-//                                                                        
-// RETURN:                                                                
-//   On success, the function returns a pointer to the new dfa_t structure.
-//   A NULL pointer is returned in case of error.
-//
-// SIDE EFFECTS:
-//   The returned dfa_t struct is allocated using malloc and must be manually freed.
-{
-   if (vertices < 1) vertices = 1;
-   if (wlen < 1 || tau < 0) return NULL;
-
-   dfa_t * dfa = malloc(sizeof(dfa_t) + vertices * sizeof(vertex_t));
-   if (dfa == NULL) {
-      fprintf(stderr, "error in 'dfa_new' (malloc) dfa_t: %s.\n", strerror(errno));
-      return NULL;
-   }
-
-   // Initialize state 0.
-   edge_t new = {.state = 0, .match = DFA_COMPUTE};
-   for (int i = 0; i < NBASES; i++) {
-      dfa->states[0].next[i] = new;
-   }
-
-   trie_t * trie = trie_new(trienodes, wlen);
-   if (trie == NULL) {
-      free(dfa);
-      return NULL;
-   }
-
-   // Compute initial NFA state.
-   char path[wlen+1];
-   for (int i = 0; i <= tau; i++) path[i] = 2;
-   for (int i = tau + 1; i < wlen; i++) path[i] = 1;
-
-   // Insert initial state into trie.
-   uint nodeid = trie_insert(&trie, path, tau+1, 0);
-   if (nodeid == (uint)-1) {
-      free(trie);
-      free(dfa);
-      return NULL;
-   }
-
-   // Fill struct.
-   dfa->size = vertices;
-   dfa->pos  = 1;
-   dfa->trie = trie;
-
-   // Link trie leaf with DFA vertex.
-   dfa->states[0].node_id = nodeid;
-
-   return dfa;
-}
-
-
-int
-dfa_step
-(
- uint      dfa_state,
- uint      base,
- uint      plen,
- uint      tau,
- dfa_t  ** dfap,
- char   *  exp,
- edge_t *  nextedge
-)
-// SYNOPSIS:                                                              
-//   Updates the current status of DFA graph. Based on the parameters passed,
-//   the function will compute the next row of the Needleman-Wunsch matrix and
-//   update the graph accordingly. If the new row points to an already-known
-//   state, the two existing vertices will be linked with an edge. Otherwise,
-//   a new vertex will be created for the new row.
-//                                                                        
-// PARAMETERS:                                                            
-//   dfa_state : current state of the DFA.
-//   base      : next base to resolve (0 for 'A', 1 for 'C', 2 for 'G', '3' for 'T'/'U' and 4 for 'N).
-//   plen      : length of the pattern, as returned by parse.
-//   tau       : Levenshtein distance threshold.
-//   dfap      : pointer to a memory space containing the address of the DFA.
-//   trie      : pointer to a memory space containing the address of the associated trie.
-//   exp       : expression keys, as returned by parse.
-//   nextedge  : a pointer to an edge_t struct where the computed transition will be placed,
-//
-// RETURN:                                                                
-//   dfa_step returns 0 on success, or -1 if an error occurred.
-//
-// SIDE EFFECTS:
-//   The returned dfa_t struct is allocated using malloc and must be manually freed.
-{
-   dfa_t  * dfa   = *dfap;
-
-   // Return next vertex if already computed.
-   if (dfa->states[dfa_state].next[base].match != DFA_COMPUTE) {
-      *nextedge = dfa->states[dfa_state].next[base];
-      return 0;
-   }
-
-   int  value = 1 << base;
-
-   // Explore the trie backwards to find out the NFA state.
-   uint * state = trie_getrow(dfa->trie, dfa->states[dfa_state].node_id);
-   char * code  = calloc(plen + 1, sizeof(char));
-
-   if (state == NULL) return -1;
-
-   if (code == NULL) {
-      fprintf(stderr, "error in 'dfa_step' (calloc) code: %s\n", strerror(errno));
-      return -1;
-   }
-
-   // Initialize first column.
-   int nextold, prev, old = state[0];
-   state[0] = prev = 0;
-
-   // Update row.
-   for (int i = 1; i < plen+1; i++) {
-      nextold   = state[i];
-      state[i]  = min(tau + 1, min(old + ((value & exp[i-1]) == 0), min(prev, state[i]) + 1));
-      code[i-1] = state[i] - prev + 1;
-      prev      = state[i];
-      old       = nextold;
-   }
-
-   // Save match value.
-   dfa->states[dfa_state].next[base].match = prev;
-   
-   // Check if this state already exists.
-   uint dfalink;
-   int exists = trie_search(dfa->trie, code, NULL, &dfalink);
-
-   if (exists == 1) {
-      // If exists, just link with the existing state.
-      dfa->states[dfa_state].next[base].state = dfalink;
-   } else if (exists == 0) {
-      if (dfa_newstate(dfap, code, prev, dfa_state, base) == -1)
-         return -1;
-      dfa = *dfap;
-   } else {
-      fprintf(stderr, "error in 'trie_search': incorrect path.\n");
-      return -1;
-   }
-
-   free(state);
-   free(code);
-   
-   *nextedge = dfa->states[dfa_state].next[base];
-   return 0;
-}
-
-
-uint
-dfa_newvertex
-(
- dfa_t ** dfap,
- uint     nodeid
-)
-// SYNOPSIS:                                                              
-//   Adds a new vertex to the dfa graph. The new vertex is not linked to any other
-//   vertex in any way, so the connection must be done manually.
-//                                                                        
-// PARAMETERS:                                                            
-//   dfap   : pointer to a memory space containing the address of the DFA.
-//   nodeid : id of the associated node in the NW row trie, i.e. where the
-//            NW row corresponding to this state is stored.
-//                                                                        
-// RETURN:                                                                
-//   On success, the function returns the id of the new vertex. In case of error
-//   the function returns (uint)-1.
-//
-// SIDE EFFECTS:
-//   If the dfa has reached its maximum size, the dfa will be reallocated
-//   doubling its current size. The address of the dfa may have changed after
-//   calling dfa_newvertex.
-{
-   dfa_t * dfa = *dfap;
-
-   // Create new vertex in DFA graph.
-   if (dfa->pos >= dfa->size) {
-      dfa->size *= 2;
-      *dfap = dfa = realloc(dfa, sizeof(dfa_t) + dfa->size * sizeof(vertex_t));
-      if (dfa == NULL) {
-         fprintf(stderr, "error in 'dfa_newvertex' (realloc) dfa_t: %s\n", strerror(errno));
-         return -1;
-      }
-   }
-
-   // Initialize DFA vertex.
-   dfa->states[dfa->pos].node_id = nodeid;
-   edge_t new = {.state = 0, .match = DFA_COMPUTE};
-   for (int j = 0; j < NBASES; j++) dfa->states[dfa->pos].next[j] = new;
-
-   // Increase counter.
-   return dfa->pos++;
-}
-
-int
-dfa_newstate
-(
- dfa_t ** dfap,
- char   * code,
- uint     alignval,
- uint     dfa_state,
- int      edge
-)
-// SYNOPSIS:                                                              
-//   Creates a new vertex to allocate a new DFA state, which represents an 
-//   unseen NW alignment row. This function inserts the new NW alignment row in
-//   the trie and connects the new vertex with its origin (the current DFA state).
-//                                                                        
-// PARAMETERS:                                                            
-//   dfap      : pointer to a memory space containing the address of the DFA.
-//   code      : path of the trie that represents the new NW alignment.
-//   alignval  : last column of the NW alignment.
-//   dfa_state : current DFA state.
-//   edge      : the edge slot to use of the current DFA state.
-//                                                                        
-// RETURN:                                                                
-//   On success, the function returns 0, or -1 if an error occurred.
-//
-// SIDE EFFECTS:
-//   The dfa may be reallocated, so the content of *dfap may be different
-//   at the end of the funcion.
-{
-   // Insert new NFA state in the trie.
-   uint nodeid = trie_insert(&((*dfap)->trie), code, alignval, (*dfap)->pos);
-   if (nodeid == (uint)-1) return -1;
-   // Create new vertex in dfa graph.
-   uint vertexid = dfa_newvertex(dfap, nodeid);
-   if (vertexid == (uint)-1) return -1;
-   // Connect dfa vertices.
-   (*dfap)->states[dfa_state].next[edge].state = vertexid;
-   return 0;
-}
-
-void
-dfa_free
-(
- dfa_t * dfa
+   int argc,
+   char **argv
 )
 {
-   if (dfa->trie != NULL) free(dfa->trie);
-   free(dfa);
-}
+   // Backtrace handler
+   signal(SIGSEGV, SIGSEGV_handler); 
+   char *expr, *input;
 
-trie_t *
-trie_new
-(
- int initial_size,
- int height
-)
-// SYNOPSIS:                                                              
-//   Creates and initializes a new NW-row trie preallocated with the specified
-//   number of nodes.
-//                                                                        
-// PARAMETERS:                                                            
-//   initial_size : the number of preallocated nodes.
-//   height       : height of the trie. It must be equal to the number of keys
-//                  as returned by parse.
-//                                                                        
-// RETURN:                                                                
-//   On success, the function returns a pointer to the new trie_t structure.
-//   A NULL pointer is returned in case of error.
-//
-// SIDE EFFECTS:
-//   The returned trie_t struct is allocated using malloc and must be manually freed.
-{
+   // Unset flags (value -1).
+   int showdist_flag  = -1;
+   int showpos_flag   = -1;
+   int printline_flag = -1;
+   int matchonly_flag = -1;
+   int showline_flag  = -1;
+   int count_flag     = -1;
+   int invert_flag    = -1;
+   int compact_flag   = -1;
+   int dist_flag      = -1;
+   int verbose_flag   = -1;
+   int endline_flag   = -1;
+   int prefix_flag    = -1;
 
-   // Allocate at least one node.
-   if (initial_size < 1) initial_size = 1;
-   if (height < 0) height = 0;
+   // Unset options (value 'UNSET').
+   input = NULL;
 
-   trie_t * trie = malloc(sizeof(trie_t) + initial_size*sizeof(node_t));
-   if (trie == NULL) {
-      fprintf(stderr, "error in 'trie_new' (malloc) trie_t: %s\n", strerror(errno));
-      return NULL;
+   if (argc == 1) {
+      say_version();
+      say_usage();
+      return EXIT_SUCCESS;
    }
 
-   // Initialize root node.
-   memset(&(trie->nodes[0]), 0, initial_size*sizeof(node_t));
+   int c;
+   while (1) {
+      int option_index = 0;
+      static struct option long_options[] = {
+         {"positions",     no_argument, 0, 'p'},
+         {"match-only",    no_argument, 0, 'm'},
+         {"no-printline",  no_argument, 0, 'n'},
+         {"print-dist",    no_argument, 0, 's'},
+         {"lines",         no_argument, 0, 'l'},
+         {"count",         no_argument, 0, 'c'},
+         {"invert",        no_argument, 0, 'i'},
+         {"format-compact",no_argument, 0, 'f'},
+         {"verbose",       no_argument, 0, 'z'},
+         {"version",       no_argument, 0, 'v'},
+         {"help",          no_argument, 0, 'h'},
+         {"end",           no_argument, 0, 'e'},         
+         {"prefix",        no_argument, 0, 'b'},                  
+         {"distance",required_argument, 0, 'd'},
+         {0, 0, 0, 0}
+      };
 
-   // Initialize trie struct.
-   trie->pos = 1;
-   trie->size = initial_size;
-   trie->height = height;
-
-   return trie;
-}
-
-
-int
-trie_search
-(
- trie_t * trie,
- char   * path,
- uint   * value,
- uint   * dfastate
- )
-// SYNOPSIS:                                                              
-//   Searches the trie following a specified path and returns the values stored
-//   at the leaf.
-//                                                                        
-// PARAMETERS:                                                            
-//   trie     : Pointer to the trie.
-//   path     : The path as an array of chars containing values {0,1,2}
-//   value    : Pointer where the leaf value will be placed (if found).
-//   dfastate : Pointer where the leaf dfastate will be placed (if found).
-//                                                                        
-// RETURN:                                                                
-//   trie_search returns 1 if the path was found, and 0 otherwise. If an
-//   error occurred during the search, -1 is returned.
-//
-// SIDE EFFECTS:
-//   None.
-{
-   uint id = 0;
-   for (int i = 0; i < trie->height; i++) {
-      if (path[i] >= TRIE_CHILDREN || path[i] < 0) return -1;
-      id = trie->nodes[id].child[(int)path[i]];
-      if (id == 0) return 0;
-   }
-   // Save leaf value.
-   if (value != NULL) *value = trie->nodes[id].child[0];
-   if (dfastate != NULL) *dfastate = trie->nodes[id].child[1];
-   return 1;
-}
-
-
-uint *
-trie_getrow
-(
- trie_t * trie,
- uint     nodeid
-)
-// SYNOPSIS:                                                              
-//   Recomputes the NW row that terminates at nodeid ('nodeid' must point
-//   to a trie leaf).
-//                                                                        
-// PARAMETERS:                                                            
-//   trie   : Pointer to the trie.
-//   nodeid : Id of the leaf at which the NW row terminates.
-//                                                                        
-// RETURN:                                                                
-//   trie_getrow returns a pointer to the start of the NW row. If an
-//   error occurred during the row computation or nodeid did not point
-//   to a leaf node, a NULL pointer is returned.
-//
-// SIDE EFFECTS:
-//   An array containing the NW row is allocated using malloc and must be
-//   manually freed.
-{
-   node_t * nodes = &(trie->nodes[0]);
-   uint   * path  = malloc((trie->height + 1) * sizeof(uint));
-   int      i     = trie->height;
-   uint     id    = nodeid;
-
-   if (path == NULL) {
-      fprintf(stderr, "error in 'trie_getrow' (malloc) path: %s\n", strerror(errno));
-      return NULL;
-   }
-
-   // Match value.
-   path[i] = nodes[id].child[0];
-   
-   while (id != 0 && i > 0) {
-      uint next_id = nodes[id].parent;
-      path[i-1] = path[i] + (nodes[next_id].child[0] == id) - (nodes[next_id].child[2] == id);
-      id = next_id;
-      i--;
-   } 
-
-   // Control.
-   if (i != 0) {
-      free(path);
-      fprintf(stderr, "error in 'trie_getrow': nodeid is not a leaf.\n");
-      return NULL;
-   }
-
-   return path;
-}
-
-
-uint
-trie_insert
-(
- trie_t ** triep,
- char   *  path,
- uint      value,
- uint      dfastate
-)
-// SYNOPSIS:                                                              
-//   Inserts the specified path in the trie and stores the end value and
-//   the dfa state at the leaf (last node of the path). If the path already
-//   exists, its leaf values will be overwritten.
-//                                                                        
-// PARAMETERS:                                                            
-//   trie      : pointer to a memory space containing the address of the trie.
-//   path     : The path as an array of chars containing values {0,1,2}
-//   value    : The value of the last column of the NW row.
-//   dfastate : The NW-row-associated DFA state. 
-//                                                                        
-// RETURN:                                                                
-//   On success, dfa_insert returns the id of the leaf where the values were
-//   stored, -1 is returned if an error occurred.
-//
-// SIDE EFFECTS:
-//   If the trie has reached its limit of allocated nodes, it will be reallocated
-//   doubling its size. The address of the trie may have changed after calling dfa_insert.
-{
-   trie_t * trie  = *triep;
-   node_t * nodes = &(trie->nodes[0]);
-   uint id = 0;
-   uint initial_pos = trie->pos;
-
-   int i;
-   for (i = 0; i < trie->height; i++) {
-      if (path[i] < 0 || path[i] >= TRIE_CHILDREN) {
-         // Bad path, revert trie and return.
-         trie->pos = initial_pos;
-         return -1;
-      }
-      // Walk the tree.
-      if (nodes[id].child[(int)path[i]] != 0) {
-         id = nodes[id].child[(int)path[i]];
-         continue;
-      }
-
-      // Create new node.
-      if (trie->pos >= trie->size) {
-         size_t newsize = trie->size * 2;
-         *triep = trie = realloc(trie, sizeof(trie_t) + newsize * sizeof(node_t));
-         if (trie == NULL) {
-            fprintf(stderr, "error in 'trie_insert' (realloc) trie_t: %s\n", strerror(errno));
-            return -1;
+      c = getopt_long(argc, argv, "pmnislczfvhebd:",
+            long_options, &option_index);
+ 
+      /* Detect the end of the options. */
+      if (c == -1) break;
+  
+      switch (c) {
+      case 'd':
+         if (dist_flag < 0) {
+            int dist = atoi(optarg);
+            if (dist < 0) {
+               say_version();
+               fprintf(stderr, "error: distance must be a positive integer.\n");
+               say_help();
+               return EXIT_FAILURE;
+            }
+            dist_flag = atoi(optarg);
          }
-         // Update pointers.
-         nodes = &(trie->nodes[0]);
-         // Initialize new nodes.
-         trie->size = newsize;
-      }
-      
-      // Consume one node of the trie.
-      uint newid = trie->pos;
-      nodes[newid].parent = id;
-      nodes[newid].child[0] = nodes[newid].child[1] = nodes[newid].child[2] = 0;
-      nodes[id].child[(int)path[i]] = newid;
-      trie->pos++;
+         else {
+            say_version();
+            fprintf(stderr, "error: distance option set more than once.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         break;
 
-      // Go one level deeper.
-      id = newid;
+      case 'v':
+         say_version();
+         return EXIT_SUCCESS;
+
+      case 'z':
+         if (verbose_flag < 0) {
+            verbose_flag = 1;
+         }
+         else {
+            say_version();
+            fprintf(stderr, "error: verbose option set more than once.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         break;
+
+
+
+      case 'b':
+         if (prefix_flag < 0) {
+            prefix_flag = 1;
+         }
+         else {
+            say_version();
+            fprintf(stderr, "error: prefix option set more than once.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         break;
+
+
+      case 'e':
+         if (endline_flag < 0) {
+            endline_flag = 1;
+         }
+         else {
+            say_version();
+            fprintf(stderr, "error: line-end option set more than once.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         break;
+
+      case 'p':
+         if (showpos_flag < 0) {
+            showpos_flag = 1;
+         }
+         else {
+            say_version();
+            fprintf(stderr, "error: show-position option set more than once.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         break;
+
+      case 'm':
+         if (matchonly_flag < 0) {
+            matchonly_flag = 1;
+         }
+         else {
+            say_version();
+            fprintf(stderr, "error: match-only option set more than once.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         break;
+
+      case 'n':
+         if (printline_flag < 0) {
+            printline_flag = 0;
+         }
+         else {
+            say_version();
+            fprintf(stderr, "error: no-printline option set more than once.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         break;
+
+      case 's':
+         if (showdist_flag < 0) {
+            showdist_flag = 1;
+         }
+         else {
+            say_version();
+            fprintf(stderr, "error: show-distance option set more than once.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         break;
+
+      case 'l':
+         if (showline_flag < 0) {
+            showline_flag = 1;
+         }
+         else {
+            say_version();
+            fprintf(stderr, "error: show-line option set more than once.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         break;
+
+      case 'c':
+         if (count_flag < 0) {
+            count_flag = 1;
+         }
+         else {
+            say_version();
+            fprintf(stderr, "error: count option set more than once.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         break;
+
+      case 'i':
+         if (invert_flag < 0) {
+            invert_flag = 1;
+         }
+         else {
+            say_version();
+            fprintf(stderr, "error: invert option set more than once.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         break;
+
+      case 'f':
+         if (compact_flag < 0) {
+            compact_flag = 1;
+         }
+         else {
+            say_version();
+            fprintf(stderr, "error: format-compact option set more than once.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         break;
+
+      case 'h':
+         say_version();
+         say_usage();
+         exit(0);
+         break;
+      }
    }
 
-   // Write data.
-   nodes[id].child[0] = value;
-   nodes[id].child[1] = dfastate;
+   if (optind == argc) {
+      say_version();
+      fprintf(stderr, "error: not enough arguments.\n");
+      say_help();
+      return EXIT_FAILURE;
+   }
+   expr = argv[optind++];
 
-   return id;
+   if (optind < argc) {
+      if ((optind == argc - 1) && (input == NULL)) {
+         input = argv[optind];
+      }
+      else {
+         say_version();
+         fprintf(stderr, "error: too many options.\n");
+         say_help();
+         return EXIT_FAILURE;
+      }
+   }
+   if (count_flag == -1) count_flag = 0;
+   if (showdist_flag == -1) showdist_flag = 0;
+   if (showpos_flag  == -1) showpos_flag = 0;
+   if (matchonly_flag == -1) matchonly_flag = 0;
+   if (showline_flag == -1) showline_flag = 0;
+   if (invert_flag == -1) invert_flag = 0;
+   if (compact_flag == -1) compact_flag = 0;
+   if (dist_flag == -1) dist_flag = 0;
+   if (verbose_flag == -1) verbose_flag = 0;
+   if (endline_flag == -1) endline_flag = 0;
+   if (prefix_flag == -1) prefix_flag = 0;
+   if (printline_flag == -1) printline_flag = (!matchonly_flag && !endline_flag && !prefix_flag);
+
+   if (!showdist_flag && !showpos_flag && !printline_flag && !matchonly_flag && !showline_flag && !count_flag && !compact_flag && !prefix_flag && !endline_flag) {
+      say_version();
+      fprintf(stderr, "Invalid options: No output will be generated.\n");
+      say_help();
+      return EXIT_FAILURE;
+   }
+
+   int maskcnt = !count_flag;
+   int maskinv = !invert_flag * maskcnt;
+
+   struct seeqarg_t args;
+
+   args.showdist  = showdist_flag * maskinv;
+   args.showpos   = showpos_flag * maskinv;
+   args.showline  = showline_flag * maskcnt;
+   args.printline = printline_flag * maskinv;
+   args.matchonly = matchonly_flag * maskinv;
+   args.count     = count_flag;
+   args.compact   = compact_flag * maskinv;
+   args.dist      = dist_flag;
+   args.verbose   = verbose_flag;
+   args.endline   = endline_flag * maskinv;
+   args.prefix    = prefix_flag * maskinv;
+   args.invert    =invert_flag * maskcnt;
+
+   return seeq(expr, input, args);
 }
 
 
-void
-trie_reset
-(
- trie_t * trie
-)
-// SYNOPSIS:                                                              
-//   Resets the trie by pruning the root node. The size of the trie, in terms
-//   of preallocated nodes is maintained.
-//                                                                        
-// PARAMETERS:                                                            
-//   trie   : Pointer to the trie.
-//                                                                        
-// RETURN:                                                                
-//   void.
-//
-// SIDE EFFECTS:
-//   None.
-{
-   trie->pos = 0;
-   memset(&(trie->nodes[0]), 0, sizeof(node_t));
-}
