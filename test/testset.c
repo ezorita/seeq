@@ -1,8 +1,15 @@
+#include "libseeq.h"
+#include "seeqcore.h"
+#include "faultymalloc.h"
+#include "seeq.h"
 #include <glib.h>
 #include <stdio.h>
 #include <string.h>
-#include "faultymalloc.h"
-#include "libseeq.h"
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <execinfo.h>
+#include <unistd.h>
 
 void SIGSEGV_handler(int sig) {
    void *array[10];
@@ -27,6 +34,20 @@ char ERROR_BUFFER[1024];
 char OUTPUT_BUFFER[1024];
 int BACKUP_FILE_DESCRIPTOR;
 int BACKUP_STDOUT;
+int tty_value = 0;
+
+extern
+
+int isatty(int fd);
+
+int
+isatty
+(
+int fd
+)
+{
+   return tty_value;
+}
 
 void
 mute_stderr
@@ -680,6 +701,147 @@ test_parse
 }
 
 void
+test_seeqOpen
+(void)
+{
+   // Open file and check struct contents.
+   seeq_t * sq = seeqOpen("testdata.txt", "ACTGA", 2);
+   g_assert(sq != NULL);
+   g_assert_cmpint(sq->tau, ==, 2);
+   g_assert_cmpint(sq->wlen, ==, 5);
+   g_assert_cmpint(sq->line, ==, 0);
+   g_assert_cmpint(sq->count, ==, 0);
+   g_assert_cmpint(sq->keys[0], ==, 1);
+   g_assert_cmpint(sq->keys[1], ==, 2);
+   g_assert_cmpint(sq->keys[2], ==, 8);
+   g_assert_cmpint(sq->keys[3], ==, 4);
+   g_assert_cmpint(sq->keys[4], ==, 1);
+   g_assert(sq->dfa  != NULL);
+   g_assert(sq->rdfa != NULL);
+   g_assert(sq->fdi  != NULL);
+   g_assert_cmpint(seeqClose(sq), ==, 0);
+   
+   // Open stdin.
+   sq = seeqOpen(NULL, "ACG[AT]", 1);
+   g_assert(sq != NULL);
+   g_assert_cmpint(sq->tau, ==, 1);
+   g_assert_cmpint(sq->wlen, ==, 4);
+   g_assert_cmpint(sq->line, ==, 0);
+   g_assert_cmpint(sq->count, ==, 0);
+   g_assert_cmpint(sq->keys[0], ==, 1);
+   g_assert_cmpint(sq->keys[1], ==, 2);
+   g_assert_cmpint(sq->keys[2], ==, 4);
+   g_assert_cmpint(sq->keys[3], ==, 9);
+   g_assert(sq->dfa  != NULL);
+   g_assert(sq->rdfa != NULL);
+   g_assert(sq->fdi  == stdin);
+   g_assert_cmpint(seeqClose(sq), ==, 0);
+
+   // Check tau error.
+   sq = seeqOpen(NULL, "ACG[AT]", -1);
+   g_assert(sq == NULL);
+   g_assert_cmpint(seeqerr, ==, 1);
+   sq = seeqOpen(NULL, "ACG[AT]", 4);
+   g_assert(sq == NULL);
+   g_assert_cmpint(seeqerr, ==, 9);
+
+
+   // Incorrect pattern.
+   sq = seeqOpen(NULL, "ACT[A[AG]", 1);
+   g_assert(sq == NULL);
+   g_assert_cmpint(seeqerr, ==, 2);
+   sq = seeqOpen(NULL, "ACT[AG]T]A", 1);
+   g_assert(sq == NULL);
+   g_assert_cmpint(seeqerr, ==, 3);
+   sq = seeqOpen(NULL, "ACHT[AG]", 1);
+   g_assert(sq == NULL);
+   g_assert_cmpint(seeqerr, ==, 4);
+   sq = seeqOpen(NULL, "ACT[AG]A[TG", 1);
+   g_assert(sq == NULL);
+   g_assert_cmpint(seeqerr, ==, 5);
+
+   // No such file.
+   sq = seeqOpen("fakefile.txt", "ACTGA", 0);
+   g_assert(sq == NULL);
+}
+
+void
+test_seeqMatch
+(void)
+{
+   seeq_t * sq = seeqOpen("testdata.txt", "ATCG", 1);
+   g_assert(sq != NULL);
+   g_assert_cmpint(seeqMatch(sq, SQ_MATCH | SQ_FIRST), ==, 1);
+   g_assert_cmpint(seeqGetStart(sq), ==, 2);
+   g_assert_cmpint(seeqGetEnd(sq), ==, 5);
+   g_assert_cmpint(seeqGetLine(sq), ==, 1);
+   g_assert_cmpint(seeqGetDistance(sq), ==, 1);
+   g_assert_cmpstr(sq->match.string, ==, "GTATGTACCACAGATGTCGATCGAC");
+   g_assert_cmpint(seeqMatch(sq, SQ_MATCH | SQ_FIRST), ==, 1);
+   g_assert_cmpint(seeqGetStart(sq), ==, 3);
+   g_assert_cmpint(seeqGetEnd(sq), ==, 7);
+   g_assert_cmpint(seeqGetLine(sq), ==, 2);
+   g_assert_cmpint(seeqGetDistance(sq), ==, 1);
+   g_assert_cmpstr(sq->match.string, ==, "TCTATCATCCGTACTCTGATCTCAT");
+   g_assert_cmpint(seeqMatch(sq, SQ_MATCH | SQ_FIRST), ==, 0);
+   seeqClose(sq);
+
+   sq = seeqOpen("testdata.txt", "TGTC", 1);
+   g_assert(sq != NULL);
+   g_assert_cmpint(seeqMatch(sq, SQ_MATCH | SQ_BEST), ==, 1);
+   g_assert_cmpint(seeqGetStart(sq), ==, 14);
+   g_assert_cmpint(seeqGetEnd(sq), ==, 18);
+   g_assert_cmpint(seeqGetLine(sq), ==, 1);
+   g_assert_cmpint(seeqGetDistance(sq), ==, 0);
+   g_assert_cmpstr(sq->match.string, ==, "GTATGTACCACAGATGTCGATCGAC");
+   g_assert_cmpint(seeqMatch(sq, SQ_MATCH | SQ_BEST), ==, 1);
+   g_assert_cmpint(seeqGetStart(sq), ==, 2);
+   g_assert_cmpint(seeqGetEnd(sq), ==, 6);
+   g_assert_cmpint(seeqGetLine(sq), ==, 2);
+   g_assert_cmpint(seeqGetDistance(sq), ==, 1);
+   g_assert_cmpstr(sq->match.string, ==, "TCTATCATCCGTACTCTGATCTCAT");
+   seeqClose(sq);
+
+   sq = seeqOpen("testdata.txt", "CACAGAT", 1);
+   g_assert(sq != NULL);
+   g_assert_cmpint(seeqMatch(sq, SQ_NOMATCH), ==, 1);
+   g_assert_cmpint(seeqGetStart(sq), ==, 0);
+   g_assert_cmpint(seeqGetEnd(sq), ==, 25);
+   g_assert_cmpint(seeqGetLine(sq), ==, 2);
+   g_assert_cmpint(seeqGetDistance(sq), ==, -1);
+   g_assert_cmpstr(sq->match.string, ==, "TCTATCATCCGTACTCTGATCTCAT");
+   g_assert_cmpint(seeqMatch(sq, SQ_ANY), ==, 0);
+   seeqClose(sq);
+   
+   sq = seeqOpen("testdata.txt", "CACAGAT", 1);
+   g_assert(sq != NULL);
+   g_assert_cmpint(seeqMatch(sq, SQ_ANY | SQ_BEST), ==, 1);
+   g_assert_cmpint(seeqGetStart(sq), ==, 8);
+   g_assert_cmpint(seeqGetEnd(sq), ==, 15);
+   g_assert_cmpint(seeqGetLine(sq), ==, 1);
+   g_assert_cmpint(seeqGetDistance(sq), ==, 0);
+   g_assert_cmpstr(sq->match.string, ==, "GTATGTACCACAGATGTCGATCGAC");
+   g_assert_cmpint(seeqMatch(sq, SQ_ANY | SQ_BEST), ==, 1);
+   g_assert_cmpint(seeqGetStart(sq), ==, 0);
+   g_assert_cmpint(seeqGetEnd(sq), ==, 25);
+   g_assert_cmpint(seeqGetLine(sq), ==, 2);
+   g_assert_cmpint(seeqGetDistance(sq), ==, -1);
+   g_assert_cmpstr(sq->match.string, ==, "TCTATCATCCGTACTCTGATCTCAT");
+   g_assert_cmpint(seeqMatch(sq, SQ_ANY), ==, 0);
+   seeqClose(sq);
+}
+
+void
+test_seeqClose
+(void)
+{
+   seeq_t * sq = seeqOpen("testdata.txt", "ATGA", 2);
+   g_assert_cmpint(seeqClose(sq), ==, 0);
+   sq = seeqOpen(NULL, "ATG", 0);
+   g_assert_cmpint(seeqClose(sq), ==, 0);
+}
+
+void
 test_seeq
 (void)
 {
@@ -716,8 +878,12 @@ test_seeq
    redirect_stdout_to(OUTPUT_BUFFER);
    redirect_stderr_to(ERROR_BUFFER);
    int offset = 0;
-   int eoffset = 0;
-   
+
+   tty_value = 1;
+   seeq(pattern, input, args);
+   offset = strlen(OUTPUT_BUFFER);
+
+   tty_value = 0;
    seeq(pattern, input, args);
    g_assert_cmpint(strcmp(OUTPUT_BUFFER+offset, answer), ==, 0);
    offset = strlen(OUTPUT_BUFFER);
@@ -788,26 +954,22 @@ test_seeq
 
    // Test 10: incorrect pattern.
    g_assert(seeq("CACAG[AT", input, args) == EXIT_FAILURE);
-   g_assert_cmpstr(ERROR_BUFFER + eoffset, ==, "error: invalid pattern expression.\n");
-   eoffset = strlen(ERROR_BUFFER);
+   g_assert_cmpint(seeqerr, ==, 5);
 
    // Test 11: tau > pattern length.
    args.dist = 7;
    g_assert(seeq(pattern, input, args) == EXIT_FAILURE);
-   g_assert_cmpstr(ERROR_BUFFER + eoffset, ==, "error: expression must be longer than the maximum distance.\n");
-   eoffset = strlen(ERROR_BUFFER);
+   g_assert_cmpint(seeqerr, ==, 9);
 
    // Test 12: file does not exist.
    args.dist = 0;
    g_assert(seeq(pattern, "invented.txt", args) == EXIT_FAILURE);
-   g_assert_cmpint(strncmp(ERROR_BUFFER + eoffset, "error: could not open file:", 27), ==, 0);
-   eoffset = strlen(ERROR_BUFFER);
+   g_assert_cmpint(seeqerr, ==, 0);
 
    // Test 13: invalid distance.
    args.dist = -1;
    g_assert(seeq(pattern, input, args) == EXIT_FAILURE);
-   g_assert_cmpstr(ERROR_BUFFER + eoffset, ==, "error: invalid distance.\n");
-   eoffset = strlen(ERROR_BUFFER);
+   g_assert_cmpint(seeqerr, ==, 1);
 
    // ALLOC FAILURE TESTS.
    mute_stderr();
@@ -824,6 +986,8 @@ test_seeq
    for (int i = 0; i < 10000; i++) seeq(pattern, input, args);
    reset_alloc();
 
+   unredirect_sderr();
+
    return;
 }
 
@@ -839,15 +1003,18 @@ main(
    BACKUP_STDOUT = dup(STDOUT_FILENO);
 
    g_test_init(&argc, &argv, NULL);
-   g_test_add_func("/trie_new", test_trie_new);
-   g_test_add_func("/trie_insert", test_trie_insert);
-   g_test_add_func("/trie_search_getrow", test_trie_search_getrow);
-   g_test_add_func("/trie_reset", test_trie_reset);
-   g_test_add_func("/dfa_new", test_dfa_new);
-   g_test_add_func("/dfa_newvertex", test_dfa_newvertex);
-   g_test_add_func("/dfa_newstate", test_dfa_newstate);
-   g_test_add_func("/dfa_step", test_dfa_step);
-   g_test_add_func("/parse", test_parse);
+   g_test_add_func("/libseeq/core/trie_new", test_trie_new);
+   g_test_add_func("/libseeq/core/trie_insert", test_trie_insert);
+   g_test_add_func("/libseeq/core/trie_search_getrow", test_trie_search_getrow);
+   g_test_add_func("/libseeq/core/trie_reset", test_trie_reset);
+   g_test_add_func("/libseeq/core/dfa_new", test_dfa_new);
+   g_test_add_func("/libseeq/core/dfa_newvertex", test_dfa_newvertex);
+   g_test_add_func("/libseeq/core/dfa_newstate", test_dfa_newstate);
+   g_test_add_func("/libseeq/core/dfa_step", test_dfa_step);
+   g_test_add_func("/libseeq/core/parse", test_parse);
+   g_test_add_func("/libseeq/lib/seeqOpen", test_seeqOpen);
+   g_test_add_func("/libseeq/lib/seeqMatch", test_seeqMatch);
+   g_test_add_func("/libseeq/lib/seeqClose", test_seeqClose);
    g_test_add_func("/seeq", test_seeq);
    return g_test_run();
 }

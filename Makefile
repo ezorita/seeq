@@ -1,8 +1,8 @@
 SRC_DIR= src
 INC_DIR= src
 OBJECT_FILES= libseeq.o
-SOURCE_FILES= seeq.c
-HEADER_FILES=
+SOURCE_FILES= seeq.c seeq-main.c
+HEADER_FILES= seeq.h
 LIBSRC_FILES= libseeq.c
 LIBHDR_FILES= libseeq.h seeqcore.h
 
@@ -17,7 +17,9 @@ CFLAGS= -std=c99 -g -Wall -O3
 LDLIBS=
 #CC= gcc
 
-all: libseeq.so seeq
+all: seeq
+
+lib: libseeq.so
 
 libseeq.so: $(LIBSRCS) $(LIBHDRS)
 	mkdir -p lib

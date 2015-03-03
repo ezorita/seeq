@@ -4,7 +4,7 @@
 ** File authors:
 **  Eduard Valera Zorita (eduardvalera@gmail.com)
 **
-** Last modified: March 2, 2015
+** Last modified: March 3, 2015
 **
 ** License: 
 **  This program is free software: you can redistribute it and/or modify
@@ -27,7 +27,7 @@
 #ifndef _SEEQLIB_H_
 #define _SEEQLIB_H_
 
-#define VERSION "seeq-1.0"
+#define LIBSEEQ_VERSION "libseeq-1.0"
 #define COLOR_TERMINAL 1
 
 // Match options.

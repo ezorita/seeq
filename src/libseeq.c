@@ -4,7 +4,7 @@
 ** File authors:
 **  Eduard Valera Zorita (eduardvalera@gmail.com)
 **
-** Last modified: March 2, 2015
+** Last modified: March 3, 2015
 **
 ** License: 
 **  This program is free software: you can redistribute it and/or modify
@@ -87,7 +87,7 @@ seeqOpen
    }
 
    dfa_t * rdfa = dfa_new(wlen, mismatches, INITIAL_DFA_SIZE, INITIAL_TRIE_SIZE);
-   if (dfa == NULL) {
+   if (rdfa == NULL) {
       free(keys); free(rkeys); free(dfa);
       return NULL;
    }
@@ -154,9 +154,9 @@ seeqMatch
    seeqerr = 0;
 
    // Count replaces all other options.
-   if (options & SQ_COUNT) options = 0;
-   else if (options == 0) options = SQ_MATCH | SQ_NOMATCH;
    int best_match = options & SQ_BEST;
+   if (options & SQ_COUNT) options = 0;
+   else if ((options & 0x03) == 0) options = SQ_MATCH | SQ_NOMATCH;
 
    // Set structure to non-matched.
    sqfile->match.start = sqfile->match.end = sqfile->match.line = -1;
@@ -195,6 +195,7 @@ seeqMatch
                sqfile->match.start = 0;
                sqfile->match.end   = readsz;
                sqfile->match.dist  = -1;
+               count = 1;
                break;
             }
          } else {
@@ -212,7 +213,7 @@ seeqMatch
             // Tau is decreasing, track new streak.
             streak_dist   = next.match;
          } else if (streak_dist < next.match && streak_dist < sqfile->match.dist) {
-            count++;
+            if (sqfile->match.start == -1) count++;
             if (options & SQ_MATCH) {
                long j = 0;
                int rnode = 0;

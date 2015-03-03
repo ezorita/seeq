@@ -4,8 +4,8 @@ vpath %.h ../src
 #CC= gcc
 P= testset
 
-OBJECTS= libseeq.o
-COVERAGE= libseeq.gcno
+OBJECTS= libseeq.o seeq.o
+COVERAGE= libseeq.gcno seeq.gcno
 
 CFLAGS= -I../src `pkg-config --cflags glib-2.0` -g -Wall -std=gnu99 \
 	-fprofile-arcs -ftest-coverage -O0
