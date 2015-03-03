@@ -390,10 +390,17 @@ test_trie_search_getrow
       free(row);
    }
 
+   // Wrong path.
+   path[3] = 6;
+   uint retval, dfaval;
+   g_assert_cmpint(trie_search(trie,path, &retval, &dfaval), ==, -1);
+   g_assert_cmpint(seeqerr, ==, 6);
+
    // Getrow starting from a wrong leaf.
    g_assert(trie_getrow(trie, 15) == NULL);
+   g_assert_cmpint(seeqerr, ==, 7);
    g_assert(trie_getrow(trie, 4) == NULL);
-   
+   g_assert_cmpint(seeqerr, ==, 7);
 
    free(trie);
 
@@ -769,6 +776,7 @@ void
 test_seeqMatch
 (void)
 {
+   char * match;
    seeq_t * sq = seeqOpen("testdata.txt", "ATCG", 1);
    g_assert(sq != NULL);
    g_assert_cmpint(seeqMatch(sq, SQ_MATCH | SQ_FIRST), ==, 1);
@@ -776,13 +784,17 @@ test_seeqMatch
    g_assert_cmpint(seeqGetEnd(sq), ==, 5);
    g_assert_cmpint(seeqGetLine(sq), ==, 1);
    g_assert_cmpint(seeqGetDistance(sq), ==, 1);
-   g_assert_cmpstr(sq->match.string, ==, "GTATGTACCACAGATGTCGATCGAC");
+   match = seeqGetString(sq);
+   g_assert_cmpstr(match, ==, "GTATGTACCACAGATGTCGATCGAC");
+   free(match);
    g_assert_cmpint(seeqMatch(sq, SQ_MATCH | SQ_FIRST), ==, 1);
    g_assert_cmpint(seeqGetStart(sq), ==, 3);
    g_assert_cmpint(seeqGetEnd(sq), ==, 7);
    g_assert_cmpint(seeqGetLine(sq), ==, 2);
    g_assert_cmpint(seeqGetDistance(sq), ==, 1);
-   g_assert_cmpstr(sq->match.string, ==, "TCTATCATCCGTACTCTGATCTCAT");
+   match = seeqGetString(sq);
+   g_assert_cmpstr(match, ==, "TCTATCATCCGTACTCTGATCTCAT");
+   free(match);
    g_assert_cmpint(seeqMatch(sq, SQ_MATCH | SQ_FIRST), ==, 0);
    seeqClose(sq);
 
@@ -793,13 +805,17 @@ test_seeqMatch
    g_assert_cmpint(seeqGetEnd(sq), ==, 18);
    g_assert_cmpint(seeqGetLine(sq), ==, 1);
    g_assert_cmpint(seeqGetDistance(sq), ==, 0);
-   g_assert_cmpstr(sq->match.string, ==, "GTATGTACCACAGATGTCGATCGAC");
+   match = seeqGetString(sq);
+   g_assert_cmpstr(match, ==, "GTATGTACCACAGATGTCGATCGAC");
+   free(match);
    g_assert_cmpint(seeqMatch(sq, SQ_MATCH | SQ_BEST), ==, 1);
    g_assert_cmpint(seeqGetStart(sq), ==, 2);
    g_assert_cmpint(seeqGetEnd(sq), ==, 6);
    g_assert_cmpint(seeqGetLine(sq), ==, 2);
    g_assert_cmpint(seeqGetDistance(sq), ==, 1);
-   g_assert_cmpstr(sq->match.string, ==, "TCTATCATCCGTACTCTGATCTCAT");
+   match = seeqGetString(sq);
+   g_assert_cmpstr(match, ==, "TCTATCATCCGTACTCTGATCTCAT");
+   free(match);
    seeqClose(sq);
 
    sq = seeqOpen("testdata.txt", "CACAGAT", 1);
@@ -809,7 +825,9 @@ test_seeqMatch
    g_assert_cmpint(seeqGetEnd(sq), ==, 25);
    g_assert_cmpint(seeqGetLine(sq), ==, 2);
    g_assert_cmpint(seeqGetDistance(sq), ==, -1);
-   g_assert_cmpstr(sq->match.string, ==, "TCTATCATCCGTACTCTGATCTCAT");
+   match = seeqGetString(sq);
+   g_assert_cmpstr(match, ==, "TCTATCATCCGTACTCTGATCTCAT");
+   free(match);
    g_assert_cmpint(seeqMatch(sq, SQ_ANY), ==, 0);
    seeqClose(sq);
    
@@ -820,13 +838,17 @@ test_seeqMatch
    g_assert_cmpint(seeqGetEnd(sq), ==, 15);
    g_assert_cmpint(seeqGetLine(sq), ==, 1);
    g_assert_cmpint(seeqGetDistance(sq), ==, 0);
-   g_assert_cmpstr(sq->match.string, ==, "GTATGTACCACAGATGTCGATCGAC");
+   match = seeqGetString(sq);
+   g_assert_cmpstr(match, ==, "GTATGTACCACAGATGTCGATCGAC");
+   free(match);
    g_assert_cmpint(seeqMatch(sq, SQ_ANY | SQ_BEST), ==, 1);
    g_assert_cmpint(seeqGetStart(sq), ==, 0);
    g_assert_cmpint(seeqGetEnd(sq), ==, 25);
    g_assert_cmpint(seeqGetLine(sq), ==, 2);
    g_assert_cmpint(seeqGetDistance(sq), ==, -1);
-   g_assert_cmpstr(sq->match.string, ==, "TCTATCATCCGTACTCTGATCTCAT");
+   match = seeqGetString(sq);
+   g_assert_cmpstr(match, ==, "TCTATCATCCGTACTCTGATCTCAT");
+   free(match);
    g_assert_cmpint(seeqMatch(sq, SQ_ANY), ==, 0);
    seeqClose(sq);
 }
@@ -880,8 +902,10 @@ test_seeq
    int offset = 0;
 
    tty_value = 1;
+   args.verbose = 1;
    seeq(pattern, input, args);
    offset = strlen(OUTPUT_BUFFER);
+   args.verbose = 0;
 
    tty_value = 0;
    seeq(pattern, input, args);

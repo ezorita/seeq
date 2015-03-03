@@ -554,8 +554,7 @@ dfa_step
       // If exists, just link with the existing state.
       dfa->states[dfa_state].next[base].state = dfalink;
    } else if (exists == 0) {
-      if (dfa_newstate(dfap, code, prev, dfa_state, base) == -1)
-         return -1;
+      if (dfa_newstate(dfap, code, prev, dfa_state, base) == -1) return -1;
       dfa = *dfap;
    } else return -1;
 
