@@ -156,9 +156,11 @@ seeqMatch
    // Count replaces all other options.
    if (options & SQ_COUNT) options = 0;
    else if (options == 0) options = SQ_MATCH | SQ_NOMATCH;
+   int best_match = options & SQ_BEST;
 
    // Set structure to non-matched.
    sqfile->match.start = sqfile->match.end = sqfile->match.line = -1;
+   sqfile->match.dist  = sqfile->tau + 1;
 
    // Aux vars.
    long startline = sqfile->line;
@@ -209,7 +211,7 @@ seeqMatch
          if (streak_dist > next.match) {
             // Tau is decreasing, track new streak.
             streak_dist   = next.match;
-         } else if (streak_dist < next.match) {
+         } else if (streak_dist < next.match && streak_dist < sqfile->match.dist) {
             count++;
             if (options & SQ_MATCH) {
                long j = 0;
@@ -233,7 +235,7 @@ seeqMatch
                sqfile->match.line  = sqfile->line;
                sqfile->match.dist  = streak_dist;
             }
-            break;
+            if (!best_match) break;
          }
       }
       if (sqfile->match.start >= 0) break;

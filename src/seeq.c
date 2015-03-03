@@ -47,7 +47,8 @@ char *USAGE = "Usage:"
 "    -s --print-dist      prints the Levenshtein distance wrt the pattern\n"
 "    -f --compact         prints output in compact format (line:pos:dist)\n"
 "    -e --end             print only the end of the line, starting after the match\n"
-"    -b --prefix          print only the prefix, ending before the match\n";
+"    -r --prefix          print only the prefix, ending before the match\n"
+"    -b --best            scan the whole line to find the best match (default: first match only)\n";
 
 struct seeqarg_t {
    int showdist;
@@ -62,6 +63,7 @@ struct seeqarg_t {
    int endline;
    int prefix;
    int invert;
+   int best;
 };
 
 
@@ -146,6 +148,7 @@ seeq
       int match_options = 0;
       if (args.invert) match_options = SQ_NOMATCH;
       else match_options = SQ_MATCH;
+      if (args.best) match_options |= SQ_BEST;
 
       int retval;
       while ((retval = seeqMatch(sq, match_options)) > 0) {
@@ -222,6 +225,7 @@ main
    int verbose_flag   = -1;
    int endline_flag   = -1;
    int prefix_flag    = -1;
+   int best_flag      = -1;
 
    // Unset options (value 'UNSET').
    input = NULL;
@@ -248,12 +252,13 @@ main
          {"version",       no_argument, 0, 'v'},
          {"help",          no_argument, 0, 'h'},
          {"end",           no_argument, 0, 'e'},         
-         {"prefix",        no_argument, 0, 'b'},                  
+         {"prefix",        no_argument, 0, 'r'},                  
+         {"best",          no_argument, 0, 'b'},                  
          {"distance",required_argument, 0, 'd'},
          {0, 0, 0, 0}
       };
 
-      c = getopt_long(argc, argv, "pmnislczfvhebd:",
+      c = getopt_long(argc, argv, "pmnislczfvherbd:",
             long_options, &option_index);
  
       /* Detect the end of the options. */
@@ -295,15 +300,25 @@ main
          }
          break;
 
-
-
-      case 'b':
+      case 'r':
          if (prefix_flag < 0) {
             prefix_flag = 1;
          }
          else {
             say_version();
             fprintf(stderr, "error: prefix option set more than once.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         break;
+
+      case 'b':
+         if (best_flag < 0) {
+            best_flag = 1;
+         }
+         else {
+            say_version();
+            fprintf(stderr, "error: 'best' option set more than once.\n");
             say_help();
             return EXIT_FAILURE;
          }
@@ -456,6 +471,7 @@ main
    if (verbose_flag == -1) verbose_flag = 0;
    if (endline_flag == -1) endline_flag = 0;
    if (prefix_flag == -1) prefix_flag = 0;
+   if (best_flag == -1) best_flag = 0;
    if (printline_flag == -1) printline_flag = (!matchonly_flag && !endline_flag && !prefix_flag);
 
    if (!showdist_flag && !showpos_flag && !printline_flag && !matchonly_flag && !showline_flag && !count_flag && !compact_flag && !prefix_flag && !endline_flag) {
@@ -481,7 +497,8 @@ main
    args.verbose   = verbose_flag;
    args.endline   = endline_flag * maskinv;
    args.prefix    = prefix_flag * maskinv;
-   args.invert    =invert_flag * maskcnt;
+   args.invert    = invert_flag * maskcnt;
+   args.best      = best_flag;
 
    return seeq(expr, input, args);
 }
