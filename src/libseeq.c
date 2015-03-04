@@ -27,7 +27,7 @@
 
 int seeqerr = 0;
 
-char * seeq_strerror[10] = {   "Check errno",
+char * seeq_strerror[11] = {   "Check errno",
                                "Illegal matching distance value",
                                "Incorrect pattern (double opening brackets)",
                                "Incorrect pattern (double closing brackets)",
@@ -36,7 +36,8 @@ char * seeq_strerror[10] = {   "Check errno",
                                "Illegal path value passed to 'trie_search'",
                                "Illegal nodeid passed to 'trie_getrow' (specified node is not a leaf).\n",
                                "Illegal path value passed to 'trie_insert'",
-                               "Pattern length must be larger than matching distance" };
+                               "Pattern length must be larger than matching distance",
+                               "Passed seeq_t struct does not contain a valid file pointer"};
 
 seeq_t *
 seeqOpen
@@ -135,7 +136,7 @@ seeqClose
    // Set error to 0.
    seeqerr = 0;
    // Close file.
-   if (sqfile->fdi != stdin) if (fclose(sqfile->fdi) != 0) return -1;
+   if (sqfile->fdi != stdin && sqfile->fdi != NULL) if (fclose(sqfile->fdi) != 0) return -1;
    // Free string if allocated.
    if (sqfile->match.string != NULL) free(sqfile->match.string);
    // Free structure.
@@ -153,10 +154,10 @@ seeqMatch
    // Set error to 0.
    seeqerr = 0;
 
-   // Count replaces all other options.
-   int best_match = options & SQ_BEST;
-   if (options & SQ_COUNT) options = 0;
-   else if ((options & 0x03) == 0) options = SQ_MATCH | SQ_NOMATCH;
+   if (sqfile->fdi == NULL) {
+      seeqerr = 10;
+      return -1;
+   }
 
    // Set structure to non-matched.
    sqfile->match.start = sqfile->match.end = sqfile->match.line = -1;
@@ -169,83 +170,120 @@ seeqMatch
    long count = 0;
 
    while ((readsz = getline(&(sqfile->match.string), &bufsz, sqfile->fdi)) > 0) {
-      char * data = sqfile->match.string;
+      sqfile->line++;
       // Remove newline.
+      char * data = sqfile->match.string;
       if (data[readsz-1] == '\n') data[readsz---1] = 0;
 
-      // Reset search variables
-      int streak_dist = sqfile->tau+1;
-      int current_node = 0;
-      sqfile->line++;
+      // Call String Match
+      count += seeqStringMatch(data, sqfile, options);
 
-      // DFA state.
-      for (unsigned long i = 0; i <= readsz; i++) {
-         // Update DFA.
-         int cin = (int)translate[(int)data[i]];
-         edge_t next;
-         if(cin < NBASES) {
-            next = ((dfa_t *) sqfile->dfa)->states[current_node].next[cin];
-            if (next.match == DFA_COMPUTE)
-               if (dfa_step(current_node, cin, sqfile->wlen, sqfile->tau, (dfa_t **) &(sqfile->dfa), sqfile->keys, &next)) return -1;
-            current_node = next.state;
-         } else if (cin == 5) {
-            next.match = sqfile->tau+1;
-            if ((options & SQ_NOMATCH) && streak_dist >= next.match) {
-               sqfile->match.line  = sqfile->line;
-               sqfile->match.start = 0;
-               sqfile->match.end   = readsz;
-               sqfile->match.dist  = -1;
-               count = 1;
-               break;
-            }
-         } else {
-            // Now lines containing illegal characters will be ommited.
-            break;
-            // Consider changing this by:
-            //   streak_dist = tau + 1;
-            //   current_node = 0;
-            //   continue;
-            // to report these lines as non-matches.
-         }
-
-         // Update streak.
-         if (streak_dist > next.match) {
-            // Tau is decreasing, track new streak.
-            streak_dist   = next.match;
-         } else if (streak_dist < next.match && streak_dist < sqfile->match.dist) {
-            if (sqfile->match.start == -1) count++;
-            if (options & SQ_MATCH) {
-               long j = 0;
-               int rnode = 0;
-               int d = sqfile->tau + 1;
-               // Find match start with RDFA.
-               do {
-                  int c = (int)translate[(int)data[i-++j]];
-                  edge_t next = ((dfa_t *) sqfile->rdfa)->states[rnode].next[c];
-                  if (next.match == DFA_COMPUTE)
-                     if (dfa_step(rnode, c, sqfile->wlen, sqfile->tau, (dfa_t **) &(sqfile->rdfa), sqfile->rkeys, &next)) return -1;
-                  rnode = next.state;
-                  d     = next.match;
-               } while (d > streak_dist && j < i);
-
-               // Compute match length.
-               j = i - j;
-               // Save match.
-               sqfile->match.start = j;
-               sqfile->match.end   = i;
-               sqfile->match.line  = sqfile->line;
-               sqfile->match.dist  = streak_dist;
-            }
-            if (!best_match) break;
-         }
-      }
-      if (sqfile->match.start >= 0) break;
+      // Break when match is found.
+      if (count > 0 && !(options & SQ_COUNTMATCH) && !(options & SQ_COUNTLINES)) break;
    }
 
    // If nothing was read, return -1.
    if (sqfile->line == startline) return 0;
    else return count;
 }
+
+long
+seeqStringMatch
+(
+ char      * data,
+ seeq_t    * sqstruct,
+ int         options
+)
+{
+   // Set error to 0.
+   seeqerr = 0;
+
+   // Count replaces all other options.
+   int countall   = options & SQ_COUNTMATCH;
+   int best_match = options & SQ_BEST;
+   if (options & (SQ_COUNTLINES|SQ_COUNTMATCH)) options = 0;
+   else if ((options & 0x03) == 0) options = SQ_MATCH | SQ_NOMATCH;
+
+   // Set structure to non-matched.
+   sqstruct->match.start = sqstruct->match.end = sqstruct->match.line = -1;
+   sqstruct->match.dist  = sqstruct->tau + 1;
+
+   // Reset search variables
+   int streak_dist = sqstruct->tau+1;
+   int current_node = 0;
+   long count = 0;
+   int match = 0;
+   
+   // DFA state.
+   for (unsigned long i = 0; i <= strlen(data); i++) {
+      // Update DFA.
+      int cin = (int)translate[(int)data[i]];
+      edge_t next;
+      if(cin < NBASES) {
+         next = ((dfa_t *) sqstruct->dfa)->states[current_node].next[cin];
+         if (next.match == DFA_COMPUTE)
+            if (dfa_step(current_node, cin, sqstruct->wlen, sqstruct->tau, (dfa_t **) &(sqstruct->dfa), sqstruct->keys, &next)) return -1;
+         current_node = next.state;
+      } else if (cin == 5) {
+         next.match = sqstruct->tau+1;
+         if ((options & SQ_NOMATCH) && sqstruct->match.start == -1 && streak_dist >= next.match) {
+            sqstruct->match.line  = sqstruct->line;
+            sqstruct->match.start = 0;
+            sqstruct->match.end   = strlen(data);
+            sqstruct->match.dist  = -1;
+            count = 1;
+            break;
+         }
+      } else {
+         // Now lines containing illegal characters will be ommited.
+         break;
+         // Consider changing this by:
+         //   streak_dist = tau + 1;
+         //   current_node = 0;
+         //   continue;
+         // to report these lines as non-matches.
+         // Alternatively, translate could redirect illegal characters to 'N'.
+      }
+
+      // Update streak.
+      if (streak_dist >= next.match) {
+         match = 0;
+      } else if (!match && streak_dist < next.match && streak_dist < sqstruct->match.dist) {
+         match = 1;
+         if (options & SQ_MATCH) {
+            long j = 0;
+            int rnode = 0;
+            int d = sqstruct->tau + 1;
+            // Find match start with RDFA.
+            do {
+               int c = (int)translate[(int)data[i-++j]];
+               edge_t next = ((dfa_t *) sqstruct->rdfa)->states[rnode].next[c];
+               if (next.match == DFA_COMPUTE)
+                  if (dfa_step(rnode, c, sqstruct->wlen, sqstruct->tau, (dfa_t **) &(sqstruct->rdfa), sqstruct->rkeys, &next)) return -1;
+               rnode = next.state;
+               d     = next.match;
+            } while (d > streak_dist && j < i);
+
+            // Compute match length.
+            j = i - j;
+            // Save match.
+            sqstruct->match.start = j;
+            sqstruct->match.end   = i;
+            sqstruct->match.line  = sqstruct->line;
+            sqstruct->match.dist  = streak_dist;
+         } else if (options & SQ_NOMATCH) break;
+
+         if (count == 0 || countall) count++;
+         if (!best_match && !countall) break;
+      }
+
+      // Track distance.
+      streak_dist   = next.match;
+   }
+
+   return count;
+}
+
 
 long
 seeqGetLine

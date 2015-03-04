@@ -31,12 +31,13 @@
 #define COLOR_TERMINAL 1
 
 // Match options.
-#define SQ_ANY     0x00
-#define SQ_MATCH   0x01
-#define SQ_NOMATCH 0x02
-#define SQ_COUNT   0x04
-#define SQ_BEST    0x10
-#define SQ_FIRST   0x00
+#define SQ_ANY        0x00
+#define SQ_MATCH      0x01
+#define SQ_NOMATCH    0x02
+#define SQ_COUNTLINES 0x04
+#define SQ_COUNTMATCH 0x08
+#define SQ_BEST       0x10
+#define SQ_FIRST      0x00
 
 #include <stdio.h>
 
@@ -69,6 +70,7 @@ struct seeq_t {
 seeq_t    * seeqOpen        (char *, char *, int);
 int         seeqClose       (seeq_t *);
 long        seeqMatch       (seeq_t *, int);
+long        seeqStringMatch (char *, seeq_t *, int);
 long        seeqGetLine     (seeq_t *);
 int         seeqGetDistance (seeq_t *);
 int         seeqGetStart    (seeq_t *);

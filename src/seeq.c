@@ -89,9 +89,9 @@ seeq
       fprintf(stderr, "\nmatching...\n");
       clk = clock();
    }
-   
+
    if (args.count) {
-      fprintf(stdout, "%ld\n", seeqMatch(sq, SQ_COUNT));
+      fprintf(stdout, "%ld\n", seeqMatch(sq, SQ_COUNTLINES));
    } else {
       int match_options = 0;
       if (args.invert) match_options = SQ_NOMATCH;
