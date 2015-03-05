@@ -851,6 +851,37 @@ test_seeqMatch
    free(match);
    g_assert_cmpint(seeqMatch(sq, SQ_ANY), ==, 0);
    seeqClose(sq);
+
+   sq = seeqOpen("testdata.txt", "ATC", 0);
+   g_assert(sq != NULL);
+   g_assert_cmpint(seeqMatch(sq, SQ_COUNTLINES), ==, 2);
+   seeqClose(sq);
+
+   sq = seeqOpen("testdata.txt", "ATC", 0);
+   g_assert(sq != NULL);
+   g_assert_cmpint(seeqMatch(sq, SQ_COUNTMATCH), ==, 4);
+   seeqClose(sq);
+
+   // Force error
+   sq = seeqOpen(NULL, "GATC", 1);
+   sq->fdi = NULL;
+   g_assert_cmpint(seeqMatch(sq, 0), ==, -1);
+   g_assert_cmpint(seeqerr, ==, 10);
+   seeqClose(sq);
+
+   sq = seeqOpen(NULL, "GATC", 1);
+   g_assert(sq != NULL);
+   // String first match.
+   g_assert_cmpint(seeqStringMatch("TGACTGATGACGTAGTCTACGATCGATCAGTCA", sq, SQ_MATCH | SQ_FIRST), == , 1);
+   g_assert_cmpint(seeqGetStart(sq), ==, 1);
+   g_assert_cmpint(seeqGetEnd(sq), ==, 4);
+   g_assert_cmpint(seeqGetDistance(sq), ==, 1);
+   
+   g_assert_cmpint(seeqStringMatch("TGACTGATGACGTAGTCTACGATCGATCAGTCA", sq, SQ_MATCH | SQ_BEST), == , 1);
+   g_assert_cmpint(seeqGetStart(sq), ==, 20);
+   g_assert_cmpint(seeqGetEnd(sq), ==, 24);
+   g_assert_cmpint(seeqGetDistance(sq), ==, 0);
+   seeqClose(sq);
 }
 
 void
