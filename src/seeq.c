@@ -98,7 +98,7 @@ seeq
    }
 
    if (args.count) {
-      int retval = seeqFileMatch(sqfile, sq, SQ_COUNTLINES);
+      long retval = seeqFileMatch(sqfile, sq, SQ_COUNTLINES);
       if (retval < 0) fprintf(stderr, "error in 'seeqFileMatch()': %s\n", seeqPrintError());
       else fprintf(stdout, "%ld\n", retval);
    } else {
