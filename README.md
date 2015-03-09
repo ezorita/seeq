@@ -49,7 +49,7 @@ and change the directory to the cloned repository:
 
 Now you are good to follow the instructions below.
 
-### III.I Installing seeq ###
+### III.1 Installing seeq ###
 
 To compile and build seeq you, use the make tool (Mac users require
 'xcode', available at the Mac Appstore):
@@ -61,7 +61,7 @@ symbolic link to execute seeq from any directory:
 
  > sudo ln -s ./seeq /usr/bin/seeq
 
-### III.II Building seeq library (libseeq) for C ###
+### III.2 Building seeq library (libseeq) for C ###
 
 To compile and create the C library into shared object file (.so)
 use the following make command:
@@ -71,7 +71,7 @@ use the following make command:
 the **libseeq.so** file and the required header file **libseeq.h** will
 be created in the **lib** folder.
 
-### III.III Installing seeq module for Python ###
+### III.3 Installing seeq module for Python ###
 
 Seeq can be installed as a Python module as well. The C interface for
 libseeq will be compiled and installed directly as a Python module:
