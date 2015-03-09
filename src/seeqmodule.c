@@ -6,7 +6,8 @@
 
 /** SeeqMatch class **/
 
-static PyTypeObject SeeqMatch_Type;
+// Declaration of object Type (will be defined later).
+static PyTypeObject SeeqMatchType;
 
 typedef struct {
    PyObject_HEAD
@@ -25,8 +26,8 @@ SeeqMatch_dealloc
  SeeqMatch * self
 )
 {
-   Py_XDECREF(matches);
-   Py_XDECREF(stringObj);
+   Py_XDECREF(self->matches);
+   Py_XDECREF(self->stringObj);
    self->ob_type->tp_free((PyObject*)self);
 }
 
@@ -40,23 +41,16 @@ SeeqMatch_new
 // This is a C function only, it will not be passed as a class method.
 // So SeeqMatch instances will be only created in C from 'SeeqObject.match'.
 {
-   if (string == NULL) {
+   if (string == NULL || strlen(string) < 1) {
       Py_DECREF(stringObj);
       return NULL;
    }
-   int slen = strlen(string);
-   // dist is set to -1 when the match was not found.
-   if (dist < 0) {
-      Py_DECREF(stringObj);
-      Py_INCREF(Py_None);
-      return Py_None;
-   }
-   
+
    SeeqMatch * self;
    // TYPE* PyObject_New(TYPE, PyTypeObject *type)
    // Allocate a new Python object using the C structure type TYPE and the Python type object type.
    // [...] the object’s reference count will be one. (So no need to Py_INCREF(self))
-   self = PyObject_New(SeeqMatch, &SeeqMatch_Type);
+   self = PyObject_New(SeeqMatch, &SeeqMatchType);
    if (self == NULL) {
       Py_DECREF(stringObj);
       return NULL;
@@ -89,25 +83,30 @@ SeeqMatch_add
 )
 // This functions add a new match to the SeeqMatch list of matches.
 {
+   int slen = strlen(self->string);
+
    if (start < 0 || start > slen || end < 0 || end > slen)
       return 0;
-   if (distance < 0)
+   if (dist < 0)
       return 1;
    
    // Create tuple and insert it into the matches list.
    PyObject * tuple = Py_BuildValue("(iii)", start, end, dist);
-   if (tuple == NULL) return 0;
+   if (tuple == NULL) {
+      return 0;
+   }
 
    // Append the tuple to the SeeqMatch match list.
    int retval = PyList_SetItem(self->matches, pos, tuple);
-   return (retval ? 1 : 0);
+   if (retval == -1) return 0;
+   return 1;
 }   
 
 static PyObject *
 SeeqMatch_tokenize
 (
- SeeqObject * self,
- PyObject   * args
+ SeeqMatch * self,
+ PyObject  * args
 )
 // This function tokenizes a string using the compiled pattern.
 // The non-matching fragments between matches will be returned
@@ -120,10 +119,11 @@ SeeqMatch_tokenize
       return Py_None;
    }
 
-   int     ntokens = 2*matches + 1;
-   char ** tokens  = malloc(ntokens * sizeof(char *));
+   int     maxtokens = 2*nmatches + 1;
+   char ** tokens  = malloc(maxtokens * sizeof(char *));
    if (tokens ==  NULL) return NULL;
 
+   int ntokens = 0;
    int tstart = 0;
    for (int i = 0; i < nmatches; i++) {
       PyObject * tuple = PyList_GetItem(self->matches, i);
@@ -198,10 +198,8 @@ static PyMemberDef SeeqMatch_members[] = {
 };
 
 static PyMethodDef SeeqMatch_methods[] = {
-    {"tokenize", SeeqMatch_tokenize, METH_VARARGS,
-     "Tokenizes the matched string"
-    },
-    {NULL}  /* Sentinel */
+   {"tokenize", (PyCFunction)SeeqMatch_tokenize, METH_VARARGS, "Tokenizes the matched string"},
+   {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 
 static PyTypeObject SeeqMatchType = {
@@ -248,7 +246,8 @@ static PyTypeObject SeeqMatchType = {
 
 /** SeeqObject Class **/
 
-static PyTypeObject SeeqObject_Type;
+// Declaration of object type (will be defined later).
+static PyTypeObject SeeqObjectType;
 
 typedef struct {
    PyObject_HEAD
@@ -268,6 +267,7 @@ SeeqObject_dealloc
 {
    Py_XDECREF(self->mismatches);
    Py_XDECREF(self->pattern);
+   seeqFree(self->sq);
    self->ob_type->tp_free((PyObject*)self);
 }
 
@@ -276,7 +276,7 @@ static SeeqObject *
 SeeqObject_new
 (
  int      mismatches,
- char   * pattern,
+ const char   * pattern,
  seeq_t * sq
 )
 // This is a C function only, it will not be passed as a class method.
@@ -292,9 +292,9 @@ SeeqObject_new
    // TYPE* PyObject_New(TYPE, PyTypeObject *type)
    // Allocate a new Python object using the C structure type TYPE and the Python type object type.
    // [...] the object’s reference count will be one. (So no need to Py_INCREF(self))
-   self = PyObject_New(SeeqObject, &SeeqObject_Type);
+   self = PyObject_New(SeeqObject, &SeeqObjectType);
    if (self == NULL) return NULL;
-   
+
    // Set attributes.
    // Pattern
    self->pattern = Py_BuildValue("s", pattern);
@@ -311,7 +311,7 @@ SeeqObject_new
    }
 
    // seeq_t structure.
-   self->seeqt = sq;
+   self->sq = sq;
 
    return self;
 }
@@ -327,12 +327,18 @@ SeeqObject_seeqmatch
 // This function will call the string matching function and return a
 // SeeqMatch object instance or Py_None if nothing was found.
 {
+   PyObject   * stringObj;      
    const char * string;
 
-   if (!PyArg_ParseTuple("s:match", &string))
+   if (!PyArg_ParseTuple(args,"O:match", &stringObj))
       return NULL;
-   
+   if (!PyString_Check(stringObj))
+      return NULL;
+
+   string = PyString_AsString(stringObj);
+
    int rval = seeqStringMatch(string, self->sq, MATCH_OPTIONS);
+
    // Error.
    if (rval < 0) {
       // TODO: Throw exception.
@@ -345,20 +351,21 @@ SeeqObject_seeqmatch
    }
    // Pattern found (return SeeqMatch instance).
    else {
-      PyObject   * stringObj;      
-      if (!PyArg_ParseTuple("O:match", &stringObj))
-         return NULL;
+      // Will keep a copy of the string PyObject.
       Py_INCREF(stringObj);
-
       // Create new SeeqMatch instance. (Steals stringObj reference)
-      SeeqMatch * match = SeeqMatch_new(string, stringObj, 1);
-      if (match == NULL)
+      SeeqMatch * match = SeeqMatch_new(stringObj, string, 1);
+      if (match == NULL) {
          return NULL;
+      }
+      
+      seeq_t * sq = self->sq;
       // Add the match to the match list.
-      if (!SeeqMatch_add(match, 0, sq->match.start, sq->match.end, sq->match.distance)) {
+      if (!SeeqMatch_add(match, 0, sq->match.start, sq->match.end, sq->match.dist)) {
          Py_DECREF(match);
          return NULL;
       }
+
       // Return the SeeqMatch instance.
       // We are giving our reference, so no need to increase the reference count.
       // Py_BuildValue formats:
@@ -403,25 +410,31 @@ SeeqObject_findAll
 // SeeqMatch object instance containing references to all the non-
 // overlapping matches of the sequence, or Py_None if nothing was found.
 {
+
+   PyObject   * stringObj;      
    const char * string;
 
-   if (!PyArg_ParseTuple("s:match", &string))
+   if (!PyArg_ParseTuple(args,"O:match", &stringObj))
       return NULL;
- 
+   if (!PyString_Check(stringObj))
+      return NULL;
+
+   string = PyString_AsString(stringObj);
+
    // Match buffer
-   int maxmatches = strlen(string) / self->sq->wlen + 1;
-   int startvals  = malloc(maxmatches * sizeof(int));
-   int endvals    = malloc(maxmatches * sizeof(int));
-   int distvals   = malloc(maxmatches * sizeof(int));
-   int nmatches   = 0;
+   seeq_t * sq = self->sq;
+   int   maxmatches = strlen(string) / sq->wlen + 1;
+   int * startvals  = malloc(maxmatches * sizeof(int));
+   int * endvals    = malloc(maxmatches * sizeof(int));
+   int * distvals   = malloc(maxmatches * sizeof(int));
+   int   nmatches   = 0;
 
    int offset = 0, rval;
-   seeq_t * sq = self->sq;
    while ((rval = seeqStringMatch(string + offset, sq, SQ_MATCH | SQ_FIRST)) > 0) {
-      startvals[nmatches] = sq->match.start;
-      endvals  [nmatches] = sq->match.end;
+      startvals[nmatches] = offset + sq->match.start;
+      endvals  [nmatches] = offset + sq->match.end;
       distvals [nmatches] = sq->match.dist;
-      offset = sq->match.end;
+      offset += sq->match.end;
       nmatches++;
    }
    
@@ -432,13 +445,11 @@ SeeqObject_findAll
    }
 
    if (nmatches > 0) {
-      PyObject   * stringObj;
-      if (!PyArg_ParseTuple("O:match", &stringObj))
-         return NULL;
+      // Will keep a copy of the string PyObject.
       Py_INCREF(stringObj);
 
       // Create new SeeqMatch instance. (Steals stringObj reference)
-      SeeqMatch * match = SeeqMatch_new(string, stringObj, nmatches);
+      SeeqMatch * match = SeeqMatch_new(stringObj, string, nmatches);
       if (match == NULL) {
          // Free buffers and return NULL.
          free(startvals); free(endvals); free(distvals);
@@ -475,20 +486,20 @@ static PyMemberDef SeeqObject_members[] = {
 };
 
 static PyMethodDef SeeqObject_methods[] = {
-    {"find", SeeqObject_find, METH_VARARGS,
-     "Returns the first match found in the string or None if no matches are found"
-    },
-    {"findBest", SeeqObject_findBest, METH_VARARGS,
-     "Returns the best match found in the string or None if no matches are found"
-    },
-    {"findAll", SeeqObject_findAll, METH_VARARGS,
-     "Returns all the matches found in the string or None if no matches are found"
-    },
-    {NULL}  /* Sentinel */
+   {"find", (PyCFunction)SeeqObject_find, METH_VARARGS,
+    "Returns the first match found in the string or None if no matches are found"
+   },
+   {"findBest", (PyCFunction)SeeqObject_findBest, METH_VARARGS,
+    "Returns the best match found in the string or None if no matches are found"
+   },
+   {"findAll", (PyCFunction)SeeqObject_findAll, METH_VARARGS,
+    "Returns all the matches found in the string or None if no matches are found"
+   },
+   {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 
 static PyTypeObject SeeqObjectType = {
-    PyObject_HEAD_INIT(NULL)
+   PyObject_HEAD_INIT(NULL)
     0,                         /*ob_size*/
     "seeq.SeeqObject",         /*tp_name*/
     sizeof(SeeqObject),        /*tp_basicsize*/
@@ -539,16 +550,21 @@ seeq_compile
  PyObject * args
 )
 {
-   const char * string;
+   const char * pattern;
    int mismatches;
-   if (!PyArg_ParseTuple("si:match", &string, &mismatches))
+   if (!PyArg_ParseTuple(args,"si:match", &pattern, &mismatches))
       return NULL;
-   
-   if (string == NULL) return NULL;
+
+   if (pattern == NULL) return NULL;
    if (mismatches < 0) return NULL;
-   
-   
-   
+
+   // Generate seeq_t object.
+   seeq_t * sq = seeqNew(pattern, mismatches);
+   if (sq == NULL) return NULL;
+
+   PyObject * newObj = (PyObject *) SeeqObject_new(mismatches, pattern, sq);
+
+   return newObj;
 }
 
 
@@ -561,5 +577,18 @@ PyMODINIT_FUNC
 initseeq
 (void)
 {
-   (void) Py_InitModule("seeq", SeeqMethods);
+   SeeqObjectType.tp_new = PyType_GenericNew;
+   if (PyType_Ready(&SeeqObjectType) < 0)
+      return;
+   SeeqMatchType.tp_new = PyType_GenericNew;
+   if (PyType_Ready(&SeeqMatchType) < 0)
+      return; 
+
+   PyObject* m;
+   m = Py_InitModule3("seeq", SeeqMethods, "seeq library for Python.");
+
+    Py_INCREF(&SeeqObjectType);
+    PyModule_AddObject(m, "SeeqObject", (PyObject *)&SeeqObjectType);
+    Py_INCREF(&SeeqMatchType);
+    PyModule_AddObject(m, "SeeqMatch", (PyObject *)&SeeqMatchType);
 }

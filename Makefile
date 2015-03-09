@@ -34,3 +34,4 @@ $(SRC_DIR)/%.o: $(SRC_DIR)/%.c $(SRC_DIR)/%.h
 clean:
 	rm -f $(OBJECTS) seeq
 	rm -rf lib
+	rm -rf build

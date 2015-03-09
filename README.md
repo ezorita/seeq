@@ -23,33 +23,65 @@ extraction, sequence trimming, etc.
 II. Source file list
 --------------------
 
-* **main-seeq.c**        Seeq main file (parameter parsing).
-* **seeq.c**             Main seeq algorithm.
-* **seeq.h**             Main seeq algorithm header file.
+* src/**main-seeq.c**    Seeq main file (parameter parsing).
+* src/**seeq.c**         Main seeq algorithm (match formatting).
+* src/**seeq.h**         Main seeq algorithm header file.
+* src/**libseeq.c**      libseeq source code.
+* src/**libseeq.h**      libseeq public header.
+* src/**seeqcore.h**     libseeq private header.
+* src/**seeqmodule.c**   libseeq C-Python interface.
 * **Makefile**           Make instruction file.
+* **setup.py**           Distutils instruction file.
 
 
 III. Compilation and installation
 ---------------------------------
 
-To install seeq you first need to clone or manually download the 
-repository content from [github](http://github.com/ezorita/seeq):
+To install seeq, libseeq for C or the seeq module for Python, you
+first need to clone or manually download the repository content 
+from [github](http://github.com/ezorita/seeq):
 
  > git clone git://github.com/ezorita/seeq.git
 
-the files should be downloaded in a folder named 'seeq'. To compile
-just change the directory to 'seeq' and run make (Mac users require
-'xcode', available at the Mac Appstore):
+and change the directory to the cloned repository:
 
  > cd seeq
 
- > make
+Now you are good to follow the instructions below.
+
+### III.I Installing seeq ###
+
+To compile and build seeq you, use the make tool (Mac users require
+'xcode', available at the Mac Appstore):
+
+ > make 
 
 a binary file 'seeq' will be created. You can optionally make a
 symbolic link to execute seeq from any directory:
 
  > sudo ln -s ./seeq /usr/bin/seeq
 
+### III.II Building seeq library (libseeq) for C ###
+
+To compile and create the C library into shared object file (.so)
+use the following make command:
+
+ > make lib
+
+the **libseeq.so** file and the required header file **libseeq.h** will
+be created in the **lib** folder.
+
+### III.III Installing seeq module for Python ###
+
+Seeq can be installed as a Python module as well. The C interface for
+libseeq will be compiled and installed directly as a Python module:
+
+ > python setup.py build
+ > sudo python setup.py install
+
+From this moment, the seeq module will be available at your local
+Python installation. Use *import seeq* to import the module inside
+Python.
 
 IV. Running seeq
 ----------------
