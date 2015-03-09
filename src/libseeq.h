@@ -22,7 +22,9 @@
 **
 */
 
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 
 #ifndef _SEEQLIB_H_
 #define _SEEQLIB_H_
@@ -43,8 +45,9 @@
 
 extern int seeqerr;
 
-typedef struct seeq_t   seeq_t;
-typedef struct match_t  match_t;
+typedef struct seeq_t     seeq_t;
+typedef struct match_t    match_t;
+typedef struct seeqfile_t seeqfile_t;
 
 struct match_t {
    int    start;
@@ -58,19 +61,23 @@ struct seeq_t {
    match_t match;
    int     tau;
    int     wlen;
-   long    line;
-   long    count;
    char  * keys;
    char  * rkeys;
    void  * dfa;
    void  * rdfa;
+};
+
+struct seeqfile_t {
+   long    line;
    FILE  * fdi;
 };
 
-seeq_t    * seeqOpen        (char *, char *, int);
-int         seeqClose       (seeq_t *);
-long        seeqMatch       (seeq_t *, int);
-long        seeqStringMatch (char *, seeq_t *, int);
+seeq_t *    seeqNew         (const char *, int);
+void        seeqFree        (seeq_t *);
+seeqfile_t* seeqOpen        (const char *);
+int         seeqClose       (seeqfile_t *);
+long        seeqFileMatch   (seeqfile_t *, seeq_t *, int);
+long        seeqStringMatch (const char *, seeq_t *, int);
 long        seeqGetLine     (seeq_t *);
 int         seeqGetDistance (seeq_t *);
 int         seeqGetStart    (seeq_t *);

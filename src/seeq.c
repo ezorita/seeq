@@ -78,10 +78,14 @@ seeq
    const int tau = args.dist;
 
    if (verbose) fprintf(stderr, "opening input file... ");
-   seeq_t * sq = seeqOpen(input, expression, tau);
-   if (sq == NULL) {
+   seeqfile_t * sqfile = seeqOpen(input);
+   if (sqfile == NULL) {
       fprintf(stderr, "error in 'seeqOpen()': %s\n", seeqPrintError());
       return EXIT_FAILURE;
+   }
+   seeq_t * sq =  seeqNew(expression, tau);
+   if (sq == NULL) {
+      fprintf(stderr, "error in 'seeqNew()'; %s\n:", seeqPrintError());
    }
 
    clock_t clk = 0;
@@ -91,7 +95,7 @@ seeq
    }
 
    if (args.count) {
-      fprintf(stdout, "%ld\n", seeqMatch(sq, SQ_COUNTLINES));
+      fprintf(stdout, "%ld\n", seeqFileMatch(sqfile, sq, SQ_COUNTLINES));
    } else {
       int match_options = 0;
       if (args.invert) match_options = SQ_NOMATCH;
@@ -99,7 +103,7 @@ seeq
       if (args.best) match_options |= SQ_BEST;
 
       int retval;
-      while ((retval = seeqMatch(sq, match_options)) > 0) {
+      while ((retval = seeqFileMatch(sqfile, sq, match_options)) > 0) {
          if (args.compact) fprintf(stdout, "%ld:%d-%d:%d",sq->match.line, sq->match.start, sq->match.end-1, sq->match.dist);
          else {
             if (args.showline) fprintf(stdout, "%ld ", sq->match.line);
@@ -142,7 +146,8 @@ seeq
       fprintf(stderr, "done in %.3fs\n", (clock()-clk)*1.0/CLOCKS_PER_SEC);
    }
    
-   seeqClose(sq);
+   seeqClose(sqfile);
+   seeqFree(sq);
 
    return EXIT_SUCCESS;
 }

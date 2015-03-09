@@ -87,7 +87,7 @@ static const int translate[256] = {
 
 static const char bases[NBASES] = "ACGTN";
 
-int         parse         (char *, char *);
+int         parse         (const char *, char *);
 dfa_t     * dfa_new       (int, int, int, int);
 uint        dfa_newvertex (dfa_t **, uint);
 int         dfa_newstate  (dfa_t **, char *, uint, uint, int); 
