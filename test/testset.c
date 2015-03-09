@@ -708,16 +708,18 @@ test_parse
 }
 
 void
-test_seeqOpen
+test_seeqNewOpen
 (void)
 {
    // Open file and check struct contents.
-   seeq_t * sq = seeqOpen("testdata.txt", "ACTGA", 2);
+   seeq_t * sq = seeqNew("ACTGA", 2);
    g_assert(sq != NULL);
+   seeqfile_t * sqfile = seeqOpen("testdata.txt");
+   g_assert(sqfile != NULL);
+
+   // seeq_t
    g_assert_cmpint(sq->tau, ==, 2);
    g_assert_cmpint(sq->wlen, ==, 5);
-   g_assert_cmpint(sq->line, ==, 0);
-   g_assert_cmpint(sq->count, ==, 0);
    g_assert_cmpint(sq->keys[0], ==, 1);
    g_assert_cmpint(sq->keys[1], ==, 2);
    g_assert_cmpint(sq->keys[2], ==, 8);
@@ -725,61 +727,70 @@ test_seeqOpen
    g_assert_cmpint(sq->keys[4], ==, 1);
    g_assert(sq->dfa  != NULL);
    g_assert(sq->rdfa != NULL);
-   g_assert(sq->fdi  != NULL);
-   g_assert_cmpint(seeqClose(sq), ==, 0);
+   // seeqfile_t
+   g_assert_cmpint(sqfile->line, ==, 0);
+   g_assert(sqfile->fdi  != NULL);
+   g_assert_cmpint(seeqClose(sqfile), ==, 0);
+   seeqFree(sq);
    
    // Open stdin.
-   sq = seeqOpen(NULL, "ACG[AT]", 1);
+   sq = seeqNew("ACG[AT]", 1);
    g_assert(sq != NULL);
+   sqfile = seeqOpen(NULL);
+   g_assert(sqfile != NULL);
    g_assert_cmpint(sq->tau, ==, 1);
    g_assert_cmpint(sq->wlen, ==, 4);
-   g_assert_cmpint(sq->line, ==, 0);
-   g_assert_cmpint(sq->count, ==, 0);
    g_assert_cmpint(sq->keys[0], ==, 1);
    g_assert_cmpint(sq->keys[1], ==, 2);
    g_assert_cmpint(sq->keys[2], ==, 4);
    g_assert_cmpint(sq->keys[3], ==, 9);
    g_assert(sq->dfa  != NULL);
    g_assert(sq->rdfa != NULL);
-   g_assert(sq->fdi  == stdin);
-   g_assert_cmpint(seeqClose(sq), ==, 0);
+   // seeqfile_t
+   g_assert_cmpint(sqfile->line, ==, 0);
+   g_assert(sqfile->fdi == stdin);
+   g_assert_cmpint(seeqClose(sqfile), ==, 0);
+   seeqFree(sq);
 
    // Check tau error.
-   sq = seeqOpen(NULL, "ACG[AT]", -1);
+   sq = seeqNew("ACG[AT]", -1);
    g_assert(sq == NULL);
    g_assert_cmpint(seeqerr, ==, 1);
-   sq = seeqOpen(NULL, "ACG[AT]", 4);
+
+   sq = seeqNew("ACG[AT]", 4);
    g_assert(sq == NULL);
    g_assert_cmpint(seeqerr, ==, 9);
 
 
    // Incorrect pattern.
-   sq = seeqOpen(NULL, "ACT[A[AG]", 1);
+   sq = seeqNew("ACT[A[AG]", 1);
    g_assert(sq == NULL);
    g_assert_cmpint(seeqerr, ==, 2);
-   sq = seeqOpen(NULL, "ACT[AG]T]A", 1);
+   sq = seeqNew("ACT[AG]T]A", 1);
    g_assert(sq == NULL);
    g_assert_cmpint(seeqerr, ==, 3);
-   sq = seeqOpen(NULL, "ACHT[AG]", 1);
+   sq = seeqNew("ACHT[AG]", 1);
    g_assert(sq == NULL);
    g_assert_cmpint(seeqerr, ==, 4);
-   sq = seeqOpen(NULL, "ACT[AG]A[TG", 1);
+   sq = seeqNew("ACT[AG]A[TG", 1);
    g_assert(sq == NULL);
    g_assert_cmpint(seeqerr, ==, 5);
 
    // No such file.
-   sq = seeqOpen("fakefile.txt", "ACTGA", 0);
-   g_assert(sq == NULL);
+   sqfile = seeqOpen("fakefile.txt");
+   g_assert(sqfile == NULL);
 }
 
 void
-test_seeqMatch
+test_seeqFileMatch
 (void)
 {
    char * match;
-   seeq_t * sq = seeqOpen("testdata.txt", "ATCG", 1);
+   seeqfile_t * sqfile = seeqOpen("testdata.txt");
+   g_assert(sqfile != NULL);
+   seeq_t * sq = seeqNew("ATCG", 1);
    g_assert(sq != NULL);
-   g_assert_cmpint(seeqMatch(sq, SQ_MATCH | SQ_FIRST), ==, 1);
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_MATCH | SQ_FIRST), ==, 1);
    g_assert_cmpint(seeqGetStart(sq), ==, 2);
    g_assert_cmpint(seeqGetEnd(sq), ==, 5);
    g_assert_cmpint(seeqGetLine(sq), ==, 1);
@@ -787,7 +798,7 @@ test_seeqMatch
    match = seeqGetString(sq);
    g_assert_cmpstr(match, ==, "GTATGTACCACAGATGTCGATCGAC");
    free(match);
-   g_assert_cmpint(seeqMatch(sq, SQ_MATCH | SQ_FIRST), ==, 1);
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_MATCH | SQ_FIRST), ==, 1);
    g_assert_cmpint(seeqGetStart(sq), ==, 3);
    g_assert_cmpint(seeqGetEnd(sq), ==, 7);
    g_assert_cmpint(seeqGetLine(sq), ==, 2);
@@ -795,12 +806,15 @@ test_seeqMatch
    match = seeqGetString(sq);
    g_assert_cmpstr(match, ==, "TCTATCATCCGTACTCTGATCTCAT");
    free(match);
-   g_assert_cmpint(seeqMatch(sq, SQ_MATCH | SQ_FIRST), ==, 0);
-   seeqClose(sq);
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_MATCH | SQ_FIRST), ==, 0);
+   seeqClose(sqfile);
+   seeqFree(sq);
 
-   sq = seeqOpen("testdata.txt", "TGTC", 1);
+   sqfile = seeqOpen("testdata.txt");
+   g_assert(sqfile != NULL);
+   sq = seeqNew("TGTC", 1);
    g_assert(sq != NULL);
-   g_assert_cmpint(seeqMatch(sq, SQ_MATCH | SQ_BEST), ==, 1);
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_MATCH | SQ_BEST), ==, 1);
    g_assert_cmpint(seeqGetStart(sq), ==, 14);
    g_assert_cmpint(seeqGetEnd(sq), ==, 18);
    g_assert_cmpint(seeqGetLine(sq), ==, 1);
@@ -808,7 +822,7 @@ test_seeqMatch
    match = seeqGetString(sq);
    g_assert_cmpstr(match, ==, "GTATGTACCACAGATGTCGATCGAC");
    free(match);
-   g_assert_cmpint(seeqMatch(sq, SQ_MATCH | SQ_BEST), ==, 1);
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_MATCH | SQ_BEST), ==, 1);
    g_assert_cmpint(seeqGetStart(sq), ==, 2);
    g_assert_cmpint(seeqGetEnd(sq), ==, 6);
    g_assert_cmpint(seeqGetLine(sq), ==, 2);
@@ -816,11 +830,14 @@ test_seeqMatch
    match = seeqGetString(sq);
    g_assert_cmpstr(match, ==, "TCTATCATCCGTACTCTGATCTCAT");
    free(match);
-   seeqClose(sq);
+   seeqClose(sqfile);
+   seeqFree(sq);
 
-   sq = seeqOpen("testdata.txt", "CACAGAT", 1);
+   sqfile = seeqOpen("testdata.txt");
+   g_assert(sqfile != NULL);
+   sq = seeqNew("CACAGAT", 1);
    g_assert(sq != NULL);
-   g_assert_cmpint(seeqMatch(sq, SQ_NOMATCH), ==, 1);
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_NOMATCH), ==, 1);
    g_assert_cmpint(seeqGetStart(sq), ==, 0);
    g_assert_cmpint(seeqGetEnd(sq), ==, 25);
    g_assert_cmpint(seeqGetLine(sq), ==, 2);
@@ -828,12 +845,13 @@ test_seeqMatch
    match = seeqGetString(sq);
    g_assert_cmpstr(match, ==, "TCTATCATCCGTACTCTGATCTCAT");
    free(match);
-   g_assert_cmpint(seeqMatch(sq, SQ_ANY), ==, 0);
-   seeqClose(sq);
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_ANY), ==, 0);
+   seeqClose(sqfile);
    
-   sq = seeqOpen("testdata.txt", "CACAGAT", 1);
+   sqfile = seeqOpen("testdata.txt");
+   g_assert(sqfile != NULL);
    g_assert(sq != NULL);
-   g_assert_cmpint(seeqMatch(sq, SQ_ANY | SQ_BEST), ==, 1);
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_ANY | SQ_BEST), ==, 1);
    g_assert_cmpint(seeqGetStart(sq), ==, 8);
    g_assert_cmpint(seeqGetEnd(sq), ==, 15);
    g_assert_cmpint(seeqGetLine(sq), ==, 1);
@@ -841,7 +859,7 @@ test_seeqMatch
    match = seeqGetString(sq);
    g_assert_cmpstr(match, ==, "GTATGTACCACAGATGTCGATCGAC");
    free(match);
-   g_assert_cmpint(seeqMatch(sq, SQ_ANY | SQ_BEST), ==, 1);
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_ANY | SQ_BEST), ==, 1);
    g_assert_cmpint(seeqGetStart(sq), ==, 0);
    g_assert_cmpint(seeqGetEnd(sq), ==, 25);
    g_assert_cmpint(seeqGetLine(sq), ==, 2);
@@ -849,48 +867,53 @@ test_seeqMatch
    match = seeqGetString(sq);
    g_assert_cmpstr(match, ==, "TCTATCATCCGTACTCTGATCTCAT");
    free(match);
-   g_assert_cmpint(seeqMatch(sq, SQ_ANY), ==, 0);
-   seeqClose(sq);
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_ANY), ==, 0);
+   seeqClose(sqfile);
+   seeqFree(sq);
 
-   sq = seeqOpen("testdata.txt", "ATC", 0);
+   sqfile = seeqOpen("testdata.txt");
+   g_assert(sqfile != NULL);
+   sq = seeqNew("ATC", 0);
    g_assert(sq != NULL);
-   g_assert_cmpint(seeqMatch(sq, SQ_COUNTLINES), ==, 2);
-   seeqClose(sq);
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_COUNTLINES), ==, 2);
+   seeqClose(sqfile);
 
-   sq = seeqOpen("testdata.txt", "ATC", 0);
+   sqfile = seeqOpen("testdata.txt");
+   g_assert(sqfile != NULL);
    g_assert(sq != NULL);
-   g_assert_cmpint(seeqMatch(sq, SQ_COUNTMATCH), ==, 4);
-   seeqClose(sq);
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_COUNTMATCH), ==, 4);
+   seeqClose(sqfile);
 
    // Force error
-   sq = seeqOpen(NULL, "GATC", 1);
-   sq->fdi = NULL;
-   g_assert_cmpint(seeqMatch(sq, 0), ==, -1);
+   sqfile = seeqOpen(NULL);
+   g_assert(sqfile != NULL);
+   sqfile->fdi = NULL;
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, 0), ==, -1);
    g_assert_cmpint(seeqerr, ==, 10);
-   seeqClose(sq);
+   seeqClose(sqfile);
 
-   sq = seeqOpen(NULL, "GATC", 1);
-   g_assert(sq != NULL);
    // String first match.
+   sq = seeqNew("GATC", 1);
    g_assert_cmpint(seeqStringMatch("TGACTGATGACGTAGTCTACGATCGATCAGTCA", sq, SQ_MATCH | SQ_FIRST), == , 1);
    g_assert_cmpint(seeqGetStart(sq), ==, 1);
    g_assert_cmpint(seeqGetEnd(sq), ==, 4);
    g_assert_cmpint(seeqGetDistance(sq), ==, 1);
-   
+
+   // String best match.
    g_assert_cmpint(seeqStringMatch("TGACTGATGACGTAGTCTACGATCGATCAGTCA", sq, SQ_MATCH | SQ_BEST), == , 1);
    g_assert_cmpint(seeqGetStart(sq), ==, 20);
    g_assert_cmpint(seeqGetEnd(sq), ==, 24);
    g_assert_cmpint(seeqGetDistance(sq), ==, 0);
-   seeqClose(sq);
+   seeqFree(sq);
 }
 
 void
 test_seeqClose
 (void)
 {
-   seeq_t * sq = seeqOpen("testdata.txt", "ATGA", 2);
+   seeqfile_t * sq = seeqOpen("testdata.txt");
    g_assert_cmpint(seeqClose(sq), ==, 0);
-   sq = seeqOpen(NULL, "ATG", 0);
+   sq = seeqOpen(NULL);
    g_assert_cmpint(seeqClose(sq), ==, 0);
 }
 
@@ -1067,8 +1090,8 @@ main(
    g_test_add_func("/libseeq/core/dfa_newstate", test_dfa_newstate);
    g_test_add_func("/libseeq/core/dfa_step", test_dfa_step);
    g_test_add_func("/libseeq/core/parse", test_parse);
-   g_test_add_func("/libseeq/lib/seeqOpen", test_seeqOpen);
-   g_test_add_func("/libseeq/lib/seeqMatch", test_seeqMatch);
+   g_test_add_func("/libseeq/lib/seeqNew-Open", test_seeqNewOpen);
+   g_test_add_func("/libseeq/lib/seeqFileMatch", test_seeqFileMatch);
    g_test_add_func("/libseeq/lib/seeqClose", test_seeqClose);
    g_test_add_func("/seeq", test_seeq);
    return g_test_run();

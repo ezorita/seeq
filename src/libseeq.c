@@ -184,12 +184,13 @@ seeqOpen
    // Set error to 0.
    seeqerr = 0;
 
+   seeqfile_t * sqfile = malloc(sizeof(seeqfile_t));
+   if (sqfile == NULL) return NULL;
+
    // Open file or set to stdin
    FILE * fdi = stdin;
    if (file != NULL) fdi = fopen(file, "r");
    if (fdi  == NULL) return NULL;
-
-   seeqfile_t * sqfile = malloc(sizeof(seeqfile_t));
 
    sqfile->line = 0;
    sqfile->fdi = fdi;
@@ -709,7 +710,6 @@ dfa_new
 
    dfa_t * dfa = malloc(sizeof(dfa_t) + vertices * sizeof(vertex_t));
    if (dfa == NULL) {
-      fprintf(stderr, "error in 'dfa_new' (malloc) dfa_t: %s.\n", strerror(errno));
       return NULL;
    }
 

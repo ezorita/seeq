@@ -78,15 +78,18 @@ seeq
    const int tau = args.dist;
 
    if (verbose) fprintf(stderr, "opening input file... ");
+   seeq_t * sq =  seeqNew(expression, tau);
+   if (sq == NULL) {
+      fprintf(stderr, "error in 'seeqNew()'; %s\n:", seeqPrintError());
+      return EXIT_FAILURE;
+   }
+
    seeqfile_t * sqfile = seeqOpen(input);
    if (sqfile == NULL) {
       fprintf(stderr, "error in 'seeqOpen()': %s\n", seeqPrintError());
       return EXIT_FAILURE;
    }
-   seeq_t * sq =  seeqNew(expression, tau);
-   if (sq == NULL) {
-      fprintf(stderr, "error in 'seeqNew()'; %s\n:", seeqPrintError());
-   }
+
 
    clock_t clk = 0;
    if (verbose) {
@@ -95,7 +98,9 @@ seeq
    }
 
    if (args.count) {
-      fprintf(stdout, "%ld\n", seeqFileMatch(sqfile, sq, SQ_COUNTLINES));
+      int retval = seeqFileMatch(sqfile, sq, SQ_COUNTLINES);
+      if (retval < 0) fprintf(stderr, "error in 'seeqFileMatch()': %s\n", seeqPrintError());
+      else fprintf(stdout, "%ld\n", retval);
    } else {
       int match_options = 0;
       if (args.invert) match_options = SQ_NOMATCH;
@@ -138,7 +143,7 @@ seeq
          fprintf(stdout, "\n");
       }
       if (retval == -1) {
-         fprintf(stderr, "error in 'seeqMatch()': %s\n", seeqPrintError());
+         fprintf(stderr, "error in 'seeqFileMatch()': %s\n", seeqPrintError());
       }
    }
    
