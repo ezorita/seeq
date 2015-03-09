@@ -77,6 +77,7 @@ Seeq can be installed as a Python module as well. The C interface for
 libseeq will be compiled and installed directly as a Python module:
 
  > python setup.py build
+
  > sudo python setup.py install
 
 From this moment, the seeq module will be available at your local
