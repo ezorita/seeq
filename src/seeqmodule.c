@@ -5,6 +5,9 @@
 
 /** Declarations **/
 
+static PyObject * SeeqException;
+static PyObject * LibSeeqException;
+
 static PyTypeObject SeeqIterType;
 static PyTypeObject SeeqMatchType;
 static PyTypeObject SeeqObjectType;
@@ -64,7 +67,10 @@ SeeqIter_new
  int          match_iter
 )
 {
-   if (sqObj->sq == NULL) return NULL;
+   if (sqObj->sq == NULL) {
+      PyErr_SetString(SeeqException, "NULL reference to DFA pointer");
+      return NULL;
+   }
    if (!PyString_Check(strObj)) return NULL;
 
    SeeqIter * self;
@@ -126,6 +132,7 @@ SeeqIter_iternext
       if (self->match_iter == 1) {
          int toklen = end - start;
          char * new_string = malloc(toklen + 1);
+         if (new_string == NULL) return PyErr_NoMemory();
          memcpy(new_string, string + start, toklen);
          new_string[toklen] = 0;
          PyObject * new_strObj = PyString_FromString(new_string);
@@ -138,6 +145,7 @@ SeeqIter_iternext
          int toklen = start - pos;
          if (toklen > 0) {
             char * new_string = malloc(toklen + 1);
+            if (new_string == NULL) return PyErr_NoMemory();
             memcpy(new_string, string + pos, toklen);
             new_string[toklen] = 0;
             PyObject * new_strObj = PyString_FromString(new_string);
@@ -160,6 +168,7 @@ SeeqIter_iternext
          int toklen = slen - self->pos;
          if (toklen > 0) {
             char * new_string = malloc(toklen + 1);
+            if (new_string == NULL) return PyErr_NoMemory();
             memcpy(new_string, string + self->pos, toklen);
             new_string[toklen] = 0;
             PyObject * new_strObj = PyString_FromString(new_string);
@@ -174,9 +183,10 @@ SeeqIter_iternext
          }
       }
    }
-   else return NULL;
-
-   return NULL;
+   else {
+      PyErr_SetString(LibSeeqException, seeqPrintError());
+      return NULL;
+   }
 }
 
 // Attributes and methods
@@ -257,6 +267,7 @@ SeeqMatch_new
 // So SeeqMatch instances will be only created in C from 'SeeqObject.match'.
 {
    if (string == NULL || strlen(string) < 1) {
+      PyErr_SetString(SeeqException, "Empty string");
       Py_DECREF(stringObj);
       return NULL;
    }
@@ -336,7 +347,7 @@ SeeqMatch_tokenize
 
    int     maxtokens = 2*nmatches + 1;
    char ** tokens  = malloc(maxtokens * sizeof(char *));
-   if (tokens ==  NULL) return NULL;
+   if (tokens == NULL) return PyErr_NoMemory();
 
    int ntokens = 0;
    int tstart = 0;
@@ -353,6 +364,7 @@ SeeqMatch_tokenize
       if (mstart - tstart > 0) {
          int tokenlen = mstart - tstart;
          char * token = malloc(tokenlen + 1);
+         if (token == NULL) return PyErr_NoMemory();
          memcpy(token, string + tstart, tokenlen);
          token[tokenlen] = 0;
          tokens[ntokens++] = token;
@@ -362,6 +374,7 @@ SeeqMatch_tokenize
       if (mend - mstart > 0) {
          int tokenlen = mend - mstart;
          char * token = malloc(tokenlen + 1);
+         if (token == NULL) return PyErr_NoMemory();
          memcpy(token, string + mstart, tokenlen);
          token[tokenlen] = 0;
          tokens[ntokens++] = token;
@@ -374,6 +387,7 @@ SeeqMatch_tokenize
    if (slen - tstart > 0) {
          int tokenlen = slen - tstart;
          char * token = malloc(tokenlen + 1);
+         if (token == NULL) return PyErr_NoMemory();
          memcpy(token, string + tstart, tokenlen);
          token[tokenlen] = 0;
          tokens[ntokens++] = token;
@@ -421,7 +435,7 @@ SeeqMatch_split
 
    int     maxtokens = 2*nmatches + 1;
    char ** tokens  = malloc(maxtokens * sizeof(char *));
-   if (tokens ==  NULL) return NULL;
+   if (tokens == NULL) return PyErr_NoMemory();
 
    int ntokens = 0;
    int tstart = 0;
@@ -438,6 +452,7 @@ SeeqMatch_split
       if (mstart - tstart > 0) {
          int tokenlen = mstart - tstart;
          char * token = malloc(tokenlen + 1);
+         if (token == NULL) return PyErr_NoMemory();
          memcpy(token, string + tstart, tokenlen);
          token[tokenlen] = 0;
          tokens[ntokens++] = token;
@@ -451,6 +466,7 @@ SeeqMatch_split
    if (slen - tstart > 0) {
          int tokenlen = slen - tstart;
          char * token = malloc(tokenlen + 1);
+         if (token == NULL) return PyErr_NoMemory();
          memcpy(token, string + tstart, tokenlen);
          token[tokenlen] = 0;
          tokens[ntokens++] = token;
@@ -498,7 +514,7 @@ SeeqMatch_matches
 
    int     maxtokens = 2*nmatches + 1;
    char ** tokens  = malloc(maxtokens * sizeof(char *));
-   if (tokens ==  NULL) return NULL;
+   if (tokens == NULL) return PyErr_NoMemory();
 
    int ntokens = 0;
    for (int i = 0; i < nmatches; i++) {
@@ -514,6 +530,7 @@ SeeqMatch_matches
       if (mend - mstart > 0) {
          int tokenlen = mend - mstart;
          char * token = malloc(tokenlen + 1);
+         if (token == NULL) return PyErr_NoMemory();
          memcpy(token, string + mstart, tokenlen);
          token[tokenlen] = 0;
          tokens[ntokens++] = token;
@@ -629,9 +646,18 @@ SeeqObject_new
 
 {
    // Check errors.
-   if (pattern == NULL || strlen(pattern) < 1) return NULL;
-   if (mismatches < 0) return NULL;
-   if (sq == NULL) return NULL;
+   if (pattern == NULL || strlen(pattern) < 1) {
+      PyErr_SetString(SeeqException, "Empty pattern");
+      return NULL;
+   }
+   if (mismatches < 0) {
+      PyErr_SetString(SeeqException, "Mismatches must be a non-negative integer");
+      return NULL;
+   }
+   if (sq == NULL) {
+      PyErr_SetString(SeeqException, "NULL reference to DFA pointer");
+      return NULL;
+   }
 
    SeeqObject * self;
    // TYPE* PyObject_New(TYPE, PyTypeObject *type)
@@ -686,7 +712,7 @@ SeeqObject_seeqmatch
 
    // Error.
    if (rval < 0) {
-      // TODO: Throw exception.
+      PyErr_SetString(LibSeeqException, seeqPrintError());
       return NULL;
    }
    // Pattern not found (return Py_None).
@@ -772,6 +798,7 @@ SeeqObject_findAll
    int * startvals  = malloc(maxmatches * sizeof(int));
    int * endvals    = malloc(maxmatches * sizeof(int));
    int * distvals   = malloc(maxmatches * sizeof(int));
+   if (startvals == NULL || endvals == NULL || distvals == NULL) return PyErr_NoMemory();
    int   nmatches   = 0;
 
    int offset = 0, rval;
@@ -784,6 +811,7 @@ SeeqObject_findAll
    }
    
    if (rval == -1) {
+      PyErr_SetString(LibSeeqException, seeqPrintError());
       // Free buffers and return NULL.
       free(startvals); free(endvals); free(distvals);
       return NULL;
@@ -947,16 +975,18 @@ seeq_compile
    if (!PyArg_ParseTuple(args,"si:match", &pattern, &mismatches))
       return NULL;
 
-   if (pattern == NULL) return NULL;
-   if (mismatches < 0) return NULL;
-
    // Generate seeq_t object.
    seeq_t * sq = seeqNew(pattern, mismatches);
-   if (sq == NULL) return NULL;
+   if (sq == NULL) {
+      PyErr_SetString(LibSeeqException, seeqPrintError());
+      return NULL;
+   }
 
    PyObject * newObj = (PyObject *) SeeqObject_new(mismatches, pattern, sq);
-
-   return newObj;
+   if (newObj == NULL) {
+      free(sq);
+      return NULL;
+   } else return newObj;
 }
 
 
@@ -979,5 +1009,15 @@ initseeq
    if (PyType_Ready(&SeeqIterType) < 0)
       return; 
 
-   Py_InitModule3("seeq", SeeqMethods, "seeq library for Python.");
+   PyObject * m = Py_InitModule3("seeq", SeeqMethods, "seeq library for Python.");
+
+   // Add Seeq Exception objects.
+   SeeqException = PyErr_NewException("seeq.exception", NULL, NULL);
+   Py_INCREF(SeeqException);
+   PyModule_AddObject(m, "exception", SeeqException);
+
+   LibSeeqException = PyErr_NewException("libseeq.exception", NULL, NULL);
+   Py_INCREF(LibSeeqException);
+   PyModule_AddObject(m, "clibexception", LibSeeqException);
+
 }
