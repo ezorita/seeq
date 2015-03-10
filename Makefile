@@ -1,12 +1,13 @@
 SRC_DIR= src
 INC_DIR= src
+OBJ_DIR= build
 OBJECT_FILES= libseeq.o
 SOURCE_FILES= seeq.c seeq-main.c
 HEADER_FILES= seeq.h
 LIBSRC_FILES= libseeq.c
 LIBHDR_FILES= libseeq.h seeqcore.h
 
-OBJECTS= $(addprefix $(SRC_DIR)/,$(OBJECT_FILES))
+OBJECTS= $(addprefix $(OBJ_DIR)/,$(OBJECT_FILES))
 SOURCES= $(addprefix $(SRC_DIR)/,$(SOURCE_FILES))
 HEADERS= $(addprefix $(SRC_DIR)/,$(HEADER_FILES))
 LIBSRCS= $(addprefix $(SRC_DIR)/,$(LIBSRC_FILES))
@@ -29,9 +30,10 @@ libseeq.so: $(LIBSRCS) $(LIBHDRS)
 seeq: $(OBJECTS) $(SOURCES) $(LIBSRCS) $(HEADERS) $(LIBHDRS)
 	$(CC) $(CFLAGS) $(SOURCES) $(OBJECTS) $(LDLIBS) -o $@
 
-$(SRC_DIR)/%.o: $(SRC_DIR)/%.c $(SRC_DIR)/%.h
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(SRC_DIR)/%.h
+	mkdir -p build
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 clean:
-	rm -f $(OBJECTS) seeq
+	rm -f  seeq
 	rm -rf lib
 	rm -rf build
