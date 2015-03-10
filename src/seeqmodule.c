@@ -3,12 +3,13 @@
 #include "libseeq.h"
 #include <string.h>
 
+/** Declarations **/
 
-/** SeeqMatch class **/
-
-// Declaration of object Type (will be defined later).
+static PyTypeObject SeeqIterType;
 static PyTypeObject SeeqMatchType;
+static PyTypeObject SeeqObjectType;
 
+// SeeqMatch struct.
 typedef struct {
    PyObject_HEAD
    // 'matches' will be a PyList containing tuples with the 
@@ -19,6 +20,220 @@ typedef struct {
    PyObject   * stringObj;
    const char * string;
 } SeeqMatch;
+
+// SeeqObject struct.
+typedef struct {
+   PyObject_HEAD
+   PyObject * mismatches;
+   PyObject * pattern;
+   // Pointer to seeq_t structure.
+   // This attribute will be invisible to Python since it will
+   // not be declared in the PyMemberDef array.
+   seeq_t   * sq;
+} SeeqObject;
+
+// SeeqIter struct.
+typedef struct {
+   PyObject_HEAD
+   SeeqObject * sqObj;
+   PyObject   * stringObj;
+   int          pos;
+   int          match_iter;
+} SeeqIter;
+
+
+
+/** SeeqIter class **/
+
+static void
+SeeqIter_dealloc
+(
+ SeeqIter * self
+)
+{
+   Py_XDECREF(self->sqObj);
+   Py_XDECREF(self->stringObj);
+   self->ob_type->tp_free((PyObject*)self);
+}
+
+static SeeqIter *
+SeeqIter_new
+(
+ SeeqObject * sqObj,
+ PyObject   * strObj,
+ int          match_iter
+)
+{
+   if (sqObj->sq == NULL) return NULL;
+   if (!PyString_Check(strObj)) return NULL;
+
+   SeeqIter * self;
+   // TYPE* PyObject_New(TYPE, PyTypeObject *type)
+   // Allocate a new Python object using the C structure type TYPE and the Python type object type.
+   // [...] the object’s reference count will be one. (So no need to Py_INCREF(self))
+   self = PyObject_New(SeeqIter, &SeeqIterType);
+   if (self == NULL) {
+      return NULL;
+   }
+
+   Py_INCREF(sqObj);
+   Py_INCREF(strObj);
+   self->sqObj = sqObj;
+   self->stringObj = strObj;
+   self->pos = 0;
+   self->match_iter = match_iter;
+
+   return self;
+}
+
+static PyObject *
+SeeqIter_iter
+(
+ PyObject * self
+)
+{
+   Py_INCREF(self);
+   return self;
+}
+
+static PyObject *
+SeeqIter_iternext
+(
+ PyObject * s
+)
+{
+   SeeqIter * self = (SeeqIter *) s;
+
+   const char * string = PyString_AsString(self->stringObj);
+   if (string == NULL) return NULL;
+   int slen = strlen(string);
+
+   // StopIteration exception
+   if (self->pos >= slen) {
+      PyErr_SetNone(PyExc_StopIteration);
+      return NULL;
+   }
+
+   seeq_t * sq = self->sqObj->sq;
+   int rval  = seeqStringMatch(string + self->pos, sq, SQ_MATCH | SQ_FIRST);
+   if (rval > 0) {
+      int pos   = self->pos;
+      int start = self->pos + sq->match.start;
+      int end   = self->pos + sq->match.end;
+      self->pos+= sq->match.end;
+      
+      // Return match.
+      if (self->match_iter == 1) {
+         int toklen = end - start;
+         char * new_string = malloc(toklen + 1);
+         memcpy(new_string, string + start, toklen);
+         new_string[toklen] = 0;
+         PyObject * new_strObj = PyString_FromString(new_string);
+         free(new_string);
+         if (new_strObj == NULL) return NULL;
+         return new_strObj;
+      }
+      // Return prefix.
+      else {
+         int toklen = start - pos;
+         if (toklen > 0) {
+            char * new_string = malloc(toklen + 1);
+            memcpy(new_string, string + pos, toklen);
+            new_string[toklen] = 0;
+            PyObject * new_strObj = PyString_FromString(new_string);
+            free(new_string);
+            if (new_strObj == NULL) return NULL;
+            return new_strObj;
+         }
+         // It may happen that we have a zero-length prefix. Iterate again.
+         else return SeeqIter_iternext((PyObject *)self);
+      }
+   }
+   // No matches were found.
+   else if (rval == 0) {
+      if (self->match_iter == 1) {
+         // If return matches only, stop iteration.
+         PyErr_SetNone(PyExc_StopIteration);
+         return NULL;
+      } else {
+         // Return last suffix (if any).
+         int toklen = slen - self->pos;
+         if (toklen > 0) {
+            char * new_string = malloc(toklen + 1);
+            memcpy(new_string, string + self->pos, toklen);
+            new_string[toklen] = 0;
+            PyObject * new_strObj = PyString_FromString(new_string);
+            free(new_string);
+            self->pos = slen;
+            if (new_strObj == NULL) return NULL;
+            else return new_strObj;
+         } else {
+            // There was no suffix, stop iteration.
+            PyErr_SetNone(PyExc_StopIteration);
+            return NULL;
+         }
+      }
+   }
+   else return NULL;
+
+   return NULL;
+}
+
+// Attributes and methods
+
+static PyMemberDef SeeqIter_members[] = {
+    {"string", T_OBJECT_EX, offsetof(SeeqIter, stringObj), READONLY, "matched string"},
+    {NULL}  /* Sentinel */
+};
+
+static PyMethodDef SeeqIter_methods[] = {
+   {NULL, NULL, 0, NULL}        /* Sentinel */
+};
+
+static PyTypeObject SeeqIterType = {
+    PyObject_HEAD_INIT(NULL)
+    0,                         /*ob_size*/
+    "seeq.SeeqIter",           /*tp_name*/
+    sizeof(SeeqIter),         /*tp_basicsize*/
+    0,                         /*tp_itemsize*/
+    (destructor)SeeqIter_dealloc, /*tp_dealloc*/
+    0,                         /*tp_print*/
+    0,                         /*tp_getattr*/
+    0,                         /*tp_setattr*/
+    0,                         /*tp_compare*/
+    0,                         /*tp_repr*/
+    0,                         /*tp_as_number*/
+    0,                         /*tp_as_sequence*/
+    0,                         /*tp_as_mapping*/
+    0,                         /*tp_hash */
+    0,                         /*tp_call*/
+    0,                         /*tp_str*/
+    0,                         /*tp_getattro*/
+    0,                         /*tp_setattro*/
+    0,                         /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE, /*tp_flags*/
+    "SeeqIter objects",        /* tp_doc */
+    0,		               /* tp_traverse */
+    0,		               /* tp_clear */
+    0,		               /* tp_richcompare */
+    0,		               /* tp_weaklistoffset */
+    SeeqIter_iter,             /* tp_iter */
+    SeeqIter_iternext,         /* tp_iternext */
+    SeeqIter_methods,         /* tp_methods */
+    SeeqIter_members,         /* tp_members */
+    0,                         /* tp_getset */
+    0,                         /* tp_base */
+    0,                         /* tp_dict */
+    0,                         /* tp_descr_get */
+    0,                         /* tp_descr_set */
+    0,                         /* tp_dictoffset */
+    0,                         /* tp_init */
+    0,                         /* tp_alloc */
+    0,                         /* tp_new */
+};
+
+
+/** SeeqMatch class **/
 
 static void
 SeeqMatch_dealloc
@@ -187,18 +402,161 @@ SeeqMatch_tokenize
    return toktuple;
 }
 
+static PyObject *
+SeeqMatch_split
+(
+ SeeqMatch * self,
+ PyObject  * args
+)
+// This function tokenizes a string using the compiled pattern.
+// The non-matching fragments between matches will be returned
+// as a list of independent strings.
+{
+   const char * string = self->string;
+   Py_ssize_t nmatches = PyList_Size(self->matches);
+   if (string == NULL || strlen(string) == 0 || nmatches == 0) {
+      Py_INCREF(Py_None);
+      return Py_None;
+   }
+
+   int     maxtokens = 2*nmatches + 1;
+   char ** tokens  = malloc(maxtokens * sizeof(char *));
+   if (tokens ==  NULL) return NULL;
+
+   int ntokens = 0;
+   int tstart = 0;
+   for (int i = 0; i < nmatches; i++) {
+      PyObject * tuple = PyList_GetItem(self->matches, i);
+      if (!PyTuple_Check(tuple)) {
+         free(tokens);
+         return NULL;
+      }
+      int mstart = PyInt_AsLong(PyTuple_GetItem(tuple, 0));
+      int mend   = PyInt_AsLong(PyTuple_GetItem(tuple, 1));
+
+      // Prefix.
+      if (mstart - tstart > 0) {
+         int tokenlen = mstart - tstart;
+         char * token = malloc(tokenlen + 1);
+         memcpy(token, string + tstart, tokenlen);
+         token[tokenlen] = 0;
+         tokens[ntokens++] = token;
+      }
+
+      tstart = mend;
+   }
+
+   // String suffix.
+   int slen = strlen(string);
+   if (slen - tstart > 0) {
+         int tokenlen = slen - tstart;
+         char * token = malloc(tokenlen + 1);
+         memcpy(token, string + tstart, tokenlen);
+         token[tokenlen] = 0;
+         tokens[ntokens++] = token;
+   }
+
+   // Add tokens to a tuple.
+   PyObject * toktuple = PyTuple_New(ntokens);
+   if (toktuple == NULL) {
+      for (int i = 0; i < ntokens; i++) free(tokens[i]);
+      free(tokens);
+      return NULL;
+   }
+   
+   for (int i = 0; i < ntokens; i++) {
+      //When memory buffers are passed as parameters to supply data to build objects,
+      //as for the s and s# formats, the required data is copied. Buffers provided by
+      //the caller are never referenced by the objects created by Py_BuildValue().
+      //In other words, if your code invokes malloc() and passes the allocated memory
+      //to Py_BuildValue(), your code is responsible for calling free() for that memory
+      //once Py_BuildValue() returns.
+      PyTuple_SetItem(toktuple, i, Py_BuildValue("s", tokens[i]));
+      free(tokens[i]);
+   }
+
+   free(tokens);
+   return toktuple;
+}
+
+static PyObject *
+SeeqMatch_matches
+(
+ SeeqMatch * self,
+ PyObject  * args
+)
+// This function tokenizes a string using the compiled pattern.
+// The non-matching fragments between matches will be returned
+// as a list of independent strings.
+{
+   const char * string = self->string;
+   Py_ssize_t nmatches = PyList_Size(self->matches);
+   if (string == NULL || strlen(string) == 0 || nmatches == 0) {
+      Py_INCREF(Py_None);
+      return Py_None;
+   }
+
+   int     maxtokens = 2*nmatches + 1;
+   char ** tokens  = malloc(maxtokens * sizeof(char *));
+   if (tokens ==  NULL) return NULL;
+
+   int ntokens = 0;
+   for (int i = 0; i < nmatches; i++) {
+      PyObject * tuple = PyList_GetItem(self->matches, i);
+      if (!PyTuple_Check(tuple)) {
+         free(tokens);
+         return NULL;
+      }
+      int mstart = PyInt_AsLong(PyTuple_GetItem(tuple, 0));
+      int mend   = PyInt_AsLong(PyTuple_GetItem(tuple, 1));
+
+      // Match.
+      if (mend - mstart > 0) {
+         int tokenlen = mend - mstart;
+         char * token = malloc(tokenlen + 1);
+         memcpy(token, string + mstart, tokenlen);
+         token[tokenlen] = 0;
+         tokens[ntokens++] = token;
+      }
+   }
+
+   // Add tokens to a tuple.
+   PyObject * toktuple = PyTuple_New(ntokens);
+   if (toktuple == NULL) {
+      for (int i = 0; i < ntokens; i++) free(tokens[i]);
+      free(tokens);
+      return NULL;
+   }
+   
+   for (int i = 0; i < ntokens; i++) {
+      //When memory buffers are passed as parameters to supply data to build objects,
+      //as for the s and s# formats, the required data is copied. Buffers provided by
+      //the caller are never referenced by the objects created by Py_BuildValue().
+      //In other words, if your code invokes malloc() and passes the allocated memory
+      //to Py_BuildValue(), your code is responsible for calling free() for that memory
+      //once Py_BuildValue() returns.
+      PyTuple_SetItem(toktuple, i, Py_BuildValue("s", tokens[i]));
+      free(tokens[i]);
+   }
+
+   free(tokens);
+   return toktuple;
+}
+
 // Attributes and methods
 
 static PyMemberDef SeeqMatch_members[] = {
-    {"matches", T_OBJECT_EX, offsetof(SeeqMatch, matches), 0,
+    {"matchlist", T_OBJECT_EX, offsetof(SeeqMatch, matches), READONLY,
      "match list"},
-    {"string", T_OBJECT_EX, offsetof(SeeqMatch, stringObj), 0,
+    {"string", T_OBJECT_EX, offsetof(SeeqMatch, stringObj), READONLY,
      "matched string"},
     {NULL}  /* Sentinel */
 };
 
 static PyMethodDef SeeqMatch_methods[] = {
    {"tokenize", (PyCFunction)SeeqMatch_tokenize, METH_VARARGS, "Tokenizes the matched string"},
+   {"split", (PyCFunction)SeeqMatch_split, METH_VARARGS, "Splits the string removing the matches"},
+   {"matches", (PyCFunction)SeeqMatch_matches, METH_VARARGS, "Returns a tuple with the matches"},
    {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 
@@ -245,19 +603,6 @@ static PyTypeObject SeeqMatchType = {
 };
 
 /** SeeqObject Class **/
-
-// Declaration of object type (will be defined later).
-static PyTypeObject SeeqObjectType;
-
-typedef struct {
-   PyObject_HEAD
-   PyObject * mismatches;
-   PyObject * pattern;
-   // Pointer to seeq_t structure.
-   // This attribute will be invisible to Python since it will
-   // not be declared in the PyMemberDef array.
-   seeq_t   * sq;
-} SeeqObject;
 
 static void
 SeeqObject_dealloc
@@ -414,7 +759,7 @@ SeeqObject_findAll
    PyObject   * stringObj;      
    const char * string;
 
-   if (!PyArg_ParseTuple(args,"O:match", &stringObj))
+   if (!PyArg_ParseTuple(args,"O:findAll", &stringObj))
       return NULL;
    if (!PyString_Check(stringObj))
       return NULL;
@@ -475,12 +820,53 @@ SeeqObject_findAll
    }
 }
 
+
+static PyObject *
+SeeqObject_matchIter
+(
+ SeeqObject * self,
+ PyObject   * args
+)
+// SeeqObject_matchIter will be a method of the SeeqObject class.
+// This function (...)
+{
+   PyObject   * stringObj;      
+
+   if (!PyArg_ParseTuple(args,"O:matchIter", &stringObj))
+      return NULL;
+   if (!PyString_Check(stringObj))
+      return NULL;
+
+   // Return a seeq Iterator with match_iter = 1.
+   return (PyObject *)SeeqIter_new(self, stringObj, 1);
+}
+
+static PyObject *
+SeeqObject_splitIter
+(
+ SeeqObject * self,
+ PyObject   * args
+)
+// SeeqObject_splitIter will be a method of the SeeqObject class.
+// This function (...)
+{
+   PyObject   * stringObj;      
+
+   if (!PyArg_ParseTuple(args,"O:matchIter", &stringObj))
+      return NULL;
+   if (!PyString_Check(stringObj))
+      return NULL;
+
+   // Return a seeq Iterator with match_iter = 0.
+   return (PyObject *)SeeqIter_new(self, stringObj, 0);
+}
+
 // Attributes and methods
 
 static PyMemberDef SeeqObject_members[] = {
-    {"pattern", T_OBJECT_EX, offsetof(SeeqObject, pattern), 0,
+    {"pattern", T_OBJECT_EX, offsetof(SeeqObject, pattern), READONLY,
      "matching pattern"},
-    {"mismatches", T_OBJECT_EX, offsetof(SeeqObject, mismatches), 0,
+    {"mismatches", T_OBJECT_EX, offsetof(SeeqObject, mismatches), READONLY,
      "maximum matching distance"},
     {NULL}  /* Sentinel */
 };
@@ -494,6 +880,12 @@ static PyMethodDef SeeqObject_methods[] = {
    },
    {"findAll", (PyCFunction)SeeqObject_findAll, METH_VARARGS,
     "Returns all the matches found in the string or None if no matches are found"
+   },
+   {"matchIter", (PyCFunction)SeeqObject_matchIter, METH_VARARGS,
+    "Iteratively returns the matching parts of the string"
+   },
+   {"splitIter", (PyCFunction)SeeqObject_splitIter, METH_VARARGS,
+    "Iteratively returns the non-matching parts of the string"
    },
    {NULL, NULL, 0, NULL}        /* Sentinel */
 };
@@ -583,12 +975,9 @@ initseeq
    SeeqMatchType.tp_new = PyType_GenericNew;
    if (PyType_Ready(&SeeqMatchType) < 0)
       return; 
+   SeeqIterType.tp_new = PyType_GenericNew;
+   if (PyType_Ready(&SeeqIterType) < 0)
+      return; 
 
-   PyObject* m;
-   m = Py_InitModule3("seeq", SeeqMethods, "seeq library for Python.");
-
-    Py_INCREF(&SeeqObjectType);
-    PyModule_AddObject(m, "SeeqObject", (PyObject *)&SeeqObjectType);
-    Py_INCREF(&SeeqMatchType);
-    PyModule_AddObject(m, "SeeqMatch", (PyObject *)&SeeqMatchType);
+   Py_InitModule3("seeq", SeeqMethods, "seeq library for Python.");
 }
