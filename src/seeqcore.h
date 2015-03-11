@@ -82,7 +82,7 @@ struct dfa_t {
 static const int translate[256] = {
    [0 ... 255] = 6,
    ['a'] = 0, ['c'] = 1, ['g'] = 2, ['t'] = 3, ['u'] = 3, ['n'] = 4, ['\0'] = 5,
-   ['A'] = 0, ['C'] = 1, ['G'] = 2, ['T'] = 3, ['U'] = 3, ['N'] = 4
+   ['A'] = 0, ['C'] = 1, ['G'] = 2, ['T'] = 3, ['U'] = 3, ['N'] = 4, ['\n'] = 5
 };
 
 static const char bases[NBASES] = "ACGTN";
