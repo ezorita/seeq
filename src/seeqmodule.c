@@ -750,7 +750,7 @@ SeeqObject_seeqmatch
 }
 
 static PyObject *
-SeeqObject_find
+SeeqObject_match
 (
  SeeqObject * self,
  PyObject   * args
@@ -760,7 +760,7 @@ SeeqObject_find
 }
 
 static PyObject *
-SeeqObject_findBest
+SeeqObject_matchBest
 (
  SeeqObject * self,
  PyObject   * args
@@ -771,7 +771,7 @@ SeeqObject_findBest
 
 
 static PyObject *
-SeeqObject_findAll
+SeeqObject_matchAll
 (
  SeeqObject * self,
  PyObject   * args
@@ -785,7 +785,7 @@ SeeqObject_findAll
    PyObject   * stringObj;      
    const char * string;
 
-   if (!PyArg_ParseTuple(args,"O:findAll", &stringObj))
+   if (!PyArg_ParseTuple(args,"O:matchAll", &stringObj))
       return NULL;
    if (!PyString_Check(stringObj))
       return NULL;
@@ -900,13 +900,13 @@ static PyMemberDef SeeqObject_members[] = {
 };
 
 static PyMethodDef SeeqObject_methods[] = {
-   {"find", (PyCFunction)SeeqObject_find, METH_VARARGS,
+   {"match", (PyCFunction)SeeqObject_match, METH_VARARGS,
     "Returns the first match found in the string or None if no matches are found"
    },
-   {"findBest", (PyCFunction)SeeqObject_findBest, METH_VARARGS,
+   {"matchBest", (PyCFunction)SeeqObject_matchBest, METH_VARARGS,
     "Returns the best match found in the string or None if no matches are found"
    },
-   {"findAll", (PyCFunction)SeeqObject_findAll, METH_VARARGS,
+   {"matchAll", (PyCFunction)SeeqObject_matchAll, METH_VARARGS,
     "Returns all the matches found in the string or None if no matches are found"
    },
    {"matchIter", (PyCFunction)SeeqObject_matchIter, METH_VARARGS,
