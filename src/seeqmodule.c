@@ -688,6 +688,101 @@ SeeqObject_new
 }
 
 static PyObject *
+SeeqObject_trimPrefix
+(
+ SeeqObject * self,
+ PyObject   * args
+)
+// SeeqObject_match will be a method of the SeeqObject class.
+// This function will call the string matching function and return a
+// SeeqMatch object instance or Py_None if nothing was found.
+{
+   PyObject   * include_match;
+   const char * string;
+
+   if (!PyArg_ParseTuple(args,"sO:match", &string, &include_match))
+      return NULL;
+   int inc_match = PyObject_IsTrue(include_match);
+   if (inc_match == -1)
+      return NULL;
+
+   //   string = PyString_AsString(stringObj);
+
+   int rval = seeqStringMatch(string, self->sq, SQ_BEST);
+
+   // Error.
+   if (rval < 0) {
+      PyErr_SetString(LibSeeqException, seeqPrintError());
+      return NULL;
+   }
+   // Pattern not found (return Py_None).
+   else if (rval == 0) {
+      Py_INCREF(Py_None);
+      return Py_None;
+   }
+   // Pattern found (return SeeqMatch instance).
+   else {
+      char * dup = strdup(string);
+      char * suffix;
+      if (inc_match) {
+         suffix = dup + self->sq->match.start; 
+      } else {
+         suffix = dup + self->sq->match.end;
+      }
+      PyObject * retObj = PyString_FromString(suffix);
+      free(dup);
+      return retObj;
+   }
+}
+
+static PyObject *
+SeeqObject_trimSuffix
+(
+ SeeqObject * self,
+ PyObject   * args
+)
+// SeeqObject_match will be a method of the SeeqObject class.
+// This function will call the string matching function and return a
+// SeeqMatch object instance or Py_None if nothing was found.
+{
+   PyObject   * include_match;
+   const char * string;
+
+   if (!PyArg_ParseTuple(args,"sO:match", &string, &include_match))
+      return NULL;
+   int inc_match = PyObject_IsTrue(include_match);
+   if (inc_match == -1)
+      return NULL;
+
+   //   string = PyString_AsString(stringObj);
+
+   int rval = seeqStringMatch(string, self->sq, SQ_BEST);
+
+   // Error.
+   if (rval < 0) {
+      PyErr_SetString(LibSeeqException, seeqPrintError());
+      return NULL;
+   }
+   // Pattern not found (return Py_None).
+   else if (rval == 0) {
+      Py_INCREF(Py_None);
+      return Py_None;
+   }
+   // Pattern found (return SeeqMatch instance).
+   else {
+      char * prefix = strdup(string);
+      if (inc_match) {
+         prefix[self->sq->match.end] = 0;
+      } else {
+         prefix[self->sq->match.start] = 0;
+      }
+      PyObject * retObj = PyString_FromString(prefix);
+      free(prefix);
+      return retObj;
+   }
+}
+
+static PyObject *
 SeeqObject_seeqmatch
 (
  SeeqObject * self,
@@ -914,6 +1009,14 @@ static PyMethodDef SeeqObject_methods[] = {
    },
    {"splitIter", (PyCFunction)SeeqObject_splitIter, METH_VARARGS,
     "Iteratively returns the non-matching parts of the string"
+   },
+   {"trimPrefix", (PyCFunction)SeeqObject_trimPrefix, METH_VARARGS,
+    "Trims out the prefix before the best match. The match will be included in the string \
+if the second argument is set to 'True'."
+   },
+   {"trimSuffix", (PyCFunction)SeeqObject_trimSuffix, METH_VARARGS,
+    "Trims out the prefix after the best match. The match will be included in the string \
+if the second argument is set to 'True'."
    },
    {NULL, NULL, 0, NULL}        /* Sentinel */
 };
