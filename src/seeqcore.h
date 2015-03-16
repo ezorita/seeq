@@ -64,6 +64,7 @@ struct trie_t {
 struct edge_t {
    uint state;
    int  match;
+   int  min_to_match;
 };
 
 struct vertex_t {

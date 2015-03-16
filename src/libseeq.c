@@ -379,9 +379,10 @@ seeqStringMatch
    int current_node = 0;
    long count = 0;
    int match = 0;
+   int slen = strlen(data);
    
    // DFA state.
-   for (unsigned long i = 0; i <= strlen(data); i++) {
+   for (unsigned long i = 0; i <= slen; i++) {
       // Update DFA.
       int cin = (int)translate[(int)data[i]];
       edge_t next;
@@ -390,17 +391,8 @@ seeqStringMatch
          if (next.match == DFA_COMPUTE)
             if (dfa_step(current_node, cin, sq->wlen, sq->tau, (dfa_t **) &(sq->dfa), sq->keys, &next)) return -1;
          current_node = next.state;
-      } else if (cin == 5) {
-         next.match = sq->tau+1;
-         if ((options & SQ_NOMATCH) && sq->match.start == -1 && streak_dist >= next.match) {
-            sq->match.line  = 0;
-            sq->match.start = 0;
-            sq->match.end   = strlen(data);
-            sq->match.dist  = -1;
-            count = 1;
-            break;
-         }
-      } else {
+      }
+      else if (cin == 6) {
          // Now lines containing illegal characters will be ommited.
          break;
          // Consider changing this by:
@@ -409,6 +401,17 @@ seeqStringMatch
          //   continue;
          // to report these lines as non-matches.
          // Alternatively, translate could redirect illegal characters to 'N'.
+      }
+      if (cin == 5 || slen - i - 1 < next.min_to_match) {
+         next.match = sq->tau+1;
+         if ((options & SQ_NOMATCH) && sq->match.start == -1 && streak_dist >= next.match) {
+            sq->match.line  = 0;
+            sq->match.start = 0;
+            sq->match.end   = slen;
+            sq->match.dist  = -1;
+            count = 1;
+            break;
+         }
       }
 
       // Update streak.
@@ -808,11 +811,13 @@ dfa_step
    // Initialize first column.
    int nextold, prev, old = state[0];
    state[0] = prev = 0;
+   int last_active = 1;
 
    // Update row.
    for (int i = 1; i < plen+1; i++) {
       nextold   = state[i];
       state[i]  = min(tau + 1, min(old + ((value & exp[i-1]) == 0), min(prev, state[i]) + 1));
+      if (state[i] <= tau) last_active = i;
       code[i-1] = state[i] - prev + 1;
       prev      = state[i];
       old       = nextold;
@@ -830,6 +835,8 @@ dfa_step
       dfa->states[dfa_state].next[base].state = dfalink;
    } else if (exists == 0) {
       if (dfa_newstate(dfap, code, prev, dfa_state, base) == -1) return -1;
+      // Set min_to_match:
+      dfa->states[dfa_state].next[base].min_to_match = plen - last_active;
       dfa = *dfap;
    } else return -1;
 
