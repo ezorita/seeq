@@ -836,8 +836,8 @@ dfa_step
    } else if (exists == 0) {
       if (dfa_newstate(dfap, code, prev, dfa_state, base) == -1) return -1;
       // Set min_to_match:
-      dfa->states[dfa_state].next[base].min_to_match = plen - last_active;
       dfa = *dfap;
+      dfa->states[dfa_state].next[base].min_to_match = plen - last_active;
    } else return -1;
 
    free(state);
