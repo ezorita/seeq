@@ -10,3 +10,4 @@ test/testset
 test/benchmark.txt
 lib/*
 build/*
+tmp/*

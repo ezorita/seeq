@@ -20,11 +20,11 @@ LDLIBS=
 
 all: seeq
 
-lib: libseeq.so
+lib: lib/libseeq.so
 
-libseeq.so: $(LIBSRCS) $(LIBHDRS)
+lib/libseeq.so: $(LIBSRCS) $(LIBHDRS)
 	mkdir -p lib
-	$(CC) -shared -fPIC $(CFLAGS) $(INCLUDES) $(LIBSRCS) -o lib/$@
+	$(CC) -shared -fPIC $(CFLAGS) $(INCLUDES) $(LIBSRCS) -o $@
 	cp src/libseeq.h lib/libseeq.h
 
 seeq: $(OBJECTS) $(SOURCES) $(LIBSRCS) $(HEADERS) $(LIBHDRS)
