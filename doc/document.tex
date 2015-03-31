@@ -21,114 +21,91 @@ $^{2}$Universitat Pompeu Fabra (UPF), 08002 Barcelona, Spain}
 \begin{abstract}
 
 \section{Motivation:}
-Searching specific sequences over DNA reads is an elemental procedure
-of biological data analysis. Experimental DNA samples have usually
-been engineered to contain pattern sequences at the positions where
-operations such as adaptor removal, sequence trimming or barcode
-extraction have to be performed. The experimental data contain errors
-that must be tolerated in order to identify these patterns at their
-correct positions. This process is straightforward in data produced by
-second generation sequencing machines, in which the error rates lie
-below 2\%. Short sequences with small error tolerance suffice to
-identify the patterns accurately in these circumstances. However,
-third generation sequencing technologies promise longer reads with
-error rates around 15\%. Consequently, this opens a new scenario in
-which both the pattern length and the relative error tolerance will
-have to be dramatically increased.
+Searching specific sequences in DNA is one of the most common tasks
+in the analysis of biological data. Experimental samples often contain
+known sequences at the positions where adaptor removal, sequence
+trimming or barcode extraction have to be performed. Experimental data
+contain errors that must be tolerated in order to identify these
+patterns. For reads produced by second generation sequencing,
+where the error rates lie below 2\%, short sequences with small error
+tolerance suffice to identify the patterns. However, third generation
+sequencing technologies promise longer reads at the cost of 10-fold
+higher error rates. In this scenario, both the pattern length and the
+relative error tolerance have to be dramatically increased.
 \section{Results:}
-In this paper we present seeq, an inexact pattern matching algorithm
-optimized for DNA sequence matching with almost constant running
-time. We benchmark seeq against the most widely used algorithms for
-inexact pattern matching. The results show that seeq scales better and
-becomes significantly faster as the error rate increases.
+Here we present seeq, an algorithm for pattern matching with errors.
+Seeq is optimized for DNA sequences and shows very little increase in
+running time as error tolerance increases. We benchmark seeq against
+the most widely used algorithms for inexact pattern matching. The
+results show that seeq scales better and becomes significantly faster
+as the error rate increases.
 \section{Availability:}
-Seeq is available in three forms: Linux software, C Library and Python
-module. The source code and the C/Python libraries are available for
-download at
+Seeq is available in three forms: a Linux software, a C library and a 
+Python module. The source code and the C/Python libraries are available
+for download at
 \href{http://github.com/ezorita/seeq}{http://github.com/ezorita/seeq}.
 \section{Contact:} \href{guillaume.filion@gmail.com}{guillaume.filion@gmail.com}
 \end{abstract}
 
 \section{Introduction}
 
-Inexact string matching is an old problem that dates back to the
-sixties with the definition of the edit distance \citep{Lev65}. The
-first algorithms used to solve this problem were based on dynamic
-programming \citep{NW70}. Although the algorithms were not very
-efficient, they are still widely used to align biological sequences
-due to their simplicity and flexibility. Later on, more sophisticated
-algorithms derived from the Boyer-Moore search method \citep{BM77}
-were designed to search patterns on long strings allowing
-differences. Such algorithms are much faster than the dynamic
+Inexact string matching dates back to the origin of computer sciences
+\citep{Lev65}. The first algorithms addressing this problem were based
+on dynamic programming \citep{NW70}. They are still widely used to
+align biological sequences due to their simplicity and flexibility,
+More sophisticated algorithms derived from the Boyer-Moore search
+method \citep{BM77} were later designed to search patterns on long
+strings allowing errors. Such algorithms are faster than the dynamic
 programming approach because they do not compute all the relative
 distances. Instead, the pattern is pre-processed to design a search
 strategy which skips parts of the text that do not contain any
 match. The jumping strategy is very efficient for perfect matches or
-small edit distances because the non-matching condition is inferred
-with only a few comparisons. In this scenario, the number of
-operations per input character is ridiculously small given that large
-areas of the text are never processed. However, other scenarios are
-not so favorable for this technique. For instance, if the proposed
-pattern matches in almost any text position, the performance degrades
-severely since the algorithm will not be able to jump so
-often. Besides, for high mismatch ratios the search strategy becomes
-complex and requires more comparisons to determine a non-matching
-condition, specially when the alphabet is as small as in the task of
-matching DNA sequences.
+small edit distances because non-matching conditions can be inferred
+with only a few comparisons. In those conditions, the number of
+operations per input character is small because large areas of the
+text are never processed. However, when the error rate is high, the
+search strategy requires more comparisons to identify a non-matching
+condition. The drop in performance is even more accute when the alphabet
+is as small as in the case of DNA sequences.
 
-Sequencing data produced by the Illumina platform \citep{Mar05}
-typically has 1-2\% error rate mainly consisting of substitutions
-\citep{Doh08}. Therefore one expects to find all the matching strings
-within a small edit distance relative to the original pattern
-length. Moreover, if such patterns are produced artificially
-(e.g. sequencing adaptors or barcodes), it is reliable to use short 
-sequences that are not present in the target genome. On the other
-side, the PacBio platform produces reads two orders of magnitude
-longer than Illumina, but at the expense of a much higher error rate
-(15\%) consisting principally of insertions and deletions
-\citep{Eid09}. This high error rate dramatically increases the false
+Illumina reads typically have a 1-2\% error rate \citep{Mar05},
+mainly consisting of substitutions \citep{Doh08}, which are ideal
+conditions for the Boyer-Moore algorithm. However, third generation
+sequencing technologies such as the PacBio platform now come of age.
+They produce reads two orders of magnitude longer than Illumina, at
+the expense of a 10-fold higher error rate (15\%) consisting mostly
+of insertions and deletions \citep{Eid09}.  
+This high error rate dramatically increases the false
 positive rate unless the pattern sequence is extended
-accordingly. This brings us to a new scenario with unusually long
-patterns and edit distances that lie on the same order of magnitude.
+accordingly. This raises a new scenario with long patterns and
+large edit distances.
 
-In this article we present \emph{seeq}, an algorithm based on a
-deterministic finite automaton (DFA) structure. The automaton is built
-as the input text is processed and has been optimized for DNA sequence
-matching. We benchmark seeq against other widely used inexact string
-matching software. The results show that seeq scales better and
+Here we present \emph{seeq}, an algorithm using a dynamic version of
+deterministic finite automata (DFA). Instead of using standard
+construction procedures, the dynamic DFA of seeq is built as the input
+text is processed. We benchmark seeq against other widely used inexact
+string matching software. The results show that seeq scales better and
 becomes significantly faster as the error rate increases.
 
 \begin{methods}
 \section{Methods}
 
-The algorithm proposed is the DFA representation of a dynamic
-programming algorithm. The goal is to find the occurrences of a
-pattern $P$ in a text $T$ that are $k$-differences or less. The
-lengths of $P$ and $T$ are $m$ and $n$, respectively. The score matrix
-$\mathbf{C} \in \mathbb{N}^{m\times n}$ is initialized so as that any
-text position is a potential alignment start, i.e. $\mathbf{C}(0,j)=0$
-and $\mathbf{C}(i,0) = i$. After the initialization, the score matrix
-is computed and filled column-wise. Note that the standard dynamic
-programming update process can be represented as
-$\mathbf{c}_j=f(\mathbf{c}_{j-1},T_j)$. In effect, the value of the 
-$j$-th column $\mathbf{c}_{j}$ is a deterministic transition that only
-depends on $\mathbf{c}_{j-1}$ and the character $T_j$. We take
-advantage of this property to build a deterministic automata in which
-the different states represent the set of non-equivalent alignment
-columns and the transitions between states are dictated by the input
-characters.
-
-To make the alignment algorithm efficient, only the significant
-($\mathbf{C}(i,j) \le k$) parts of the column are computed. The DFA
-states $S$ have a vector representation
-$\mathbf{s} = \mbox{dif}(\mathbf{c}_j)$ generated by differentially
-encoding the $j$-th column values as 
-$\mathbf{s}(i)=\mathbf{C}(i+1,j)-\mathbf{C}(i,j)+1$ for
-$i=0\ldots m-1$. This is done for two reasons: (i) the alphabet of
-$\mathbf{s}$ is small \{0,1,2\}, therefore the alignment columns can be
-efficiently stored in a ternary trie, and (ii) the inverse process to
-recompute the original column ($\mathbf{c}_j=\mbox{undif}(\mathbf{s})$)
-is performed without further information, provided that $\mathbf{C}(0,j)=0$. 
+We use a DFA representation of a dynamic programming algorithm.
+We search the occurrences of the pattern $P$ of length $m$
+in a text $T$ of length $n$, with up to $k$ differences.
+The edit matrix $\mathbf{C} \in \mathbb{N}^{m\times n}$ is initialized
+with $\mathbf{C}(0,j)=0$ and $\mathbf{C}(i,0) = i$, and then updated
+column-wise with the Needleman-Wunsch recusrion. Note that this process
+can be represented as $\mathbf{c}_j=f(\mathbf{c}_{j-1},T_j)$,
+\textit{i.e.} the value of the $j$-th column $\mathbf{c}_{j}$ is a
+deterministic transition that only depends on $\mathbf{c}_{j-1}$ and the
+character $T_j$. We take advantage of this property to build a
+deterministic automaton where the states are the columns of the matrix
+and the transitions are dictated by the input characters.
+We represent the states of the DFA by the differential encoding
+of the $j$-th column, $\mathbf{s}(i)=\mathbf{C}(i+1,j)-\mathbf{C}(i,j)+1$
+so that the state can be stored in a ternary trie ($\mathbf{s}(i)$
+can take only 3 values).
 
 \begin{figure}[!tpb]
 %\centerline{\includegraphics[scale=0.5]{fig_methods.pdf}}
@@ -139,68 +116,72 @@ The DFA construction process is illustrated in Figure. X. The
 dynamic programming algorithm starts at the DFA state
 $S = S_0$. For any input character $T_j$, being $S$
 the active DFA state, the algorithm recursively proceeds as follows:
-\begin{itemize}
+\begin{enumerate}
 \item If $S$ has an outgoing path (to $S_q$) with
-label $T_j$, then $S = S_q$.
-\item Otherwise, the vector $\mathbf{s}_j$ is computed as
-$\mathbf{s}_j=\mbox{dif}(f(\mbox{undif}(\mathbf{s}), T_j))$.
-If a state represented by $\mathbf{s}_j$ already exists ($S_q$), $S$
-is connected to such state with a path labeled $T_j$ and $S = S_q$. On
-the other hand, if $\mathbf{s}_j$ does not exist, a new DFA state
-$S_j$ is created and both nodes are connected in the same
-way, then $S = S_j$.
-\end{itemize}
-After several steps, the DFA graph is densely connected and the
-complexity of the algorithm boils down to direct DFA state
+label $T_j$, then set $S = S_q$.
+\item Otherwise, compute the column of the edit matrix corresponding
+to $f(S, T_j)$. Case 2a: if this state already exists ($S_q$), connect
+$S$ to it with a path labeled $T_j$ and set $S = S_q$. Case 2b: if
+the state does not exist, create it, and do as in in the previous
+case 2a.
+\end{enumerate}
+
+After several steps, the graph of the DFA is densely connected and
+the steps of state and edge creation are almost never performed. 
+The complexity of the algorithm is then reduced to direct DFA state
 transitions.
 
 \end{methods}
 
 \section{Results}
 
-We have benchmarked seeq against two competitive inexact string
+We have benchmarked seeq against two standard inexact string
 matching algorithms: agrep \citep{Wu92} and nr-grep \citep{Nav01}. We
-used two real sequencing datasets for benchmarking. Both datasets contain
-10 million reads but differ in read length. Dataset 1 consists random
-Drosophila genome reads of length 100. Dataset 2 reads are 50
-nucleotides long, from which the first 30 nucleotides are constant and
-the last 20 are random (barcodes). The software were set to match
+used two sequencing datasets for benchmarking. Both datasets contain
+10 million reads but differ in read length. Dataset 1 consists of random
+\textit{Drosophila} genome reads of length 100. The reads of dataset 2
+are 50 nucleotides long, from which the first 30 nucleotides are constant
+and the last 20 are random (barcodes). The software were set to match
 random patterns ranging from 5 to 50 nucleotides with a random error
-tolerance up to 40\%. We would like to point out that agrep limits the
-number of differences to 8, therefore the comparison shown here is
-only fair between seeq and nr-grep.
+tolerance up to 40\%. Importantly, agrep limits the number of differences
+to 8, which is a serious limitation and makes the comparison fair only between seeq and nr-grep.
 
-Figure \ref{fig:results} shows the running time of each execution as
-a function of the relative error tolerace ($k/m$). For low error
+The running time of each execution is plotted against the relative
+error tolerace ($k/m$) on figure \ref{fig:results}. For low error
 rates, both agrep and nr-grep perform better than seeq, with a maximum
 5-fold advantage when $k=1$ and $m > 25$. On the other hand, seeq is
 up to two orders of magnitude faster than nr-grep and one order of
 magnitude faster than agrep for $k/m > 0.15$. The similarity between
-the two datasets indicates that neither software is particularly
-favored when the processed data has a repetitive structure. The worst
-to best case ratio also speaks strongly in favor of seeq (5), which
-achieves almost constant running time. This value is one and almost
-three orders of magnitude higher for agrep (50) and nr-grep (1000),
-respectively.
+the two datasets indicates that neither software is favored when the
+data has a repetitive structure. Also note that seeq 
+achieves near-constant running time.
 
 \begin{figure}[!tpb]
 \centerline{\includegraphics[scale=0.5]{results.pdf}}
-\caption{Benchmark between seeq, agrep and nr-grep.}
+\caption{Benchmark between seeq, agrep and nr-grep. Each dot represents
+the running time of one search with a random pattern and a random
+edit distance. Note the logarithmic scale on the y axis.}
 \label{fig:results}
 \end{figure}
 
 \section{Conclusion}
 
-In this article we have introduced and benchmarked seeq, an inexact
-DNA sequence matching algorithm. We have measured and compared the
-running time of seeq and two competitive software in different
-configurations. The results conclude that seeq is faster in higher
-error regions with a worst case speedup of almost 50. We attribute
-the higher efficiency of seeq to the fact that it has been
-specifically designed to match DNA sequences. Thus, we could take
-advantage of algorithms that are not feasible in general string
-matchers because they only scale well when the size of the alphabet is
-reduced.
+The benchmark shows that seeq is faster in higher error regions with
+an excellent worst case. Actually, the running time of seeq depends
+very little on the error tolerance. The higher efficiency of seeq
+is attributed to the underlying dynamic DFA structure. Here, the key
+insight was to take advantage of the limited size of the DNA alphabet.
+This strategy is usually not efficient in general string matching
+problems.
+
+In practice, most pattern searches in DNA reads are performed from
+scripts and pipelines. To ease the use of seeq in existing software,
+we have ensured that it is comliant with Linux pipes. Also, we have
+created a Python module that can be imported and integrated seamlessly,
+as it can be called on Python string objects that can be further
+manipulated. We also provide a API in C for the cases that optimal
+performance is required.
+
 
 \paragraph{Funding\textcolon}
 
