@@ -1,0 +1,51 @@
+\begin{thebibliography}{}
+
+\bibitem[Boyer and Moore(1977)Boyer and Moore]{BM77}
+Boyer, R.~S. and Moore, J.~S. (1977).
+\newblock A fast string searching algorithm.
+\newblock {\em Commun. ACM\/}, {\bf 20}(10), 762--772.
+
+\bibitem[Dohm {\em et~al.}(2008)Dohm, Lottaz, Borodina, and Himmelbauer]{Doh08}
+Dohm, J.~C., Lottaz, C., Borodina, T., and Himmelbauer, H. (2008).
+\newblock Substantial biases in ultra-short read data sets from high-throughput
+  dna sequencing.
+\newblock {\em Nucleic acids research\/}, {\bf 36}(16), e105--e105.
+
+\bibitem[Eid {\em et~al.}(2009)Eid, Fehr, Gray, Luong, Lyle, Otto, Peluso,
+  Rank, Baybayan, Bettman, {\em et~al.}]{Eid09}
+Eid, J., Fehr, A., Gray, J., Luong, K., Lyle, J., Otto, G., Peluso, P., Rank,
+  D., Baybayan, P., Bettman, B., {\em et~al.} (2009).
+\newblock Real-time dna sequencing from single polymerase molecules.
+\newblock {\em Science\/}, {\bf 323}(5910), 133--138.
+
+\bibitem[Levenshtein(1965)Levenshtein]{Lev65}
+Levenshtein, V.~I. (1965).
+\newblock {Binary codes capable of correcting spurious insertions and deletions
+  of ones}.
+\newblock {\em Problems of Information Transmission\/}, pages 1:8--17.
+
+\bibitem[Margulies {\em et~al.}(2005)Margulies, Egholm, Altman, Attiya, Bader,
+  Bemben, Berka, Braverman, Chen, Chen, {\em et~al.}]{Mar05}
+Margulies, M., Egholm, M., Altman, W.~E., Attiya, S., Bader, J.~S., Bemben,
+  L.~A., Berka, J., Braverman, M.~S., Chen, Y.-J., Chen, Z., {\em et~al.}
+  (2005).
+\newblock Genome sequencing in microfabricated high-density picolitre reactors.
+\newblock {\em Nature\/}, {\bf 437}(7057), 376--380.
+
+\bibitem[Navarro(2001)Navarro]{Nav01}
+Navarro, G. (2001).
+\newblock Nr-grep: a fast and flexible pattern-matching tool.
+\newblock {\em Software: Practice and Experience\/}, {\bf 31}(13), 1265--1312.
+
+\bibitem[Needleman and Wunsch(1970)Needleman and Wunsch]{NW70}
+Needleman, S.~B. and Wunsch, C.~D. (1970).
+\newblock A general method applicable to the search for similarities in the
+  amino acid sequence of two proteins.
+\newblock {\em Journal of Molecular Biology\/}, {\bf 48}(3), 443 -- 453.
+
+\bibitem[Wu and Manber(1992)Wu and Manber]{Wu92}
+Wu, S. and Manber, U. (1992).
+\newblock Agrep--a fast approximate pattern-matching tool.
+\newblock {\em Usenix Winter 1992\/}, pages 153--162.
+
+\end{thebibliography}
