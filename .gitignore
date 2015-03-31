@@ -11,3 +11,4 @@ test/benchmark.txt
 lib/*
 build/*
 tmp/*
+results/*
