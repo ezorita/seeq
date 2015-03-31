@@ -362,7 +362,7 @@ main
    args.endline   = endline_flag * maskinv;
    args.prefix    = prefix_flag * maskinv;
    args.invert    = invert_flag * maskcnt;
-   args.best      = best_flag;
+   args.best      = best_flag * maskinv;
 
    return seeq(expr, input, args);
 }

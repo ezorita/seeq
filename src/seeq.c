@@ -110,7 +110,9 @@ seeq
       int retval;
       while ((retval = seeqFileMatch(sqfile, sq, match_options)) > 0) {
          if (args.compact) fprintf(stdout, "%ld:%d-%d:%d",sq->match.line, sq->match.start, sq->match.end-1, sq->match.dist);
-         else {
+         else if (args.invert) {
+            fprintf(stdout, "%s", sq->match.string);
+         } else {
             if (args.showline) fprintf(stdout, "%ld ", sq->match.line);
             if (args.showpos)  fprintf(stdout, "%d-%d ", sq->match.start, sq->match.end-1);
             if (args.showdist) fprintf(stdout, "%d ", sq->match.dist);
