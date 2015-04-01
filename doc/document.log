@@ -1,11 +1,11 @@
-This is pdfTeX, Version 3.1415926-2.5-1.40.14 (TeX Live 2013/Debian) (format=pdflatex 2015.3.17)  1 APR 2015 17:28
+This is pdfTeX, Version 3.1415926-2.5-1.40.14 (TeX Live 2013/Debian) (format=pdflatex 2014.4.27)  1 APR 2015 17:58
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
-**document
+**document.tex
 (./document.tex
 LaTeX2e <2011/06/27>
-Babel <3.9h> and hyphenation patterns for 2 languages loaded.
+Babel <3.9h> and hyphenation patterns for 78 languages loaded.
 (./bioinfo.cls
 Document Class: bioinfo 2003/02/08 0.1
 (/usr/share/texlive/texmf-dist/tex/latex/base/inputenc.sty
@@ -361,24 +361,13 @@ LaTeX Font Info:    Font shape `OT1/phv/bx/n' in size <8> not available
 (Font)              Font shape `OT1/phv/b/n' tried instead on input line 23.
 LaTeX Font Info:    Font shape `OT1/phv/bx/n' in size <10> not available
 (Font)              Font shape `OT1/phv/b/n' tried instead on input line 50.
-<Figure_1.pdf, id=1, 275.0275pt x 356.33125pt>
+<Figure_1.pdf, id=1, 275.0275pt x 372.39125pt>
 File: Figure_1.pdf Graphic file (type pdf)
  <use Figure_1.pdf>
 Package pdftex.def Info: Figure_1.pdf used on input line 110.
-(pdftex.def)             Requested size: 165.01776pt x 213.80038pt.
+(pdftex.def)             Requested size: 165.01776pt x 223.43646pt.
 LaTeX Font Info:    Font shape `OT1/ptm/bx/n' in size <8> not available
-(Font)              Font shape `OT1/ptm/b/n' tried instead on input line 114.
-
-Underfull \hbox (badness 4819) in paragraph at lines 114--114
-[]\OT1/ptm/b/n/8 Fig. 1. \OT1/ptm/m/n/8 Dynamic DFA construction process for T=
-'TGTGCA' and
- []
-
-
-Underfull \hbox (badness 1642) in paragraph at lines 114--114
-\OT1/ptm/m/n/8 P='GCAC'. a) Dynamic programming matrix of the alignment. The
- []
-
+(Font)              Font shape `OT1/ptm/b/n' tried instead on input line 115.
 
 Underfull \vbox (badness 10000) has occurred while \output is active []
 
@@ -415,21 +404,111 @@ Package pdftex.def Info: results.pdf used on input line 155.
 LaTeX Font Warning: Font shape `OT1/cmr/bx/n' in size <6.5> not available
 (Font)              size <6> substituted on input line 164.
 
+
+Underfull \hbox (badness 2903) in paragraph at lines 193--196
+ \OT1/ptm/m/it/9 Funding[][] \OT1/ptm/m/n/9 The research leading to these resul
+ts has received
+ []
+
 (./document.bbl
 LaTeX Font Info:    Font shape `OT1/ptm/bx/n' in size <7> not available
 (Font)              Font shape `OT1/ptm/b/n' tried instead on input line 6.
 )
-Extra height:0.0pt when 629.70134pt
-(2)Left:629.70134pt Right:622.87036pt Output:629.70134pt
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+Extra height:20.51544pt when 633.01938pt
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+Extra height:20.51544pt when 634.01938pt
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+Extra height:20.51544pt when 635.01938pt
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+Extra height:20.51544pt when 636.01938pt
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+Extra height:20.51544pt when 637.01938pt
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+Extra height:20.51544pt when 638.01938pt
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+Extra height:20.51544pt when 639.01938pt
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+Extra height:20.51544pt when 640.01938pt
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+Extra height:20.51544pt when 641.01938pt
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+Extra height:20.51544pt when 642.01938pt
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+Extra height:20.51544pt when 643.01938pt
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+Extra height:20.51544pt when 644.01938pt
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+Extra height:20.51544pt when 645.01938pt
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+Extra height:20.51544pt when 646.01938pt
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+Extra height:20.51544pt when 647.01938pt
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+Extra height:20.51544pt when 648.01938pt
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+Extra height:20.51544pt when 649.01938pt
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+Extra height:20.51544pt when 650.01938pt
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+Extra height:0.0pt when 651.01938pt
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+(2)Left:651.01938pt Right:655.87036pt Output:651.01938pt
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+(2)Left:655.87036pt Right:655.87036pt Output:655.87036pt
 - LAST -
 Extra skip:0.0pt
-Left:629.70134pt
-Right:622.87036pt
-Output:629.70134pt
+Left:655.87036pt
+Right:655.87036pt
+Output:655.87036pt
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
 LaTeX Font Info:    Font shape `OT1/phv/bx/it' in size <8> not available
-(Font)              Font shape `OT1/phv/b/it' tried instead on input line 206.
+(Font)              Font shape `OT1/phv/b/it' tried instead on input line 209.
 LaTeX Font Info:    Font shape `OT1/phv/b/it' in size <8> not available
-(Font)              Font shape `OT1/phv/b/sl' tried instead on input line 206.
+(Font)              Font shape `OT1/phv/b/sl' tried instead on input line 209.
 
 Overfull \hbox (261.0pt too wide) has occurred while \output is active
 [][] 
@@ -450,13 +529,13 @@ LaTeX Font Warning: Size substitutions with differences
 
  ) 
 Here is how much of TeX's memory you used:
- 3287 strings out of 495028
- 41615 string characters out of 6181497
- 116687 words of memory out of 5000000
- 6394 multiletter control sequences out of 15000+600000
+ 3286 strings out of 493304
+ 41608 string characters out of 6139871
+ 120846 words of memory out of 5000000
+ 6642 multiletter control sequences out of 15000+600000
  50256 words of font info for 105 fonts, out of 8000000 for 9000
- 18 hyphenation exceptions out of 8191
- 38i,11n,28p,337b,329s stack positions out of 5000i,500n,10000p,200000b,80000s
+ 961 hyphenation exceptions out of 8191
+ 38i,11n,28p,381b,329s stack positions out of 5000i,500n,10000p,200000b,80000s
 {/usr/share/texlive/texmf-dist/fonts/enc/dvips/base/8r.enc}</usr/share/texliv
 e/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx8.pfb></usr/share/texlive/texmf
 -dist/fonts/type1/public/amsfonts/cm/cmmi6.pfb></usr/share/texlive/texmf-dist/f
@@ -476,7 +555,7 @@ etic/uhvr8a.pfb></usr/share/texlive/texmf-dist/fonts/type1/urw/helvetic/uhvro8a
 .pfb></usr/share/texlive/texmf-dist/fonts/type1/urw/times/utmb8a.pfb></usr/shar
 e/texlive/texmf-dist/fonts/type1/urw/times/utmr8a.pfb></usr/share/texlive/texmf
 -dist/fonts/type1/urw/times/utmri8a.pfb>
-Output written on document.pdf (2 pages, 449929 bytes).
+Output written on document.pdf (2 pages, 448683 bytes).
 PDF statistics:
  125 PDF objects out of 1000 (max. 8388607)
  82 compressed objects within 1 object stream

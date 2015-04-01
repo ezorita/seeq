@@ -68,7 +68,7 @@ search strategy requires more comparisons to identify a non-matching
 condition. The drop in performance is even more accute when the alphabet
 is as small as in the case of DNA sequences.
 
-Illumina reads typically have a 1-2\% error rate \citep{Mar05},
+Illumina reads typically have a 1-2\% error rate,
 mainly consisting of substitutions \citep{Doh08}, which are ideal
 conditions for the Boyer-Moore algorithm. However, third generation
 sequencing technologies such as the PacBio platform now come of age.
@@ -108,13 +108,14 @@ can take only 3 values).
 
 \begin{figure}[!tpb]
 \centerline{\includegraphics[scale=0.6]{Figure_1.pdf}}
-\caption{Dynamic DFA construction process for T='TGTGCA' and P='GCAC'.
-a) Dynamic programming matrix of the alignment. The differential code
-of each column is shown inside the semicircles. b) State of the DFA at
+\caption{Dynamic DFA construction process. In this example, the search
+text is TGTGCA and the pattern is GCAC.
+A) Dynamic programming matrix of the alignment. The differential code
+of each column is shown inside the semicircles. B) State of the DFA at
 the end of the alignment.}\label{matrix}
 \end{figure}
 
-The DFA construction process is illustrated in Figure. \ref{matrix}. The
+The DFA construction process is illustrated in Figure \ref{matrix}. The
 dynamic programming algorithm starts at the DFA state
 $S = S_0$. For any input character $T_j$, being $S$
 the active DFA state, the algorithm recursively proceeds as follows:
@@ -131,9 +132,8 @@ path labeled $T_j$ and set $S = S_j$.
 \end{enumerate}
 
 After several steps, the graph of the DFA is densely connected and
-the steps of state and edge creation are almost never performed. 
-The complexity of the algorithm is then reduced to direct DFA state
-transitions.
+case 2 almost never occurs. The complexity of the algorithm is then
+reduced to direct DFA state transitions.
 
 \end{methods}
 
@@ -161,7 +161,7 @@ edit distance. Note the logarithmic scale on the y axis.}
 
 
 The running time of each execution is plotted against the relative
-error tolerace ($k/m$) on figure \ref{fig:results}. For low error
+error tolerace ($k/m$) on Figure \ref{fig:results}. For low error
 rates, both agrep and nr-grep perform better than seeq, with a maximum
 5-fold advantage when $k=1$ and $m > 25$. On the other hand, seeq is
 up to two orders of magnitude faster than nr-grep and one order of
@@ -182,7 +182,7 @@ problems.
 
 In practice, most pattern searches in DNA reads are performed from
 scripts and pipelines. To ease the use of seeq in existing software,
-we have ensured that it is comliant with Linux pipes. Also, we have
+we have ensured that it is compliant with Linux pipes. Also, we have
 created a Python module that can be imported and integrated seamlessly,
 as it can be called on Python string objects that can be further
 manipulated. We also provide an API in C for the cases that optimal
@@ -190,6 +190,9 @@ performance is required.
 
 
 \paragraph{Funding\textcolon}
+The research leading to these results has received funding from the
+European Research Council under the European Union's Seventh Framework
+Programme (FP7/2007-2013) / ERC SYNERGY n$^\circ$ 609989.
 
 
 \bibliographystyle{natbib}

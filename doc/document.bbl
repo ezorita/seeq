@@ -24,14 +24,6 @@ Levenshtein, V.~I. (1965).
   of ones}.
 \newblock {\em Problems of Information Transmission\/}, pages 1:8--17.
 
-\bibitem[Margulies {\em et~al.}(2005)Margulies, Egholm, Altman, Attiya, Bader,
-  Bemben, Berka, Braverman, Chen, Chen, {\em et~al.}]{Mar05}
-Margulies, M., Egholm, M., Altman, W.~E., Attiya, S., Bader, J.~S., Bemben,
-  L.~A., Berka, J., Braverman, M.~S., Chen, Y.-J., Chen, Z., {\em et~al.}
-  (2005).
-\newblock Genome sequencing in microfabricated high-density picolitre reactors.
-\newblock {\em Nature\/}, {\bf 437}(7057), 376--380.
-
 \bibitem[Navarro(2001)Navarro]{Nav01}
 Navarro, G. (2001).
 \newblock Nr-grep: a fast and flexible pattern-matching tool.
