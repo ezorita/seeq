@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.1415926-2.5-1.40.14 (TeX Live 2013/Debian) (format=pdflatex 2015.3.17)  31 MAR 2015 16:16
+This is pdfTeX, Version 3.1415926-2.5-1.40.14 (TeX Live 2013/Debian) (format=pdflatex 2015.3.17)  1 APR 2015 17:28
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -359,82 +359,77 @@ Underfull \hbox (badness 10000) detected at line 19
 
 LaTeX Font Info:    Font shape `OT1/phv/bx/n' in size <8> not available
 (Font)              Font shape `OT1/phv/b/n' tried instead on input line 23.
-
-Underfull \hbox (badness 3260) in paragraph at lines 23--38
-\OT1/phv/m/n/8 at the positions where operations such as adaptor removal,
- []
-
 LaTeX Font Info:    Font shape `OT1/phv/bx/n' in size <10> not available
-(Font)              Font shape `OT1/phv/b/n' tried instead on input line 52.
+(Font)              Font shape `OT1/phv/b/n' tried instead on input line 50.
+<Figure_1.pdf, id=1, 275.0275pt x 356.33125pt>
+File: Figure_1.pdf Graphic file (type pdf)
+ <use Figure_1.pdf>
+Package pdftex.def Info: Figure_1.pdf used on input line 110.
+(pdftex.def)             Requested size: 165.01776pt x 213.80038pt.
+LaTeX Font Info:    Font shape `OT1/ptm/bx/n' in size <8> not available
+(Font)              Font shape `OT1/ptm/b/n' tried instead on input line 114.
 
-Underfull \hbox (badness 1194) in paragraph at lines 54--78
-\OT1/ptm/m/n/9 to search patterns on long strings allowing differences. Such
+Underfull \hbox (badness 4819) in paragraph at lines 114--114
+[]\OT1/ptm/b/n/8 Fig. 1. \OT1/ptm/m/n/8 Dynamic DFA construction process for T=
+'TGTGCA' and
  []
 
 
-Underfull \hbox (badness 1810) in paragraph at lines 94--100
-[]\OT1/ptm/m/n/9 In this article we present \OT1/ptm/m/it/9 seeq\OT1/ptm/m/n/9 
-, an algorithm based on a
+Underfull \hbox (badness 1642) in paragraph at lines 114--114
+\OT1/ptm/m/n/8 P='GCAC'. a) Dynamic programming matrix of the alignment. The
  []
 
 
-Underfull \hbox (badness 4531) in paragraph at lines 104--120
-\OT1/ptm/m/n/8 The algorithm proposed is the DFA representation of a dynamic
- []
+Underfull \vbox (badness 10000) has occurred while \output is active []
 
-LaTeX Font Info:    Try loading font information for OMS+phv on input line 120.
+LaTeX Font Info:    Try loading font information for OMS+phv on input line 139.
+
 
 (/usr/share/texlive/texmf-dist/tex/latex/psnfss/omsphv.fd
 File: omsphv.fd 
 )
 LaTeX Font Info:    Font shape `OMS/phv/m/n' in size <7> not available
-(Font)              Font shape `OMS/cmsy/m/n' tried instead on input line 120.
+(Font)              Font shape `OMS/cmsy/m/n' tried instead on input line 139.
  [1
 
 {/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}
 
 
 ]
-LaTeX Font Info:    Try loading font information for OMS+ptm on input line 128.
-
-
-(/usr/share/texlive/texmf-dist/tex/latex/psnfss/omsptm.fd
-File: omsptm.fd 
-)
-LaTeX Font Info:    Font shape `OMS/ptm/m/n' in size <8> not available
-(Font)              Font shape `OMS/cmsy/m/n' tried instead on input line 128.
-LaTeX Font Info:    Font shape `OT1/ptm/bx/n' in size <8> not available
-(Font)              Font shape `OT1/ptm/b/n' tried instead on input line 135.
-
-
-LaTeX Font Warning: Font shape `OT1/cmr/bx/n' in size <6.5> not available
-(Font)              size <6> substituted on input line 143.
-
-
-Underfull \hbox (badness 1360) in paragraph at lines 161--172
+Underfull \hbox (badness 1360) in paragraph at lines 142--153
 \OT1/ptm/m/n/9 matching algorithms: agrep (Wu and Manber, 1992) and nr-
  []
 
-<results.pdf, id=25, 505.89pt x 361.35pt>
+
+Underfull \hbox (badness 1831) in paragraph at lines 142--153
+\OT1/ptm/m/n/9 grep (Navarro, 2001). We used two sequencing datasets for
+ []
+
+<results.pdf, id=26, 505.89pt x 361.35pt>
 File: results.pdf Graphic file (type pdf)
  <use results.pdf>
-Package pdftex.def Info: results.pdf used on input line 187.
+Package pdftex.def Info: results.pdf used on input line 155.
 (pdftex.def)             Requested size: 252.94437pt x 180.67456pt.
- (./document.bbl
+
+
+LaTeX Font Warning: Font shape `OT1/cmr/bx/n' in size <6.5> not available
+(Font)              size <6> substituted on input line 164.
+
+(./document.bbl
 LaTeX Font Info:    Font shape `OT1/ptm/bx/n' in size <7> not available
 (Font)              Font shape `OT1/ptm/b/n' tried instead on input line 6.
 )
-Extra height:0.0pt when 597.00513pt
-(2)Left:597.00513pt Right:594.87036pt Output:597.00513pt
+Extra height:0.0pt when 629.70134pt
+(2)Left:629.70134pt Right:622.87036pt Output:629.70134pt
 - LAST -
 Extra skip:0.0pt
-Left:597.00513pt
-Right:594.87036pt
-Output:597.00513pt
+Left:629.70134pt
+Right:622.87036pt
+Output:629.70134pt
 LaTeX Font Info:    Font shape `OT1/phv/bx/it' in size <8> not available
-(Font)              Font shape `OT1/phv/b/it' tried instead on input line 219.
+(Font)              Font shape `OT1/phv/b/it' tried instead on input line 206.
 LaTeX Font Info:    Font shape `OT1/phv/b/it' in size <8> not available
-(Font)              Font shape `OT1/phv/b/sl' tried instead on input line 219.
+(Font)              Font shape `OT1/phv/b/sl' tried instead on input line 206.
 
 Overfull \hbox (261.0pt too wide) has occurred while \output is active
 [][] 
@@ -448,20 +443,20 @@ Overfull \hbox (261.0pt too wide) has occurred while \output is active
 [][] 
  []
 
-[2 <./results.pdf>] (./document.aux)
+[2 <./Figure_1.pdf> <./results.pdf>] (./document.aux)
 
 LaTeX Font Warning: Size substitutions with differences
 (Font)              up to 1.0pt have occurred.
 
  ) 
 Here is how much of TeX's memory you used:
- 3296 strings out of 495028
- 41795 string characters out of 6181497
- 122687 words of memory out of 5000000
- 6402 multiletter control sequences out of 15000+600000
- 48572 words of font info for 103 fonts, out of 8000000 for 9000
+ 3287 strings out of 495028
+ 41615 string characters out of 6181497
+ 116687 words of memory out of 5000000
+ 6394 multiletter control sequences out of 15000+600000
+ 50256 words of font info for 105 fonts, out of 8000000 for 9000
  18 hyphenation exceptions out of 8191
- 38i,11n,28p,452b,327s stack positions out of 5000i,500n,10000p,200000b,80000s
+ 38i,11n,28p,337b,329s stack positions out of 5000i,500n,10000p,200000b,80000s
 {/usr/share/texlive/texmf-dist/fonts/enc/dvips/base/8r.enc}</usr/share/texliv
 e/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx8.pfb></usr/share/texlive/texmf
 -dist/fonts/type1/public/amsfonts/cm/cmmi6.pfb></usr/share/texlive/texmf-dist/f
@@ -481,10 +476,10 @@ etic/uhvr8a.pfb></usr/share/texlive/texmf-dist/fonts/type1/urw/helvetic/uhvro8a
 .pfb></usr/share/texlive/texmf-dist/fonts/type1/urw/times/utmb8a.pfb></usr/shar
 e/texlive/texmf-dist/fonts/type1/urw/times/utmr8a.pfb></usr/share/texlive/texmf
 -dist/fonts/type1/urw/times/utmri8a.pfb>
-Output written on document.pdf (2 pages, 205791 bytes).
+Output written on document.pdf (2 pages, 449929 bytes).
 PDF statistics:
- 100 PDF objects out of 1000 (max. 8388607)
- 73 compressed objects within 1 object stream
+ 125 PDF objects out of 1000 (max. 8388607)
+ 82 compressed objects within 1 object stream
  0 named destinations out of 1000 (max. 500000)
- 6 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 11 words of extra memory for PDF output out of 10000 (max. 10000000)
 

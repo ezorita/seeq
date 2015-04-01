@@ -34,8 +34,8 @@ higher error rates. In this scenario, both the pattern length and the
 relative error tolerance have to be dramatically increased.
 \section{Results:}
 Here we present seeq, an algorithm for pattern matching with errors.
-Seeq is optimized for DNA sequences and shows very little increase in
-running time as error tolerance increases. We benchmark seeq against
+Seeq is optimized for DNA sequences and shows very little variance in
+running time with different configurations. We benchmark seeq against
 the most widely used algorithms for inexact pattern matching. The
 results show that seeq scales better and becomes significantly faster
 as the error rate increases.
@@ -52,7 +52,7 @@ for download at
 Inexact string matching dates back to the origin of computer sciences
 \citep{Lev65}. The first algorithms addressing this problem were based
 on dynamic programming \citep{NW70}. They are still widely used to
-align biological sequences due to their simplicity and flexibility,
+align biological sequences due to their simplicity and flexibility.
 More sophisticated algorithms derived from the Boyer-Moore search
 method \citep{BM77} were later designed to search patterns on long
 strings allowing errors. Such algorithms are faster than the dynamic
@@ -61,7 +61,7 @@ distances. Instead, the pattern is pre-processed to design a search
 strategy which skips parts of the text that do not contain any
 match. The jumping strategy is very efficient for perfect matches or
 small edit distances because non-matching conditions can be inferred
-with only a few comparisons. In those conditions, the number of
+with only a few comparisons. In such conditions, the number of
 operations per input character is small because large areas of the
 text are never processed. However, when the error rate is high, the
 search strategy requires more comparisons to identify a non-matching
@@ -83,10 +83,9 @@ large edit distances.
 Here we present \emph{seeq}, an algorithm using a dynamic version of
 deterministic finite automata (DFA). Instead of using standard
 construction procedures, the dynamic DFA of seeq is built as the input
-text is processed. We benchmark seeq against other widely used inexact
-string matching software. The results show that seeq scales better and
-becomes significantly faster as the error rate increases.
-
+text is processed. We benchmark seeq against other inexact string
+matching software. The results show that seeq scales better and
+becomes significantly faster as the error rate increases. 
 \begin{methods}
 \section{Methods}
 
@@ -108,22 +107,27 @@ so that the state can be stored in a ternary trie ($\mathbf{s}(i)$
 can take only 3 values).
 
 \begin{figure}[!tpb]
-%\centerline{\includegraphics[scale=0.5]{fig_methods.pdf}}
-\caption{}\label{matrix}
+\centerline{\includegraphics[scale=0.6]{Figure_1.pdf}}
+\caption{Dynamic DFA construction process for T='TGTGCA' and P='GCAC'.
+a) Dynamic programming matrix of the alignment. The differential code
+of each column is shown inside the semicircles. b) State of the DFA at
+the end of the alignment.}\label{matrix}
 \end{figure}
 
-The DFA construction process is illustrated in Figure. X. The
+The DFA construction process is illustrated in Figure. \ref{matrix}. The
 dynamic programming algorithm starts at the DFA state
 $S = S_0$. For any input character $T_j$, being $S$
 the active DFA state, the algorithm recursively proceeds as follows:
 \begin{enumerate}
 \item If $S$ has an outgoing path (to $S_q$) with
 label $T_j$, then set $S = S_q$.
-\item Otherwise, compute the column of the edit matrix corresponding
-to $f(S, T_j)$. Case 2a: if this state already exists ($S_q$), connect
-$S$ to it with a path labeled $T_j$ and set $S = S_q$. Case 2b: if
-the state does not exist, create it, and do as in in the previous
-case 2a.
+\item Otherwise, revert $\mathbf{c}$ from $\mathbf{s}$ and compute
+the $j$-th column of the edit matrix as $\mathbf{c}_j = f(\mathbf{c}, T_j)$ and
+its diferential code $\mathbf{s}_j$. Then: a) If $\mathbf{s}_j$
+represents an existing state ($S_q$), connect $S$ to it with a path
+labeled $T_j$ and set $S = S_q$. b) If none of the states is
+represented by $\mathbf{s}_j$, create $S_j$, connect $S$ to it with a
+path labeled $T_j$ and set $S = S_j$.
 \end{enumerate}
 
 After several steps, the graph of the DFA is densely connected and
@@ -144,7 +148,17 @@ are 50 nucleotides long, from which the first 30 nucleotides are constant
 and the last 20 are random (barcodes). The software were set to match
 random patterns ranging from 5 to 50 nucleotides with a random error
 tolerance up to 40\%. Importantly, agrep limits the number of differences
-to 8, which is a serious limitation and makes the comparison fair only between seeq and nr-grep.
+to 8, which is a serious limitation and makes the comparison fair only
+between seeq and nr-grep.
+
+\begin{figure}[!tpb]
+\centerline{\includegraphics[scale=0.5]{results.pdf}}
+\caption{Benchmark between seeq, agrep and nr-grep. Each dot represents
+the running time of one search with a random pattern and a random
+edit distance. Note the logarithmic scale on the y axis.}
+\label{fig:results}
+\end{figure}
+
 
 The running time of each execution is plotted against the relative
 error tolerace ($k/m$) on figure \ref{fig:results}. For low error
@@ -155,14 +169,6 @@ magnitude faster than agrep for $k/m > 0.15$. The similarity between
 the two datasets indicates that neither software is favored when the
 data has a repetitive structure. Also note that seeq 
 achieves near-constant running time.
-
-\begin{figure}[!tpb]
-\centerline{\includegraphics[scale=0.5]{results.pdf}}
-\caption{Benchmark between seeq, agrep and nr-grep. Each dot represents
-the running time of one search with a random pattern and a random
-edit distance. Note the logarithmic scale on the y axis.}
-\label{fig:results}
-\end{figure}
 
 \section{Conclusion}
 
@@ -179,7 +185,7 @@ scripts and pipelines. To ease the use of seeq in existing software,
 we have ensured that it is comliant with Linux pipes. Also, we have
 created a Python module that can be imported and integrated seamlessly,
 as it can be called on Python string objects that can be further
-manipulated. We also provide a API in C for the cases that optimal
+manipulated. We also provide an API in C for the cases that optimal
 performance is required.
 
 
