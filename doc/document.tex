@@ -94,7 +94,7 @@ We search the occurrences of the pattern $P$ of length $m$
 in a text $T$ of length $n$, with up to $k$ differences.
 The edit matrix $\mathbf{C} \in \mathbb{N}^{m\times n}$ is initialized
 with $\mathbf{C}(0,j)=0$ and $\mathbf{C}(i,0) = i$, and then updated
-column-wise with the Needleman-Wunsch recusrion. Note that this process
+column-wise with the Needleman-Wunsch recursion. Note that this process
 can be represented as $\mathbf{c}_j=f(\mathbf{c}_{j-1},T_j)$,
 \textit{i.e.} the value of the $j$-th column $\mathbf{c}_{j}$ is a
 deterministic transition that only depends on $\mathbf{c}_{j-1}$ and the
@@ -107,7 +107,7 @@ so that the state can be stored in a ternary trie ($\mathbf{s}(i)$
 can take only 3 values).
 
 \begin{figure}[!tpb]
-\centerline{\includegraphics[scale=0.6]{Figure_1.pdf}}
+\centerline{\includegraphics[scale=0.6]{Figure_1.eps}}
 \caption{Dynamic DFA construction process. In this example, the search
 text is TGTGCA and the pattern is GCAC.
 A) Dynamic programming matrix of the alignment. The differential code
@@ -152,7 +152,7 @@ to 8, which is a serious limitation and makes the comparison fair only
 between seeq and nr-grep.
 
 \begin{figure}[!tpb]
-\centerline{\includegraphics[scale=0.5]{results.pdf}}
+\centerline{\includegraphics[scale=0.5]{results.eps}}
 \caption{Benchmark between seeq, agrep and nr-grep. Each dot represents
 the running time of one search with a random pattern and a random
 edit distance. Note the logarithmic scale on the y axis.}
