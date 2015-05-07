@@ -13,7 +13,5 @@ setup (name = 'seeq',
        author = 'Eduard V. Zorita',
        author_email = 'eduardvalera@gmail.com',
        url = 'https://docs.python.org/extending/building',
-       long_description = '''
-Seeq library for Python
-''',
+       long_description = 'Seeq library for Python\n',
        ext_modules = [module1])

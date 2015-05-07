@@ -61,8 +61,8 @@ seeqNew
 //
 // SIDE EFFECTS:
 //   The returned seeq_t structure must be freed using 'seeqFree'.
-
 {
+
    // Check parameters.
    if (mismatches < 0) {
       seeqerr = 1;
@@ -921,6 +921,7 @@ dfa_newstate
 //   The dfa may be reallocated, so the content of *dfap may be different
 //   at the end of the funcion.
 {
+
    // Set error to 0.
    seeqerr = 0;
 
