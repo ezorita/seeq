@@ -17,6 +17,7 @@ struct seeqarg_t {
    int prefix;
    int invert;
    int best;
+   int skip;
 };
 
 int  seeq (char * expression, char * input, struct seeqarg_t args);

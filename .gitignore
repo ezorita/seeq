@@ -6,6 +6,7 @@
 *.gcov
 *\#*
 seeq
+seeq-dev
 test/testset
 test/benchmark.txt
 lib/*

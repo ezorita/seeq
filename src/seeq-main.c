@@ -46,11 +46,12 @@ static const char *USAGE = "Usage:"
 "    -n --no-printline    does not print the matching line\n"
 "    -l --lines           prints the original line number of the match\n"
 "    -p --positions       prints the position of the match within the matched line\n"
-"    -s --print-dist      prints the Levenshtein distance wrt the pattern\n"
+"    -k --print-dist      prints the Levenshtein distance wrt the pattern\n"
 "    -f --compact         prints output in compact format (line:pos:dist)\n"
 "    -e --end             print only the end of the line, starting after the match\n"
 "    -r --prefix          print only the prefix, ending before the match\n"
-"    -b --best            scan the whole line to find the best match (default: first match only)\n";
+"    -b --best            scan the whole line to find the best match (default: first match only)\n"
+"    -s --skip            skip lines containing non-DNA characters\n";
 
 void say_usage(void) { fprintf(stderr, "%s\n", USAGE); }
 void say_version(void) { fprintf(stderr, SEEQ_VERSION "\n"); }
@@ -94,6 +95,7 @@ main
    int endline_flag   = -1;
    int prefix_flag    = -1;
    int best_flag      = -1;
+   int skip_flag      = -1;
 
    // Unset options (value 'UNSET').
    input = NULL;
@@ -111,7 +113,8 @@ main
          {"positions",     no_argument, 0, 'p'},
          {"match-only",    no_argument, 0, 'm'},
          {"no-printline",  no_argument, 0, 'n'},
-         {"print-dist",    no_argument, 0, 's'},
+         {"print-dist",    no_argument, 0, 'k'},
+         {"skip",          no_argument, 0, 's'},
          {"lines",         no_argument, 0, 'l'},
          {"count",         no_argument, 0, 'c'},
          {"invert",        no_argument, 0, 'i'},
@@ -126,7 +129,7 @@ main
          {0, 0, 0, 0}
       };
 
-      c = getopt_long(argc, argv, "pmnislczfvherbd:",
+      c = getopt_long(argc, argv, "pmnislczfvkherbd:",
             long_options, &option_index);
  
       /* Detect the end of the options. */
@@ -179,6 +182,19 @@ main
             return EXIT_FAILURE;
          }
          break;
+
+      case 's':
+         if (skip_flag < 0) {
+            skip_flag = 1;
+         }
+         else {
+            say_version();
+            fprintf(stderr, "error: 'skip' option set more than once.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         break;
+
 
       case 'b':
          if (best_flag < 0) {
@@ -241,7 +257,7 @@ main
          }
          break;
 
-      case 's':
+      case 'k':
          if (showdist_flag < 0) {
             showdist_flag = 1;
          }
@@ -342,6 +358,7 @@ main
    if (endline_flag == -1) endline_flag = 0;
    if (prefix_flag == -1) prefix_flag = 0;
    if (best_flag == -1) best_flag = 0;
+   if (skip_flag == -1) skip_flag = 0;
    if (printline_flag == -1) printline_flag = (!matchonly_flag && !endline_flag && !prefix_flag);
 
    if (!showdist_flag && !showpos_flag && !printline_flag && !matchonly_flag && !showline_flag && !count_flag && !compact_flag && !prefix_flag && !endline_flag) {
@@ -369,7 +386,7 @@ main
    args.prefix    = prefix_flag * maskinv;
    args.invert    = invert_flag * maskcnt;
    args.best      = best_flag * maskinv;
-
+   args.skip      = skip_flag;
    return seeq(expr, input, args);
 }
 

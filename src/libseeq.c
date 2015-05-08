@@ -340,6 +340,11 @@ seeqStringMatch
 //             * SQ_FIRST: searches the line until the first match.
 //             * SQ_BEST: searches the whole line to find the best match, i.e. the one with
 //               minimum matching distance. In case of many best matches, the first is returned.
+//
+//             * SQ_ILLEGAL_STOP: stops searching the current line if an illegal character is
+//               found (allowed characters are 'a','A','c','C','g','G','t','T','u','U','n','N',
+//               '\0','\n').
+//             * SQ_ILLEGAL_CONT: illegal characters will be substituted by mismatches ('N').
 //             
 //             If SQ_COUNTLINES or SQ_COUNTMATCH are specified, the other options are ignored.
 //             Also, the match/line count is passed as the return value.
@@ -369,6 +374,9 @@ seeqStringMatch
    // Count replaces all other options.
    int countall   = options & SQ_COUNTMATCH;
    int best_match = options & SQ_BEST;
+   const int * translate;
+   if (options & SQ_CONT) translate = translate_n;
+   else translate = translate_halt;
    if (options & (SQ_COUNTLINES|SQ_COUNTMATCH)) options = 0;
    else if ((options & 0x03) == 0) options = SQ_MATCH | SQ_NOMATCH;
 

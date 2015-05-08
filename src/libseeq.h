@@ -40,6 +40,8 @@
 #define SQ_COUNTMATCH 0x08
 #define SQ_BEST       0x10
 #define SQ_FIRST      0x00
+#define SQ_CONT       0x20
+#define SQ_SKIP       0x00
 
 #include <stdio.h>
 
