@@ -50,11 +50,11 @@ typedef struct match_t    match_t;
 typedef struct seeqfile_t seeqfile_t;
 
 struct match_t {
-   int    start;
-   int    end;
-   int    dist;
-   long   line;
-   char * string;
+   size_t   start;
+   size_t   end;
+   size_t   line;
+   int      dist;
+   char   * string;
 };
 
 struct seeq_t {
@@ -68,22 +68,22 @@ struct seeq_t {
 };
 
 struct seeqfile_t {
-   long    line;
+   size_t  line;
    FILE  * fdi;
 };
 
-seeq_t *    seeqNew         (const char *, int);
-void        seeqFree        (seeq_t *);
-seeqfile_t* seeqOpen        (const char *);
-int         seeqClose       (seeqfile_t *);
-long        seeqFileMatch   (seeqfile_t *, seeq_t *, int);
-long        seeqStringMatch (const char *, seeq_t *, int);
-long        seeqGetLine     (seeq_t *);
-int         seeqGetDistance (seeq_t *);
-int         seeqGetStart    (seeq_t *);
-int         seeqGetEnd      (seeq_t *);
-char      * seeqGetString   (seeq_t *);
-char      * seeqPrintError  (void);
+seeq_t     * seeqNew         (const char *, int);
+void         seeqFree        (seeq_t *);
+seeqfile_t * seeqOpen        (const char *);
+int          seeqClose       (seeqfile_t *);
+long         seeqFileMatch   (seeqfile_t *, seeq_t *, int);
+long         seeqStringMatch (const char *, seeq_t *, int);
+size_t       seeqGetLine     (seeq_t *);
+size_t       seeqGetStart    (seeq_t *);
+size_t       seeqGetEnd      (seeq_t *);
+int          seeqGetDistance (seeq_t *);
+char       * seeqGetString   (seeq_t *);
+const char * seeqPrintError  (void);
 
 #define RESET       "\033[0m"
 #define BOLDRED     "\033[1m\033[31m"      /* Bold Red */

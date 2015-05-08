@@ -30,7 +30,12 @@
 #include <stdio.h>
 #include <getopt.h>
 
-char *USAGE = "Usage:"
+void say_usage(void);
+void say_version(void);
+void say_help(void);
+void SIGSEGV_handler(int) __attribute__ ((noreturn));
+
+static const char *USAGE = "Usage:"
 "  seeq [options] pattern inputfile\n"
 "    -v --version         print version\n"
 "    -z --verbose         verbose using stderr\n"
@@ -47,14 +52,13 @@ char *USAGE = "Usage:"
 "    -r --prefix          print only the prefix, ending before the match\n"
 "    -b --best            scan the whole line to find the best match (default: first match only)\n";
 
-int  seeq (char * expression, char * input, struct seeqarg_t args);
 void say_usage(void) { fprintf(stderr, "%s\n", USAGE); }
 void say_version(void) { fprintf(stderr, SEEQ_VERSION "\n"); }
 void say_help(void) { fprintf(stderr, "use '-h' for help.\n"); }
 
 void SIGSEGV_handler(int sig) {
    void *array[10];
-   size_t size;
+   int size;
 
    // get void*'s for all entries on the stack
    size = backtrace(array, 10);
@@ -301,6 +305,8 @@ main
          say_version();
          say_usage();
          exit(0);
+
+      default:
          break;
       }
    }

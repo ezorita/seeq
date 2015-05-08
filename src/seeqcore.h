@@ -47,57 +47,66 @@ typedef struct edge_t   edge_t;
 typedef struct trie_t   trie_t;
 typedef struct node_t   node_t;
 
-typedef unsigned int uint;
-
 struct node_t {
-   uint child[TRIE_CHILDREN];
-   uint parent;
+   size_t child[TRIE_CHILDREN];
+   size_t parent;
 };
 
 struct trie_t {
-   uint    pos;
-   uint    size;
-   uint    height;
+   size_t  pos;
+   size_t  size;
+   size_t  height;
    node_t  nodes[];
 };
 
 struct edge_t {
-   uint state;
-   int  match;
-   int  min_to_match;
+   size_t       state;
+   int          match;
+   unsigned int min_to_match;
 };
 
 struct vertex_t {
-   uint    node_id;
+   size_t  node_id;
    edge_t  next[NBASES];
 };
 
 struct dfa_t {
-   uint      pos;
-   uint      size;
-   trie_t  * trie;
-   vertex_t  states[];
+   size_t     pos;
+   size_t     size;
+   trie_t   * trie;
+   vertex_t   states[];
 };
 
 
+
+//   [0 ... 255] = 6,
+//   ['a'] = 0, ['c'] = 1, ['g'] = 2, ['t'] = 3, ['u'] = 3, ['n'] = 4, ['\0'] = 5,
+//   ['A'] = 0, ['C'] = 1, ['G'] = 2, ['T'] = 3, ['U'] = 3, ['N'] = 4, ['\n'] = 5
 static const int translate[256] = {
-   [0 ... 255] = 6,
-   ['a'] = 0, ['c'] = 1, ['g'] = 2, ['t'] = 3, ['u'] = 3, ['n'] = 4, ['\0'] = 5,
-   ['A'] = 0, ['C'] = 1, ['G'] = 2, ['T'] = 3, ['U'] = 3, ['N'] = 4, ['\n'] = 5
+   5,6,6,6,6,6,6,6,6,6, 5,6,6,6,6,6,6,6,6,6, 6,6,6,6,6,6,6,6,6,6,
+   6,6,6,6,6,6,6,6,6,6, 6,6,6,6,6,6,6,6,6,6, 6,6,6,6,6,6,6,6,6,6,
+   6,6,6,6,6,0,6,1,6,6, 6,2,6,6,6,6,6,6,4,6, 6,6,6,6,3,3,6,6,6,6,
+   6,6,6,6,6,6,6,0,6,1, 6,6,6,2,6,6,6,6,6,6, 4,6,6,6,6,6,3,3,6,6,
+   6,6,6,6,6,6,6,6,6,6, 6,6,6,6,6,6,6,6,6,6, 6,6,6,6,6,6,6,6,6,6,
+   6,6,6,6,6,6,6,6,6,6, 6,6,6,6,6,6,6,6,6,6, 6,6,6,6,6,6,6,6,6,6,
+   6,6,6,6,6,6,6,6,6,6, 6,6,6,6,6,6,6,6,6,6, 6,6,6,6,6,6,6,6,6,6,
+   6,6,6,6,6,6,6,6,6,6, 6,6,6,6,6,6,6,6,6,6, 6,6,6,6,6,6,6,6,6,6,
+   6,6,6,6,6,6,6,6,6,6, 6,6,6,6,6,6
 };
+
 
 static const char bases[NBASES] = "ACGTN";
 
 int         parse         (const char *, char *);
-dfa_t     * dfa_new       (int, int, int, int);
-uint        dfa_newvertex (dfa_t **, uint);
-int         dfa_newstate  (dfa_t **, char *, uint, uint, int); 
-int         dfa_step      (uint, uint, uint, uint, dfa_t **, char *, edge_t *);
+dfa_t     * dfa_new       (int, int, size_t, size_t);
+size_t      dfa_newvertex (dfa_t **, size_t);
+int         dfa_newstate  (dfa_t **, char *, int, int, size_t); 
+int         dfa_step      (size_t, int, int, int, dfa_t **, char *, edge_t *);
 void        dfa_free      (dfa_t *);
-trie_t    * trie_new      (int, int);
-int         trie_search   (trie_t *, char*, uint*, uint*);
-uint        trie_insert   (trie_t **, char*, uint, uint);
-uint      * trie_getrow   (trie_t *, uint);
+trie_t    * trie_new      (size_t, size_t);
+int         trie_search   (trie_t *, char*, size_t*, size_t*);
+size_t      trie_insert   (trie_t **, char*, size_t, size_t);
+int       * trie_getrow   (trie_t *, size_t);
 void        trie_reset    (trie_t *);
 
 #define RESET       "\033[0m"

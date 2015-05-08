@@ -27,17 +27,17 @@
 
 int seeqerr = 0;
 
-char * seeq_strerror[11] = {   "Check errno",
-                               "Illegal matching distance value",
-                               "Incorrect pattern (double opening brackets)",
-                               "Incorrect pattern (double closing brackets)",
-                               "Incorrect pattern (illegal character)",
-                               "Incorrect pattern (missing closing bracket)",
-                               "Illegal path value passed to 'trie_search'",
-                               "Illegal nodeid passed to 'trie_getrow' (specified node is not a leaf).\n",
-                               "Illegal path value passed to 'trie_insert'",
-                               "Pattern length must be larger than matching distance",
-                               "Passed seeq_t struct does not contain a valid file pointer"};
+static const char * seeq_strerror[11] = {"Check errno",
+                                  "Illegal matching distance value",
+                                  "Incorrect pattern (double opening brackets)",
+                                  "Incorrect pattern (double closing brackets)",
+                                  "Incorrect pattern (illegal character)",
+                                  "Incorrect pattern (missing closing bracket)",
+                                  "Illegal path value passed to 'trie_search'",
+                                  "Illegal nodeid passed to 'trie_getrow' (specified node is not a leaf).\n",
+                                  "Illegal path value passed to 'trie_insert'",
+                                  "Pattern length must be larger than matching distance",
+                                  "Passed seeq_t struct does not contain a valid file pointer"};
 
 seeq_t *
 seeqNew
@@ -122,8 +122,8 @@ seeqNew
    // Initialize match_t struct.
    sq->match.start  = 0;
    sq->match.end    = 0;
-   sq->match.dist   = mismatches + 1;
    sq->match.line   = 0;
+   sq->match.dist   = mismatches + 1;
    sq->match.string = NULL;
 
    return sq;
@@ -151,8 +151,8 @@ seeqFree
    if (sq->match.string != NULL) free(sq->match.string);
    free(sq->keys);
    free(sq->rkeys);
-   free(sq->dfa);
-   free(sq->rdfa);
+   dfa_free(sq->dfa);
+   dfa_free(sq->rdfa);
    free(sq);
 }
 
@@ -227,9 +227,9 @@ seeqClose
 long
 seeqFileMatch
 (
- seeqfile_t* sqfile,
- seeq_t    * sq,
- int         options
+ seeqfile_t * sqfile,
+ seeq_t     * sq,
+ int          options
 )
 // SYNOPSIS:                                                              
 //   Find the next match in the file pointed by 'sqfile', starting from the position where
@@ -282,11 +282,11 @@ seeqFileMatch
    }
 
    // Set structure to non-matched.
-   sq->match.start = sq->match.end = sq->match.line = -1;
+   sq->match.start = sq->match.end = sq->match.line = (size_t)(-1);
    sq->match.dist  = sq->tau + 1;
 
    // Aux vars.
-   long startline = sqfile->line;
+   size_t startline = sqfile->line;
    size_t bufsz = INITIAL_LINE_SIZE;
    ssize_t readsz;
    long count = 0;
@@ -295,10 +295,12 @@ seeqFileMatch
       sqfile->line++;
       // Remove newline.
       char * data = sq->match.string;
-      if (data[readsz-1] == '\n') data[readsz---1] = 0;
+      if (data[readsz-1] == '\n') data[--readsz] = 0;
 
       // Call String Match
-      count += seeqStringMatch(data, sq, options);
+      long rval = seeqStringMatch(data, sq, options);
+      if (rval == -1) return -1;
+      else count += rval;
 
       // Break when match is found.
       if (count > 0 && !(options & SQ_COUNTMATCH) && !(options & SQ_COUNTLINES)) {
@@ -315,9 +317,9 @@ seeqFileMatch
 long
 seeqStringMatch
 (
- const char* data,
- seeq_t    * sq,
- int         options
+ const char * data,
+ seeq_t     * sq,
+ int          options
 )
 // SYNOPSIS:                                                              
 //   Match the pattern of the seeq_t structure in the string 'data'. The matching behavior
@@ -371,18 +373,18 @@ seeqStringMatch
    else if ((options & 0x03) == 0) options = SQ_MATCH | SQ_NOMATCH;
 
    // Set structure to non-matched.
-   sq->match.start = sq->match.end = sq->match.line = -1;
+   sq->match.start = sq->match.end = sq->match.line = (size_t)(-1);
    sq->match.dist  = sq->tau + 1;
 
    // Reset search variables
    int streak_dist = sq->tau+1;
-   int current_node = 0;
-   long count = 0;
    int match = 0;
-   int slen = strlen(data);
+   size_t current_node = 0;
+   size_t slen = strlen(data);
+   long count = 0;
    
    // DFA state.
-   for (unsigned long i = 0; i <= slen; i++) {
+   for (size_t i = 0; i <= slen; i++) {
       // Update DFA.
       int cin = (int)translate[(int)data[i]];
       edge_t next;
@@ -402,9 +404,9 @@ seeqStringMatch
          // to report these lines as non-matches.
          // Alternatively, translate could redirect illegal characters to 'N'.
       }
-      if (cin == 5 || slen - i - 1 < next.min_to_match) {
+      if (cin == 5 || slen - i - 1 < (size_t) next.min_to_match) {
          next.match = sq->tau+1;
-         if ((options & SQ_NOMATCH) && sq->match.start == -1 && streak_dist >= next.match) {
+         if ((options & SQ_NOMATCH) && sq->match.start == (size_t)-1 && streak_dist >= next.match) {
             sq->match.line  = 0;
             sq->match.start = 0;
             sq->match.end   = slen;
@@ -420,17 +422,17 @@ seeqStringMatch
       } else if (!match && streak_dist < next.match && streak_dist < sq->match.dist) {
          match = 1;
          if (options & SQ_MATCH) {
-            long j = 0;
-            int rnode = 0;
+            size_t j = 0;
+            size_t rnode = 0;
             int d = sq->tau + 1;
             // Find match start with RDFA.
             do {
                int c = (int)translate[(int)data[i-++j]];
-               edge_t next = ((dfa_t *) sq->rdfa)->states[rnode].next[c];
-               if (next.match == DFA_COMPUTE)
-                  if (dfa_step(rnode, c, sq->wlen, sq->tau, (dfa_t **) &(sq->rdfa), sq->rkeys, &next)) return -1;
-               rnode = next.state;
-               d     = next.match;
+               edge_t rnext = ((dfa_t *) sq->rdfa)->states[rnode].next[c];
+               if (rnext.match == DFA_COMPUTE)
+                  if (dfa_step(rnode, c, sq->wlen, sq->tau, (dfa_t **) &(sq->rdfa), sq->rkeys, &rnext)) return -1;
+               rnode = rnext.state;
+               d     = rnext.match;
             } while (d > streak_dist && j < i);
 
             // Compute match length.
@@ -454,7 +456,7 @@ seeqStringMatch
 }
 
 
-long
+size_t
 seeqGetLine
 (
  seeq_t * sq
@@ -496,7 +498,7 @@ seeqGetDistance
    return sq->match.dist;
 }
 
-int
+size_t
 seeqGetStart
 (
  seeq_t * sq
@@ -517,7 +519,7 @@ seeqGetStart
    return sq->match.start;
 }
 
-int
+size_t
 seeqGetEnd
 (
  seeq_t * sq
@@ -561,7 +563,7 @@ seeqGetString
    return strdup(sq->match.string);
 }
 
-char *
+const char *
 seeqPrintError
 (
  void
@@ -633,7 +635,7 @@ parse
    // Set error to 0.
    seeqerr = 0;
    // Initialize keys to 0.
-   for (int i = 0; i < strlen(expr); i++) keys[i] = 0;
+   for (size_t i = 0; i < strlen(expr); i++) keys[i] = 0;
 
    int i = 0;
    int l = 0;
@@ -683,8 +685,8 @@ dfa_new
 (
  int wlen,
  int tau,
- int vertices,
- int trienodes
+ size_t vertices,
+ size_t trienodes
 )
 // SYNOPSIS:                                                              
 //   Creates and initializes a new dfa graph with a root vertex and the specified
@@ -722,20 +724,23 @@ dfa_new
       dfa->states[0].next[i] = new;
    }
 
-   trie_t * trie = trie_new(trienodes, wlen);
+   trie_t * trie = trie_new(trienodes, (size_t)wlen);
    if (trie == NULL) {
       free(dfa);
       return NULL;
    }
 
    // Compute initial NFA state.
-   char path[wlen+1];
+   char * path = malloc((size_t)wlen+1);
+   if (path == NULL) return NULL;
    for (int i = 0; i <= tau; i++) path[i] = 2;
    for (int i = tau + 1; i < wlen; i++) path[i] = 1;
 
    // Insert initial state into trie.
-   uint nodeid = trie_insert(&trie, path, tau+1, 0);
-   if (nodeid == (uint)-1) {
+   size_t nodeid = trie_insert(&trie, path, (size_t)tau+1, 0);
+   free(path);
+
+   if (nodeid == (size_t)-1) {
       free(trie);
       free(dfa);
       return NULL;
@@ -756,10 +761,10 @@ dfa_new
 int
 dfa_step
 (
- uint      dfa_state,
- uint      base,
- uint      plen,
- uint      tau,
+ size_t    dfa_state,
+ int       base,
+ int       plen,
+ int       tau,
  dfa_t  ** dfap,
  char   *  exp,
  edge_t *  nextedge
@@ -774,7 +779,7 @@ dfa_step
 // PARAMETERS:                                                            
 //   dfa_state : current state of the DFA.
 //   base      : next base to resolve (0 for 'A', 1 for 'C', 2 for 'G', 3 for 'T'/'U' and 4 for 'N').
-//   plen      : length of the pattern, as returned by parse.
+//   plen      : length of the pattern, as returned by 'parse()'.
 //   tau       : Levenshtein distance threshold.
 //   dfap      : pointer to a memory space containing the address of the DFA.
 //   trie      : pointer to a memory space containing the address of the associated trie.
@@ -801,12 +806,10 @@ dfa_step
    int  value = 1 << base;
 
    // Explore the trie backwards to find out the NFA state.
-   uint * state = trie_getrow(dfa->trie, dfa->states[dfa_state].node_id);
-   char * code  = calloc(plen + 1, sizeof(char));
+   int  * state = trie_getrow(dfa->trie, dfa->states[dfa_state].node_id);
+   char * code  = calloc((size_t)plen + 1, sizeof(char));
 
-   if (state == NULL) return -1;
-
-   if (code == NULL) return -1;
+   if (state == NULL || code == NULL) return -1;
 
    // Initialize first column.
    int nextold, prev, old = state[0];
@@ -818,7 +821,7 @@ dfa_step
       nextold   = state[i];
       state[i]  = min(tau + 1, min(old + ((value & exp[i-1]) == 0), min(prev, state[i]) + 1));
       if (state[i] <= tau) last_active = i;
-      code[i-1] = state[i] - prev + 1;
+      code[i-1] = (char) (state[i] - prev + 1);
       prev      = state[i];
       old       = nextold;
    }
@@ -827,17 +830,17 @@ dfa_step
    dfa->states[dfa_state].next[base].match = prev;
    
    // Check if this state already exists.
-   uint dfalink;
+   size_t dfalink;
    int exists = trie_search(dfa->trie, code, NULL, &dfalink);
 
    if (exists == 1) {
       // If exists, just link with the existing state.
       dfa->states[dfa_state].next[base].state = dfalink;
    } else if (exists == 0) {
-      if (dfa_newstate(dfap, code, prev, dfa_state, base) == -1) return -1;
+      if (dfa_newstate(dfap, code, prev, base, dfa_state) == -1) return -1;
       // Set min_to_match:
       dfa = *dfap;
-      dfa->states[dfa_state].next[base].min_to_match = plen - last_active;
+      dfa->states[dfa_state].next[base].min_to_match = (unsigned int)(plen - last_active);
    } else return -1;
 
    free(state);
@@ -848,11 +851,11 @@ dfa_step
 }
 
 
-uint
+size_t
 dfa_newvertex
 (
  dfa_t ** dfap,
- uint     nodeid
+ size_t   nodeid
 )
 // SYNOPSIS:                                                              
 //   Adds a new vertex to the dfa graph. The new vertex is not linked to any other
@@ -865,7 +868,7 @@ dfa_newvertex
 //                                                                        
 // RETURN:                                                                
 //   On success, the function returns the id of the new vertex. In case of error
-//   the function returns (uint)-1.
+//   the function returns (size_t)-1.
 //
 // SIDE EFFECTS:
 //   If the dfa has reached its maximum size, the dfa will be reallocated
@@ -881,7 +884,7 @@ dfa_newvertex
    if (dfa->pos >= dfa->size) {
       dfa->size *= 2;
       *dfap = dfa = realloc(dfa, sizeof(dfa_t) + dfa->size * sizeof(vertex_t));
-      if (dfa == NULL) return -1;
+      if (dfa == NULL) return (size_t)-1;
    }
 
    // Initialize DFA vertex.
@@ -898,10 +901,10 @@ dfa_newstate
 (
  dfa_t ** dfap,
  char   * code,
- uint     alignval,
- uint     dfa_state,
- int      edge
-)
+ int      alignval,
+ int      edge,
+ size_t   dfa_state
+ )
 // SYNOPSIS:                                                              
 //   Creates a new vertex to allocate a new DFA state, which represents an 
 //   unseen NW alignment row. This function inserts the new NW alignment row in
@@ -926,11 +929,11 @@ dfa_newstate
    seeqerr = 0;
 
    // Insert new NFA state in the trie.
-   uint nodeid = trie_insert(&((*dfap)->trie), code, alignval, (*dfap)->pos);
-   if (nodeid == (uint)-1) return -1;
+   size_t nodeid = trie_insert(&((*dfap)->trie), code, (size_t)alignval, (*dfap)->pos);
+   if (nodeid == (size_t)-1) return -1;
    // Create new vertex in dfa graph.
-   uint vertexid = dfa_newvertex(dfap, nodeid);
-   if (vertexid == (uint)-1) return -1;
+   size_t vertexid = dfa_newvertex(dfap, nodeid);
+   if (vertexid == (size_t)-1) return -1;
    // Connect dfa vertices.
    (*dfap)->states[dfa_state].next[edge].state = vertexid;
    return 0;
@@ -949,8 +952,8 @@ dfa_free
 trie_t *
 trie_new
 (
- int initial_size,
- int height
+ size_t initial_size,
+ size_t height
 )
 // SYNOPSIS:                                                              
 //   Creates and initializes a new NW-row trie preallocated with the specified
@@ -973,7 +976,6 @@ trie_new
 
    // Allocate at least one node.
    if (initial_size < 1) initial_size = 1;
-   if (height < 0) height = 0;
 
    trie_t * trie = malloc(sizeof(trie_t) + initial_size*sizeof(node_t));
    if (trie == NULL) return NULL;
@@ -995,8 +997,8 @@ trie_search
 (
  trie_t * trie,
  char   * path,
- uint   * value,
- uint   * dfastate
+ size_t * value,
+ size_t * dfastate
  )
 // SYNOPSIS:                                                              
 //   Searches the trie following a specified path and returns the values stored
@@ -1018,8 +1020,8 @@ trie_search
    // Set error to 0.
    seeqerr = 0;
 
-   uint id = 0;
-   for (int i = 0; i < trie->height; i++) {
+   size_t id = 0;
+   for (size_t i = 0; i < trie->height; i++) {
       if (path[i] >= TRIE_CHILDREN || path[i] < 0) {
          seeqerr = 6;
          return -1;
@@ -1034,11 +1036,11 @@ trie_search
 }
 
 
-uint *
+int *
 trie_getrow
 (
  trie_t * trie,
- uint     nodeid
+ size_t   nodeid
 )
 // SYNOPSIS:                                                              
 //   Recomputes the NW row that terminates at nodeid ('nodeid' must point
@@ -1061,18 +1063,18 @@ trie_getrow
    seeqerr = 0;
 
    node_t * nodes = &(trie->nodes[0]);
-   uint   * path  = malloc((trie->height + 1) * sizeof(uint));
-   int      i     = trie->height;
-   uint     id    = nodeid;
+   int    * path  = malloc((trie->height + 1) * sizeof(int));
+   size_t   i     = trie->height;
+   size_t   id    = nodeid;
 
    if (path == NULL) return NULL;
 
    // Match value.
-   path[i] = nodes[id].child[0];
+   path[i] = (int) nodes[id].child[0];
    
    while (id != 0 && i > 0) {
-      uint next_id = nodes[id].parent;
-      path[i-1] = path[i] + (nodes[next_id].child[0] == id) - (nodes[next_id].child[2] == id);
+      size_t next_id = nodes[id].parent;
+      path[i-1] = (int)(path[i] + (nodes[next_id].child[0] == id) - (nodes[next_id].child[2] == id));
       id = next_id;
       i--;
    } 
@@ -1088,13 +1090,13 @@ trie_getrow
 }
 
 
-uint
+size_t
 trie_insert
 (
  trie_t ** triep,
  char   *  path,
- uint      value,
- uint      dfastate
+ size_t    value,
+ size_t    dfastate
 )
 // SYNOPSIS:                                                              
 //   Inserts the specified path in the trie and stores the end value and
@@ -1120,16 +1122,16 @@ trie_insert
 
    trie_t * trie  = *triep;
    node_t * nodes = &(trie->nodes[0]);
-   uint id = 0;
-   uint initial_pos = trie->pos;
+   size_t id = 0;
+   size_t initial_pos = trie->pos;
 
-   int i;
+   size_t i;
    for (i = 0; i < trie->height; i++) {
       if (path[i] < 0 || path[i] >= TRIE_CHILDREN) {
          // Bad path, revert trie and return.
          trie->pos = initial_pos;
          seeqerr = 8;
-         return -1;
+         return (size_t)-1;
       }
       // Walk the tree.
       if (nodes[id].child[(int)path[i]] != 0) {
@@ -1141,7 +1143,7 @@ trie_insert
       if (trie->pos >= trie->size) {
          size_t newsize = trie->size * 2;
          *triep = trie = realloc(trie, sizeof(trie_t) + newsize * sizeof(node_t));
-         if (trie == NULL) return -1;
+         if (trie == NULL) return (size_t)-1;
          // Update pointers.
          nodes = &(trie->nodes[0]);
          // Initialize new nodes.
@@ -1149,7 +1151,7 @@ trie_insert
       }
       
       // Consume one node of the trie.
-      uint newid = trie->pos;
+      size_t newid = trie->pos;
       nodes[newid].parent = id;
       nodes[newid].child[0] = nodes[newid].child[1] = nodes[newid].child[2] = 0;
       nodes[id].child[(int)path[i]] = newid;

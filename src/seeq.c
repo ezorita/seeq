@@ -87,6 +87,7 @@ seeq
    seeqfile_t * sqfile = seeqOpen(input);
    if (sqfile == NULL) {
       fprintf(stderr, "error in 'seeqOpen()': %s\n", seeqPrintError());
+      seeqFree(sq);
       return EXIT_FAILURE;
    }
 
@@ -107,12 +108,12 @@ seeq
       else match_options = SQ_MATCH;
       if (args.best) match_options |= SQ_BEST;
 
-      int retval;
+      long retval;
       while ((retval = seeqFileMatch(sqfile, sq, match_options)) > 0) {
-         if (args.compact) fprintf(stdout, "%ld:%d-%d:%d",sq->match.line, sq->match.start, sq->match.end-1, sq->match.dist);
+         if (args.compact) fprintf(stdout, "%ld:%ld-%ld:%d",sq->match.line, sq->match.start, sq->match.end-1, sq->match.dist);
          else {
             if (args.showline) fprintf(stdout, "%ld ", sq->match.line);
-            if (args.showpos)  fprintf(stdout, "%d-%d ", sq->match.start, sq->match.end-1);
+            if (args.showpos)  fprintf(stdout, "%ld-%ld ", sq->match.start, sq->match.end-1);
             if (args.showdist) fprintf(stdout, "%d ", sq->match.dist);
             if (args.matchonly) {
                sq->match.string[sq->match.end] = 0;

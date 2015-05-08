@@ -157,24 +157,20 @@ test_trie_new
    }
    }
 
-   for (int i = 0 ; i > -100 ; i--) {
-   for (int j = 0 ; j > -100 ; j--) {
-      trie_t *trie = trie_new(i*100, j*100);
-      g_assert(trie != NULL);
-      g_assert_cmpint(trie->pos, ==, 1);
-      g_assert_cmpint(trie->size, ==, 1);
-      g_assert_cmpint(trie->height, ==, 0);
-      g_assert_cmpint(trie->nodes[0].parent, ==, 0);
-      for (int k = 0; k < TRIE_CHILDREN; k++)
+   trie_t *trie = trie_new(0, 0);
+   g_assert(trie != NULL);
+   g_assert_cmpint(trie->pos, ==, 1);
+   g_assert_cmpint(trie->size, ==, 1);
+   g_assert_cmpint(trie->height, ==, 0);
+   g_assert_cmpint(trie->nodes[0].parent, ==, 0);
+   for (int k = 0; k < TRIE_CHILDREN; k++)
       g_assert_cmpint(trie->nodes[0].child[k], ==, 0);
-      free(trie);
-   }
-   }
+   free(trie);
 
    // Alloc test.
    mute_stderr();
    set_alloc_failure_rate_to(1.1);
-   trie_t * ret = trie_new(1, 10);
+   trie_t *ret = trie_new(1, 10);
    reset_alloc();
    g_assert(ret == NULL);
 
@@ -368,22 +364,21 @@ test_trie_search_getrow
 
    char path[10] = {0};
    // Insert random paths and search them.
-   srand48(123);
    for (int i = 0 ; i < 10000 ; i++) {
       for (int j = 0 ; j < 10 ; j++) {
          path[j] = (lrand48() % TRIE_CHILDREN);
       }
-      uint value = (uint) lrand48();
-      uint dfastate = (uint) lrand48();
-      uint retval, dfaval;
-      uint id = trie_insert(&trie, path, value, dfastate);
-      uint * row = trie_getrow(trie, id);
+      size_t value = (size_t) lrand48();
+      size_t dfastate = (size_t) lrand48();
+      size_t retval, dfaval;
+      size_t id = trie_insert(&trie, path, value, dfastate);
+      int * row = trie_getrow(trie, id);
 
       g_assert(trie_search(trie, path, &retval, &dfaval));
       g_assert_cmpint(value, ==, retval);
       g_assert_cmpint(dfastate, ==, dfaval);
       g_assert_cmpint(row[trie->height], ==, value);
-      for (int i = trie->height - 1; i >= 0; i--) {
+      for (int i = (int)(trie->height - 1); i >= 0; i--) {
          value += (path[i] == 0) - (path[i] == 2);
          g_assert_cmpint(row[i], ==, value);
       }
@@ -392,7 +387,7 @@ test_trie_search_getrow
 
    // Wrong path.
    path[3] = 6;
-   uint retval, dfaval;
+   size_t retval, dfaval;
    g_assert_cmpint(trie_search(trie,path, &retval, &dfaval), ==, -1);
    g_assert_cmpint(seeqerr, ==, 6);
 
@@ -456,14 +451,14 @@ test_dfa_new
    g_assert_cmpint(dfa->size, ==, 1);
    g_assert_cmpint(dfa->pos, ==, 1);
    g_assert_cmpint(dfa->trie->size, ==, 16);
-   uint * nwrow = trie_getrow(dfa->trie, dfa->states[0].node_id);
+   int * nwrow = trie_getrow(dfa->trie, dfa->states[0].node_id);
    for (int i = 0; i <= 10; i++) {
       g_assert_cmpint(nwrow[i], ==, (i < 4 ? i : 4));
    }
 
    free(dfa);
 
-   dfa = dfa_new(10, 3, -100, -100);
+   dfa = dfa_new(10, 3, 0, 0);
    g_assert(dfa != NULL);
    g_assert(dfa->trie != NULL);
    g_assert_cmpint(dfa->size, ==, 1);
@@ -472,7 +467,7 @@ test_dfa_new
 
    free(dfa);
 
-   for (int i = -100; i < 1000; i++) {
+   for (int i = 0; i < 1000; i++) {
       dfa = dfa_new(10, 3, i, i);
       g_assert(dfa != NULL);
       g_assert(dfa->trie != NULL);
@@ -546,7 +541,7 @@ test_dfa_newstate
    g_assert_cmpint(dfa->size, ==, 1);
    g_assert_cmpint(dfa->pos, ==, 1);
    g_assert_cmpint(dfa->trie->size, ==, 8);
-   uint * nwrow = trie_getrow(dfa->trie, dfa->states[0].node_id);
+   int * nwrow = trie_getrow(dfa->trie, dfa->states[0].node_id);
    for (int i = 0; i <= 5; i++) {
       g_assert_cmpint(nwrow[i], ==, (i < 3 ? i : 3));
    }
