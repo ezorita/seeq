@@ -584,47 +584,47 @@ test_dfa_step
 
    edge_t transition;   
    // text[0]
-   g_assert(0 == dfa_step(0, translate[(int)text[0]], plen, tau, &dfa, exp, &transition));
+   g_assert(0 == dfa_step(0, translate_halt[(int)text[0]], plen, tau, &dfa, exp, &transition));
    g_assert_cmpint(transition.state, ==, 1);
    g_assert_cmpint(transition.match, ==, 2);
    // text[1]
-   g_assert(0 == dfa_step(transition.state, translate[(int)text[1]], plen, tau, &dfa, exp, &transition));
+   g_assert(0 == dfa_step(transition.state, translate_halt[(int)text[1]], plen, tau, &dfa, exp, &transition));
    g_assert_cmpint(transition.state, ==, 2);
    g_assert_cmpint(transition.match, ==, 2);
    // text[2]
-   g_assert(0 == dfa_step(transition.state, translate[(int)text[2]], plen, tau, &dfa, exp, &transition));
+   g_assert(0 == dfa_step(transition.state, translate_halt[(int)text[2]], plen, tau, &dfa, exp, &transition));
    g_assert_cmpint(transition.state, ==, 3);
    g_assert_cmpint(transition.match, ==, 2);
    // text[3]
-   g_assert(0 == dfa_step(transition.state, translate[(int)text[3]], plen, tau, &dfa, exp, &transition));
+   g_assert(0 == dfa_step(transition.state, translate_halt[(int)text[3]], plen, tau, &dfa, exp, &transition));
    g_assert_cmpint(transition.state, ==, 3);
    g_assert_cmpint(transition.match, ==, 2);
    // text[4]
-   g_assert(0 == dfa_step(transition.state, translate[(int)text[4]], plen, tau, &dfa, exp, &transition));
+   g_assert(0 == dfa_step(transition.state, translate_halt[(int)text[4]], plen, tau, &dfa, exp, &transition));
    g_assert_cmpint(transition.state, ==, 4);
    g_assert_cmpint(transition.match, ==, 2);
    // text[5]
-   g_assert(0 == dfa_step(transition.state, translate[(int)text[5]], plen, tau, &dfa, exp, &transition));
+   g_assert(0 == dfa_step(transition.state, translate_halt[(int)text[5]], plen, tau, &dfa, exp, &transition));
    g_assert_cmpint(transition.state, ==, 3);
    g_assert_cmpint(transition.match, ==, 2);
    // text[6]
-   g_assert(0 == dfa_step(transition.state, translate[(int)text[6]], plen, tau, &dfa, exp, &transition));
+   g_assert(0 == dfa_step(transition.state, translate_halt[(int)text[6]], plen, tau, &dfa, exp, &transition));
    g_assert_cmpint(transition.state, ==, 5);
    g_assert_cmpint(transition.match, ==, 2);
    // text[7]
-   g_assert(0 == dfa_step(transition.state, translate[(int)text[7]], plen, tau, &dfa, exp, &transition));
+   g_assert(0 == dfa_step(transition.state, translate_halt[(int)text[7]], plen, tau, &dfa, exp, &transition));
    g_assert_cmpint(transition.state, ==, 6);
    g_assert_cmpint(transition.match, ==, 1);
    // text[8]
-   g_assert(0 == dfa_step(transition.state, translate[(int)text[8]], plen, tau, &dfa, exp, &transition));
+   g_assert(0 == dfa_step(transition.state, translate_halt[(int)text[8]], plen, tau, &dfa, exp, &transition));
    g_assert_cmpint(transition.state, ==, 7);
    g_assert_cmpint(transition.match, ==, 0);
    // text[9]
-   g_assert(0 == dfa_step(transition.state, translate[(int)text[9]], plen, tau, &dfa, exp, &transition));
+   g_assert(0 == dfa_step(transition.state, translate_halt[(int)text[9]], plen, tau, &dfa, exp, &transition));
    g_assert_cmpint(transition.state, ==, 8);
    g_assert_cmpint(transition.match, ==, 1);
    // recover existing step.
-   g_assert(0 == dfa_step(0, translate[(int)text[0]], plen, tau, &dfa, exp, &transition));
+   g_assert(0 == dfa_step(0, translate_halt[(int)text[0]], plen, tau, &dfa, exp, &transition));
    g_assert_cmpint(transition.state, ==, 1);
    g_assert_cmpint(transition.match, ==, 2);
    dfa_free(dfa);
@@ -938,7 +938,10 @@ test_seeq
       .verbose   = 0,
       .endline   = 0,
       .prefix    = 0,
-      .invert    = 0 };
+      .invert    = 0,
+      .best      = 0,
+      .skip      = 1
+   };
 
    // Test 1: tau=0, default output.
    char * pattern = "CACAGAT";
@@ -1008,8 +1011,29 @@ test_seeq
    seeq(pattern, input, args);
    g_assert_cmpstr(OUTPUT_BUFFER+offset, ==, answer);
    offset = strlen(OUTPUT_BUFFER);
+  
+   // Test 7.1: skip off.
+   args.skip = 0;
+   answer = "CACAGAT\nCCGT\nCACAGAT\n";
+   seeq(pattern, input, args);
+   g_assert_cmpstr(OUTPUT_BUFFER+offset, ==, answer);
+   offset = strlen(OUTPUT_BUFFER);
+
+   // Test 7.2 (best on/off).
+   args.skip = args.best = args.dist = 1;
+   answer = "CTCAT\n";
+   seeq("CTCAT", input, args);
+   g_assert_cmpstr(OUTPUT_BUFFER+offset, ==, answer);
+   offset = strlen(OUTPUT_BUFFER);
+   
+   args.best = 0;
+   answer = "CTAT\n";
+   seeq("CTCAT", input, args);
+   g_assert_cmpstr(OUTPUT_BUFFER+offset, ==, answer);
+   offset = strlen(OUTPUT_BUFFER);
 
    // Test 8: tau=3, prefix.
+   args.dist = 3;
    args.matchonly = args.printline = 0;
    args.prefix = 1;
    answer = "GTATGTAC\nTCTATCAT\n";
