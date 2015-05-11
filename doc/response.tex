@@ -163,10 +163,10 @@ in hg19 with up to 4 errors, Seeq ended with 5,294 states and spent
 0.01\% of the time in dynamic programming. Even though
 it had to scan the whole genome, the run was executed in 27 seconds,
 compared to 54 seconds for Linux \texttt{wc}, which only counts the
-number of characters. On such problems where the number of operations
-per character is small, the function used to read the file makes
-the difference. We used GNU's \texttt{readline} because it was
-faster than the alternatives in our initial tests.
+number of characters, words and lines. On such problems where the
+number of operations per character is small, the function used to read
+the file makes the difference. We use GNU's \texttt{readline} because
+it was faster than the alternatives in our tests.
 
 Allowing 12 errors, which is the case of the sketch
 of proof given in section \ref{sketch}, Seeq ended with 170,679 states,
@@ -174,7 +174,7 @@ close to our approximation. In this case, the running time
 was 1 minute 18 seconds, of which 0.39 seconds were spent in dynamic
 programming. So the difference with the previous case is either
 due to cache misses or to the additional time required to process
-the hits (of which there is a lot in this example).
+the hits (of which there is a lot in this example), or both.
 
 What about longer patterns with higher error tolerance?
 When searching the 42 nucleotide pattern
@@ -188,15 +188,15 @@ in running time is more likely due to the increased number of cache
 misses.
 
 In comparison, Myers' bitfield algorithm ran for 66 minutes
-44 seconds on this problem. Counting 17 operations per character,
-this is about 75 ns per operation, which is the right order of
-magnitude. For the bitfield algorithm to beat Seeq on the last problem,
-each operation would have to be processed in less than 2.3 ns. We
-were very surprised by this result, because Myers' bitfield
+44 seconds on this problem. %Counting 17 operations per character,
+%this is about 75 ns per operation, which is the right order of
+%magnitude. For the bitfield algorithm to beat Seeq on the last problem,
+%each operation would have to be processed in less than 2.3 ns.
+We were very surprised by this result, because Myers' bitfield
 algorithm has the reputation of being the fastest known alignment
 algorithm. But it needs to do 17 operations per character, whereas
 most of the time Seeq does just 1, and it is often a cache hit. On
-the last problem, Seeq performs 1 operation on 99.7\% of the
+the last example, Seeq performs 1 operation on 99.7\% of the
 nucleotides. In summary, Myers' bitfield is not the fastest
 alignment algorithm, it is the fastest alignment algorithm with
 no memory footprint.
@@ -223,10 +223,10 @@ tolerated errors.
 We still believe that Seeq has an interesting message for the
 bioinformatics community. It is certainly not the right tool for
 every job, it is not intended to replace BLAST or BWA. Yet there
-is a sweet spot for pattens around 20-30 nucleotides where we
-reach good performance even for a hig number of tolerated errors.
+is a sweet spot for pattens of tens of nucleotides where we
+reach good performance even for a big number of tolerated errors.
 
-Most sequences of this size are unique, even in large genomes,
+Most sequences of 20-30 nt are unique, even in large genomes,
 which is why spike-ins, watermarks, adapters, barcodes and
 other artificial sequences that need to be identified in sequencing
 experiments will be in this range. The target application of 
