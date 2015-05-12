@@ -738,6 +738,11 @@ dfa_new
       return NULL;
    }
 
+   // Fill struct.
+   dfa->size = vertices;
+   dfa->pos  = 1;
+   dfa->trie = trie;
+
    // Compute initial NFA state.
    char * path = malloc((size_t)wlen+1);
    if (path == NULL) return NULL;
@@ -745,7 +750,7 @@ dfa_new
    for (int i = tau + 1; i < wlen; i++) path[i] = 1;
 
    // Insert initial state into trie.
-   size_t nodeid = trie_insert(&trie, path, (size_t)tau+1, 0);
+   size_t nodeid = trie_insert(dfa, path, (size_t)tau + 1, (size_t)tau+1, 0);
    free(path);
 
    if (nodeid == (size_t)-1) {
@@ -753,11 +758,6 @@ dfa_new
       free(dfa);
       return NULL;
    }
-
-   // Fill struct.
-   dfa->size = vertices;
-   dfa->pos  = 1;
-   dfa->trie = trie;
 
    // Link trie leaf with DFA vertex.
    dfa->states[0].node_id = nodeid;
@@ -845,11 +845,19 @@ dfa_step
       // If exists, just link with the existing state.
       dfa->states[dfa_state].next[base].state = dfalink;
    } else if (exists == 0) {
-      if (dfa_newstate(dfap, code, prev, base, dfa_state) == -1) return -1;
+      if (dfa_newstate(dfap, code, prev, base, dfa_state) == -1) {
+         free(state);
+         free(code);
+         return -1;
+      }
       // Set min_to_match:
       dfa = *dfap;
       dfa->states[dfa_state].next[base].min_to_match = (unsigned int)(plen - last_active);
-   } else return -1;
+   } else {
+      free(state);
+      free(code);
+      return -1;
+   }
 
    free(state);
    free(code);
@@ -936,8 +944,14 @@ dfa_newstate
    // Set error to 0.
    seeqerr = 0;
 
+   trie_t ** triep = &((*dfap)->trie);
+
+   // Compute length of the constant tail.
+   size_t minlen = (*triep)->height;
+   while (code[minlen-1] == 1) minlen--;
+
    // Insert new NFA state in the trie.
-   size_t nodeid = trie_insert(&((*dfap)->trie), code, (size_t)alignval, (*dfap)->pos);
+   size_t nodeid = trie_insert(*dfap, code, minlen, (size_t)alignval, (*dfap)->pos);
    if (nodeid == (size_t)-1) return -1;
    // Create new vertex in dfa graph.
    size_t vertexid = dfa_newvertex(dfap, nodeid);
@@ -1035,7 +1049,13 @@ trie_search
          return -1;
       }
       id = trie->nodes[id].child[(int)path[i]];
+      // Check if next node is a broken path.
       if (id == 0) return 0;
+      // Check if next node is a leaf.
+      if (trie->nodes[id].child[2] == (size_t)-1) {
+         for (size_t j = i+1; j < trie->height; j++) if (path[j] != 1) return 0;
+         break;
+      }
    }
    // Save leaf value.
    if (value != NULL) *value = trie->nodes[id].child[0];
@@ -1070,29 +1090,33 @@ trie_getrow
    // Set error to 0.
    seeqerr = 0;
 
+   // Check invalid node id.
+   if (nodeid == 0) return NULL;
+
+   // Alloc path.
    node_t * nodes = &(trie->nodes[0]);
    int    * path  = malloc((trie->height + 1) * sizeof(int));
-   size_t   i     = trie->height;
-   size_t   id    = nodeid;
 
    if (path == NULL) return NULL;
 
+   // Find height of the node.
+   size_t height = 1;
+   size_t parent = nodes[nodeid].parent;
+   while (parent != 0) {
+      height++;
+      parent = nodes[parent].parent;
+   }
+   path[height] = (int) nodes[nodeid].child[0];
+
    // Match value.
-   path[i] = (int) nodes[id].child[0];
-   
-   while (id != 0 && i > 0) {
+   for (size_t i = height, id = nodeid; i > 0; i--) {
       size_t next_id = nodes[id].parent;
       path[i-1] = (int)(path[i] + (nodes[next_id].child[0] == id) - (nodes[next_id].child[2] == id));
       id = next_id;
-      i--;
    } 
 
-   // Control.
-   if (i != 0) {
-      free(path);
-      seeqerr = 7;
-      return NULL;
-   }
+   // Finish row.
+   for (size_t j = height + 1; j <= trie->height; j++) path[j] = path[height];
 
    return path;
 }
@@ -1101,10 +1125,11 @@ trie_getrow
 size_t
 trie_insert
 (
- trie_t ** triep,
- char   *  path,
- size_t    value,
- size_t    dfastate
+ dfa_t  * dfa,
+ char   * path,
+ size_t   minlen,
+ size_t   value,
+ size_t   dfastate
 )
 // SYNOPSIS:                                                              
 //   Inserts the specified path in the trie and stores the end value and
@@ -1112,8 +1137,9 @@ trie_insert
 //   exists, its leaf values will be overwritten.
 //                                                                        
 // PARAMETERS:                                                            
-//   trie      : pointer to a memory space containing the address of the trie.
+//   trie     : pointer to a memory space containing the address of the trie.
 //   path     : The path as an array of chars containing values {0,1,2}
+//   minlen   : Index of the character at which the constant part starts.
 //   value    : The value of the last column of the NW row.
 //   dfastate : The NW-row-associated DFA state. 
 //                                                                        
@@ -1128,52 +1154,93 @@ trie_insert
    // Set error to 0.
    seeqerr = 0;
 
-   trie_t * trie  = *triep;
-   node_t * nodes = &(trie->nodes[0]);
    size_t id = 0;
-   size_t initial_pos = trie->pos;
+   size_t initial_pos = dfa->trie->pos;
 
    size_t i;
-   for (i = 0; i < trie->height; i++) {
+   for (i = 0; i < dfa->trie->height; i++) {
       if (path[i] < 0 || path[i] >= TRIE_CHILDREN) {
          // Bad path, revert trie and return.
-         trie->pos = initial_pos;
+         dfa->trie->pos = initial_pos;
          seeqerr = 8;
          return (size_t)-1;
       }
       // Walk the tree.
-      if (nodes[id].child[(int)path[i]] != 0) {
-         id = nodes[id].child[(int)path[i]];
+      if (dfa->trie->nodes[id].child[(int)path[i]] != 0) {
+         id = dfa->trie->nodes[id].child[(int)path[i]];
+
+         // Check if next node is an intermediate leaf.
+         if (dfa->trie->nodes[id].child[2] == (size_t)-1) {
+            size_t newid, auxid = id;
+            // Save data.
+            size_t tmpval = dfa->trie->nodes[id].child[0];
+            size_t tmpdfa = dfa->trie->nodes[id].child[1];
+            // Reset node.
+            dfa->trie->nodes[id].child[0] = dfa->trie->nodes[id].child[1] = dfa->trie->nodes[id].child[2] = 0;
+            // Move down the node.
+            size_t j = 1;
+            do {
+               newid = trie_newnode(&(dfa->trie), auxid);
+               dfa->trie->nodes[auxid].child[1] = newid;
+               auxid = newid;
+               j++;
+            } while (path[i+j] == 1 && i+j < dfa->trie->height);
+            // Copy data.
+            dfa->trie->nodes[auxid].child[0] = tmpval;
+            dfa->trie->nodes[auxid].child[1] = tmpdfa;
+            dfa->trie->nodes[auxid].child[2] = (size_t)-1;
+            
+            // Update DFA pointer.
+            dfa->states[tmpdfa].node_id = auxid;
+         }
+
          continue;
       }
 
       // Create new node.
-      if (trie->pos >= trie->size) {
-         size_t newsize = trie->size * 2;
-         *triep = trie = realloc(trie, sizeof(trie_t) + newsize * sizeof(node_t));
-         if (trie == NULL) return (size_t)-1;
-         // Update pointers.
-         nodes = &(trie->nodes[0]);
-         // Initialize new nodes.
-         trie->size = newsize;
-      }
-      
-      // Consume one node of the trie.
-      size_t newid = trie->pos;
-      nodes[newid].parent = id;
-      nodes[newid].child[0] = nodes[newid].child[1] = nodes[newid].child[2] = 0;
-      nodes[id].child[(int)path[i]] = newid;
-      trie->pos++;
-
-      // Go one level deeper.
+      size_t newid = trie_newnode(&(dfa->trie), id);
+      dfa->trie->nodes[id].child[(int)path[i]] = newid;
       id = newid;
+
+      // If path is broken and height > minlen, place leaf here.
+      if (i + 1 >= minlen) break;
+
    }
 
    // Write data.
-   nodes[id].child[0] = value;
-   nodes[id].child[1] = dfastate;
+   dfa->trie->nodes[id].child[0] = value;
+   dfa->trie->nodes[id].child[1] = dfastate;
+   dfa->trie->nodes[id].child[2] = (size_t)-1; // Flag leaf.
 
    return id;
+}
+
+size_t
+trie_newnode
+(
+ trie_t ** triep,
+ size_t parent
+ )
+{
+   trie_t * trie = *triep;
+
+   // Check trie size.
+   if (trie->pos >= trie->size) {
+      size_t newsize = trie->size * 2;
+      *triep = trie = realloc(trie, sizeof(trie_t) + newsize * sizeof(node_t));
+      if (trie == NULL) return (size_t)-1;
+      // Initialize new nodes.
+      trie->size = newsize;
+   }
+      
+   // Consume one node of the trie.
+   size_t newid = trie->pos;
+   trie->nodes[newid].parent = parent;
+   trie->nodes[newid].child[0] = trie->nodes[newid].child[1] = trie->nodes[newid].child[2] = 0;
+   trie->pos++;
+
+   // Go one level deeper.
+   return newid;
 }
 
 

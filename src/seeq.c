@@ -153,7 +153,7 @@ seeq
    
    if (verbose) {
       size_t * data = (size_t *) sq->dfa;
-      size_t mem_dfa  = *data * 16;
+      size_t mem_dfa  = *data * (5*16+8);
       size_t mem_trie = *(size_t *)(*(data + 2)) * 32;
       double mb = 1024.0*1024.0;
       fprintf(stderr, "memory: %.2f MB (DFA: %.2f MB, trie: %.2f MB)\n", (mem_dfa + mem_trie)/mb, mem_dfa/mb, mem_trie/mb);

@@ -118,8 +118,9 @@ int         dfa_step      (size_t, int, int, int, dfa_t **, char *, edge_t *);
 void        dfa_free      (dfa_t *);
 trie_t    * trie_new      (size_t, size_t);
 int         trie_search   (trie_t *, char*, size_t*, size_t*);
-size_t      trie_insert   (trie_t **, char*, size_t, size_t);
+size_t      trie_insert   (dfa_t *, char*, size_t, size_t, size_t);
 int       * trie_getrow   (trie_t *, size_t);
+size_t      trie_newnode  (trie_t **, size_t);
 void        trie_reset    (trie_t *);
 
 #define RESET       "\033[0m"
