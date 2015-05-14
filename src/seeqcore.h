@@ -40,6 +40,7 @@
 #define TRIE_CHILDREN      3
 
 #define min(a,b) (((a) < (b)) ? (a) : (b))
+#define type_msb(a) (((size_t)1)<<(sizeof(a)*8-1))
 
 typedef struct dfa_t    dfa_t;
 typedef struct vertex_t vertex_t;
@@ -118,10 +119,14 @@ int         dfa_step      (size_t, int, int, int, dfa_t **, char *, edge_t *);
 void        dfa_free      (dfa_t *);
 trie_t    * trie_new      (size_t, size_t);
 int         trie_search   (trie_t *, char*, size_t*, size_t*);
-size_t      trie_insert   (dfa_t *, char*, size_t, size_t, size_t);
+size_t      trie_insert   (dfa_t *, char*, size_t, size_t);
 int       * trie_getrow   (trie_t *, size_t);
 size_t      trie_newnode  (trie_t **, size_t);
 void        trie_reset    (trie_t *);
+unsigned char * trie_encode   (const unsigned char *, size_t);
+unsigned char * trie_decode   (const unsigned char *, size_t);
+int             trie_compare  (const unsigned char *, const unsigned char *, size_t);
+
 
 #define RESET       "\033[0m"
 #define BOLDRED     "\033[1m\033[31m"      /* Bold Red */

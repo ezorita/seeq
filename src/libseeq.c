@@ -750,7 +750,7 @@ dfa_new
    for (int i = tau + 1; i < wlen; i++) path[i] = 1;
 
    // Insert initial state into trie.
-   size_t nodeid = trie_insert(dfa, path, (size_t)tau + 1, (size_t)tau+1, 0);
+   size_t nodeid = trie_insert(dfa, path, (size_t)tau+1, 0);
    free(path);
 
    if (nodeid == (size_t)-1) {
@@ -944,18 +944,14 @@ dfa_newstate
    // Set error to 0.
    seeqerr = 0;
 
-   trie_t ** triep = &((*dfap)->trie);
-
-   // Compute length of the constant tail.
-   size_t minlen = (*triep)->height;
-   while (code[minlen-1] == 1) minlen--;
-
    // Insert new NFA state in the trie.
-   size_t nodeid = trie_insert(*dfap, code, minlen, (size_t)alignval, (*dfap)->pos);
+   size_t nodeid = trie_insert(*dfap, code, (size_t)alignval, (*dfap)->pos);
    if (nodeid == (size_t)-1) return -1;
+
    // Create new vertex in dfa graph.
    size_t vertexid = dfa_newvertex(dfap, nodeid);
    if (vertexid == (size_t)-1) return -1;
+
    // Connect dfa vertices.
    (*dfap)->states[dfa_state].next[edge].state = vertexid;
    return 0;
@@ -1048,17 +1044,19 @@ trie_search
          seeqerr = 6;
          return -1;
       }
-      id = trie->nodes[id].child[(int)path[i]];
-      // Check if next node is a broken path.
-      if (id == 0) return 0;
-      // Check if next node is a leaf.
-      if (trie->nodes[id].child[2] == (size_t)-1) {
-         for (size_t j = i+1; j < trie->height; j++) if (path[j] != 1) return 0;
-         break;
+      // Check if current node is a leaf.
+      if (trie->nodes[id].child[2] & type_msb(trie->nodes[id].child[2])) {
+         // Compare paths.
+         if (trie_compare((unsigned char *)path + i, (unsigned char *) trie->nodes[id].child[0], trie->height - i) == 0) return 0;
+         else break;
       }
+      // Update path.
+      id = trie->nodes[id].child[(int)path[i]];
+      // Check if next node exists.
+      if (id == 0) return 0;
    }
    // Save leaf value.
-   if (value != NULL) *value = trie->nodes[id].child[0];
+   if (value != NULL) *value = trie->nodes[id].child[2] & ~type_msb(trie->nodes[id].child[2]);
    if (dfastate != NULL) *dfastate = trie->nodes[id].child[1];
    return 1;
 }
@@ -1090,33 +1088,43 @@ trie_getrow
    // Set error to 0.
    seeqerr = 0;
 
-   // Check invalid node id.
-   if (nodeid == 0) return NULL;
-
    // Alloc path.
    node_t * nodes = &(trie->nodes[0]);
    int    * path  = malloc((trie->height + 1) * sizeof(int));
-
    if (path == NULL) return NULL;
 
-   // Find height of the node.
-   size_t height = 1;
-   size_t parent = nodes[nodeid].parent;
-   while (parent != 0) {
-      height++;
-      parent = nodes[parent].parent;
-   }
-   path[height] = (int) nodes[nodeid].child[0];
+   if(!(nodes[nodeid].child[2] & type_msb(nodes[nodeid].child[2]))) {
+      // Set error flag.
 
-   // Match value.
+      // Return
+      return NULL;
+   }
+
+   // Find height of the node.
+   size_t height = 0;
+   size_t node   = nodeid;
+   while (node != 0) {
+      height++;
+      node = nodes[node].parent;
+   }
+
+   path[trie->height] = (int) (nodes[nodeid].child[2] & ~type_msb(nodes[nodeid].child[2]));
+   
+   // Decode stored path.
+   if (height < trie->height) {
+      unsigned char * dec_path = trie_decode((unsigned char *)nodes[nodeid].child[0], trie->height - height);
+      for (size_t i = trie->height; i > height; i--) {
+         path[i-1] = path[i] - (int)dec_path[i-1-height] + 1;
+      }
+      free(dec_path);
+   }
+
+   // Compute row from trie path.
    for (size_t i = height, id = nodeid; i > 0; i--) {
       size_t next_id = nodes[id].parent;
       path[i-1] = (int)(path[i] + (nodes[next_id].child[0] == id) - (nodes[next_id].child[2] == id));
       id = next_id;
    } 
-
-   // Finish row.
-   for (size_t j = height + 1; j <= trie->height; j++) path[j] = path[height];
 
    return path;
 }
@@ -1127,7 +1135,6 @@ trie_insert
 (
  dfa_t  * dfa,
  char   * path,
- size_t   minlen,
  size_t   value,
  size_t   dfastate
 )
@@ -1139,7 +1146,6 @@ trie_insert
 // PARAMETERS:                                                            
 //   trie     : pointer to a memory space containing the address of the trie.
 //   path     : The path as an array of chars containing values {0,1,2}
-//   minlen   : Index of the character at which the constant part starts.
 //   value    : The value of the last column of the NW row.
 //   dfastate : The NW-row-associated DFA state. 
 //                                                                        
@@ -1165,54 +1171,64 @@ trie_insert
          seeqerr = 8;
          return (size_t)-1;
       }
-      // Walk the tree.
-      if (dfa->trie->nodes[id].child[(int)path[i]] != 0) {
-         id = dfa->trie->nodes[id].child[(int)path[i]];
 
-         // Check if next node is an intermediate leaf.
-         if (dfa->trie->nodes[id].child[2] == (size_t)-1) {
-            size_t newid, auxid = id;
-            // Save data.
-            size_t tmpval = dfa->trie->nodes[id].child[0];
-            size_t tmpdfa = dfa->trie->nodes[id].child[1];
-            // Reset node.
-            dfa->trie->nodes[id].child[0] = dfa->trie->nodes[id].child[1] = dfa->trie->nodes[id].child[2] = 0;
-            // Move down the node.
-            size_t j = 1;
-            do {
-               newid = trie_newnode(&(dfa->trie), auxid);
-               dfa->trie->nodes[auxid].child[1] = newid;
-               auxid = newid;
-               j++;
-            } while (path[i+j] == 1 && i+j < dfa->trie->height);
-            // Copy data.
-            dfa->trie->nodes[auxid].child[0] = tmpval;
-            dfa->trie->nodes[auxid].child[1] = tmpdfa;
-            dfa->trie->nodes[auxid].child[2] = (size_t)-1;
+      // Check if the current node is an intermediate leaf.
+      if (dfa->trie->nodes[id].child[2] & type_msb(dfa->trie->nodes[id].child[2])) {
+         size_t auxid = id;
+         // Save data.
+         unsigned char * data   = (unsigned char *) dfa->trie->nodes[id].child[0];
+         size_t tmpdfa = dfa->trie->nodes[id].child[1];
+         size_t tmpval = dfa->trie->nodes[id].child[2];
+         // Reset node.
+         dfa->trie->nodes[id].child[0] = dfa->trie->nodes[id].child[1] = dfa->trie->nodes[id].child[2] = 0;
+         // Move down the node.
+         size_t coded_path_len = dfa->trie->height - i;
+         unsigned char * tmppath = trie_decode(data, coded_path_len);
+         size_t j = 0;
+         do {
+            size_t newid = trie_newnode(&(dfa->trie), auxid);
+            dfa->trie->nodes[auxid].child[(int)tmppath[j]] = newid;
+            auxid = newid;
+            j++; coded_path_len--;
+         } while ((unsigned char) path[i+j] == tmppath[j] && i+j < dfa->trie->height);
+         // Recompute encoded path.
+         unsigned char * newdata;
+         if (coded_path_len) {
+            newdata = trie_encode(tmppath+j, coded_path_len);
+         } else newdata = NULL;
+         // Free old path.
+         free(tmppath);
+         free(data);
+         // Copy data.
+         dfa->trie->nodes[auxid].child[0] = (size_t) newdata;
+         dfa->trie->nodes[auxid].child[1] = tmpdfa;
+         dfa->trie->nodes[auxid].child[2] = tmpval;
             
-            // Update DFA pointer.
-            dfa->states[tmpdfa].node_id = auxid;
-         }
-
-         continue;
+         // Update DFA pointer.
+         dfa->states[tmpdfa].node_id = auxid;
       }
 
-      // Create new node.
-      size_t newid = trie_newnode(&(dfa->trie), id);
-      dfa->trie->nodes[id].child[(int)path[i]] = newid;
-      id = newid;
-
-      // If path is broken and height > minlen, place leaf here.
-      if (i + 1 >= minlen) break;
-
+      // Walk the tree.
+      if (dfa->trie->nodes[id].child[(int)path[i]] != 0) {
+         // Follow path.
+         id = dfa->trie->nodes[id].child[(int)path[i]];
+      } else break;
    }
 
-   // Write data.
-   dfa->trie->nodes[id].child[0] = value;
-   dfa->trie->nodes[id].child[1] = dfastate;
-   dfa->trie->nodes[id].child[2] = (size_t)-1; // Flag leaf.
+   // Create new leaf. 
+   size_t newid = trie_newnode(&(dfa->trie), id);
+   dfa->trie->nodes[id].child[(int)path[i++]] = newid;
 
-   return id;
+   // Write leaf information.
+   unsigned char * data;
+   if (i < dfa->trie->height)
+      data = trie_encode((unsigned char *)path + i, dfa->trie->height - i);
+   else data = NULL;
+   dfa->trie->nodes[newid].child[0] = (size_t) data;
+   dfa->trie->nodes[newid].child[1] = dfastate;
+   dfa->trie->nodes[newid].child[2] = value | type_msb(dfa->trie->nodes[id].child[2]); // Flag leaf (MSB).
+
+   return newid;
 }
 
 size_t
@@ -1264,4 +1280,61 @@ trie_reset
 {
    trie->pos = 0;
    memset(&(trie->nodes[0]), 0, sizeof(node_t));
+}
+
+unsigned char *
+trie_encode
+(
+ const unsigned char * path,
+ size_t nelements
+)
+{
+   static const unsigned char power[5] = {81,27,9,3,1};
+   // Allocate data.
+   unsigned char * data = calloc(nelements/5 + (nelements%5 > 0), sizeof(char));
+   // Convert ternary alphabet to binary. (5 ternary symbols per byte)
+   for (size_t i = 0; i < nelements; i++) data[i/5] += path[i] * power[i%5];
+   // Return.
+   return data;
+}
+
+unsigned char *
+trie_decode
+(
+ const unsigned char * data,
+ size_t nelements
+)
+{
+   static const unsigned char power[5] = {81,27,9,3,1};
+   // Allocate path.
+   unsigned char * path = malloc(nelements);
+   unsigned char tmp = 0;
+   // Convert binary to ternary alphabet. (One byte yields 5 ternary symbols)
+   for (size_t i = 0; i < nelements; i++) {
+      if (i%5 == 0) tmp = data[i/5];
+      path[i] = tmp / power[i%5];
+      tmp = tmp % power[i%5];
+   }
+   // Return.
+   return path;
+}
+
+
+int
+trie_compare
+(
+ const unsigned char * path,
+ const unsigned char * data,
+ size_t nelements
+)
+{
+   static const unsigned char power[5] = {81,27,9,3,1};
+   unsigned char tmp = data[0];
+   // Direct comparion of ternary symbols with its binary representation.
+   for (size_t i = 0; i < nelements; i++) {
+      if (i % 5 == 0) tmp = data[i/5];
+      if (tmp / power[i%5] != path[i]) return 0;
+      tmp %= power[i%5];
+   }
+   return 1;
 }
