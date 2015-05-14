@@ -41,6 +41,9 @@
 
 #define min(a,b) (((a) < (b)) ? (a) : (b))
 #define type_msb(a) (((size_t)1)<<(sizeof(a)*8-1))
+#define set_mintomatch(a) (((unsigned int)(a)) << 16)
+#define get_mintomatch(a) (int)((((unsigned int)(a)) >> 16)&0xFFFF)
+#define get_match(a) (int)((unsigned int)(a) &0xFFFF)
 
 typedef struct dfa_t    dfa_t;
 typedef struct vertex_t vertex_t;
@@ -61,9 +64,8 @@ struct trie_t {
 };
 
 struct edge_t {
-   size_t       state;
-   int          match;
-   unsigned int min_to_match;
+   unsigned int state;
+   int match;
 };
 
 struct vertex_t {

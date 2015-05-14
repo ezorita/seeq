@@ -396,25 +396,22 @@ seeqStringMatch
       // Update DFA.
       int cin = (int)translate[(int)data[i]];
       edge_t next;
+      int current_dist = sq->tau+1;
+      size_t min_to_match = slen;
+
       if(cin < NBASES) {
          next = ((dfa_t *) sq->dfa)->states[current_node].next[cin];
          if (next.match == DFA_COMPUTE)
             if (dfa_step(current_node, cin, sq->wlen, sq->tau, (dfa_t **) &(sq->dfa), sq->keys, &next)) return -1;
          current_node = next.state;
+         current_dist = get_match(next.match);
+         min_to_match = (size_t) get_mintomatch(next.match);
       }
-      else if (cin == 6) {
-         // Now lines containing illegal characters will be ommited.
-         break;
-         // Consider changing this by:
-         //   streak_dist = tau + 1;
-         //   current_node = 0;
-         //   continue;
-         // to report these lines as non-matches.
-         // Alternatively, translate could redirect illegal characters to 'N'.
-      }
-      if (cin == 5 || slen - i - 1 < (size_t) next.min_to_match) {
-         next.match = sq->tau+1;
-         if ((options & SQ_NOMATCH) && sq->match.start == (size_t)-1 && streak_dist >= next.match) {
+      else if (cin == 6) break;
+
+      if (cin == 5 || slen - i - 1 < (size_t) min_to_match) {
+         current_dist = sq->tau+1;
+         if ((options & SQ_NOMATCH) && sq->match.start == (size_t)-1 && streak_dist >= current_dist) {
             sq->match.line  = 0;
             sq->match.start = 0;
             sq->match.end   = slen;
@@ -425,9 +422,9 @@ seeqStringMatch
       }
 
       // Update streak.
-      if (streak_dist >= next.match) {
+      if (streak_dist >= current_dist) {
          match = 0;
-      } else if (!match && streak_dist < next.match && streak_dist < sq->match.dist) {
+      } else if (!match && streak_dist < current_dist && streak_dist < sq->match.dist) {
          match = 1;
          if (options & SQ_MATCH) {
             size_t j = 0;
@@ -440,7 +437,7 @@ seeqStringMatch
                if (rnext.match == DFA_COMPUTE)
                   if (dfa_step(rnode, c, sq->wlen, sq->tau, (dfa_t **) &(sq->rdfa), sq->rkeys, &rnext)) return -1;
                rnode = rnext.state;
-               d     = rnext.match;
+               d     = get_match(rnext.match);
             } while (d > streak_dist && j < i);
 
             // Compute match length.
@@ -457,7 +454,7 @@ seeqStringMatch
       }
 
       // Track distance.
-      streak_dist   = next.match;
+      streak_dist   = current_dist;
    }
 
    return count;
@@ -843,7 +840,7 @@ dfa_step
 
    if (exists == 1) {
       // If exists, just link with the existing state.
-      dfa->states[dfa_state].next[base].state = dfalink;
+      dfa->states[dfa_state].next[base].state = (unsigned int) dfalink;
    } else if (exists == 0) {
       if (dfa_newstate(dfap, code, prev, base, dfa_state) == -1) {
          free(state);
@@ -852,7 +849,7 @@ dfa_step
       }
       // Set min_to_match:
       dfa = *dfap;
-      dfa->states[dfa_state].next[base].min_to_match = (unsigned int)(plen - last_active);
+      dfa->states[dfa_state].next[base].match |= set_mintomatch(plen - last_active);
    } else {
       free(state);
       free(code);
@@ -953,7 +950,7 @@ dfa_newstate
    if (vertexid == (size_t)-1) return -1;
 
    // Connect dfa vertices.
-   (*dfap)->states[dfa_state].next[edge].state = vertexid;
+   (*dfap)->states[dfa_state].next[edge].state = (unsigned int)vertexid;
    return 0;
 }
 
@@ -963,7 +960,13 @@ dfa_free
  dfa_t * dfa
 )
 {
-   if (dfa->trie != NULL) free(dfa->trie);
+   if (dfa->trie != NULL) {
+      for (size_t i = 0; i < dfa->pos; i++) {
+         char * pointer = (char *)dfa->trie->nodes[dfa->states[i].node_id].child[0];
+         if (pointer != NULL) free(pointer);
+      }
+      free(dfa->trie);
+   }
    free(dfa);
 }
 
