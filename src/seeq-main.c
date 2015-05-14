@@ -37,21 +37,26 @@ void SIGSEGV_handler(int) __attribute__ ((noreturn));
 
 static const char *USAGE = "Usage:"
 "  seeq [options] pattern inputfile\n"
-"    -v --version         print version\n"
-"    -z --verbose         verbose using stderr\n"
+"\n   MATCHING OPTIONS:\n"
 "    -d --distance        maximum Levenshtein distance (default 0)\n"
-"    -c --count           returns the count of matching lines\n"
+"    -s --skip            skip lines containing non-DNA characters\n"
 "    -i --invert          return only the non-matching lines\n"
+"    -b --best            scan the whole line to find the best match (default: first match only)\n"
+"\n   FORMAT OPTIONS:\n"
+"    -c --count           returns the count of matching lines\n"
 "    -m --match-only      print only the matched part of the matched lines\n"
 "    -n --no-printline    does not print the matching line\n"
 "    -l --lines           prints the original line number of the match\n"
 "    -p --positions       prints the position of the match within the matched line\n"
-"    -k --print-dist      prints the Levenshtein distance wrt the pattern\n"
+"    -k --print-dist      prints the Levenshtein distance of the match\n"
 "    -f --compact         prints output in compact format (line:pos:dist)\n"
 "    -e --end             print only the end of the line, starting after the match\n"
 "    -r --prefix          print only the prefix, ending before the match\n"
-"    -b --best            scan the whole line to find the best match (default: first match only)\n"
-"    -s --skip            skip lines containing non-DNA characters\n";
+"\n   OTHER OPTIONS:\n"
+"    -v --version         print version\n"
+"    -y --memory          set DFA memory limit (in MB)\n"
+"    -z --verbose         verbose using stderr\n";
+
 
 void say_usage(void) { fprintf(stderr, "%s\n", USAGE); }
 void say_version(void) { fprintf(stderr, SEEQ_VERSION "\n"); }
@@ -96,6 +101,7 @@ main
    int prefix_flag    = -1;
    int best_flag      = -1;
    int skip_flag      = -1;
+   int memory_flag    = -1;
 
    // Unset options (value 'UNSET').
    input = NULL;
@@ -125,11 +131,12 @@ main
          {"end",           no_argument, 0, 'e'},         
          {"prefix",        no_argument, 0, 'r'},                  
          {"best",          no_argument, 0, 'b'},                  
+         {"memory",  required_argument, 0, 'y'},                  
          {"distance",required_argument, 0, 'd'},
          {0, 0, 0, 0}
       };
 
-      c = getopt_long(argc, argv, "pmnislczfvkherbd:",
+      c = getopt_long(argc, argv, "pmnislczfvkherby:d:",
             long_options, &option_index);
  
       /* Detect the end of the options. */
@@ -150,6 +157,25 @@ main
          else {
             say_version();
             fprintf(stderr, "error: distance option set more than once.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         break;
+
+      case 'y':
+         if (memory_flag < 0) {
+            int memory = atoi(optarg);
+            if (memory < 0) {
+               say_version();
+               fprintf(stderr, "error: memory limit must be a positive integer.\n");
+               say_help();
+               return EXIT_FAILURE;
+            }
+            memory_flag = atoi(optarg);
+         }
+         else {
+            say_version();
+            fprintf(stderr, "error: memory option set more than once.\n");
             say_help();
             return EXIT_FAILURE;
          }
@@ -359,6 +385,7 @@ main
    if (prefix_flag == -1) prefix_flag = 0;
    if (best_flag == -1) best_flag = 0;
    if (skip_flag == -1) skip_flag = 0;
+   if (memory_flag == -1) memory_flag = 0;
    if (printline_flag == -1) printline_flag = (!matchonly_flag && !endline_flag && !prefix_flag);
 
    if (!showdist_flag && !showpos_flag && !printline_flag && !matchonly_flag && !showline_flag && !count_flag && !compact_flag && !prefix_flag && !endline_flag) {
@@ -387,6 +414,7 @@ main
    args.invert    = invert_flag * maskcnt;
    args.best      = best_flag * maskinv;
    args.skip      = skip_flag;
+   args.memory    = (size_t)memory_flag * 1024*1024;
    return seeq(expr, input, args);
 }
 

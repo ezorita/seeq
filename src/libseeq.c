@@ -43,7 +43,8 @@ seeq_t *
 seeqNew
 (
  const char * pattern,
- int          mismatches
+ int          mismatches,
+ size_t       maxmemory
 )
 // SYNOPSIS:                                                              
 //   Creates a new seeq_t structure for the defined pattern and matching distance.
@@ -94,13 +95,13 @@ seeqNew
    }
 
    // Allocate DFAs.
-   dfa_t * dfa = dfa_new(wlen, mismatches, INITIAL_DFA_SIZE, INITIAL_TRIE_SIZE);
+   dfa_t * dfa = dfa_new(wlen, mismatches, INITIAL_DFA_SIZE, INITIAL_TRIE_SIZE, maxmemory);
    if (dfa == NULL) {
       free(keys); free(rkeys);
       return NULL;
    }
 
-   dfa_t * rdfa = dfa_new(wlen, mismatches, INITIAL_DFA_SIZE, INITIAL_TRIE_SIZE);
+   dfa_t * rdfa = dfa_new(wlen, mismatches, INITIAL_DFA_SIZE, INITIAL_TRIE_SIZE, maxmemory);
    if (rdfa == NULL) {
       free(keys); free(rkeys); free(dfa);
       return NULL;
@@ -387,7 +388,7 @@ seeqStringMatch
    // Reset search variables
    int streak_dist = sq->tau+1;
    int match = 0;
-   size_t current_node = 0;
+   unsigned int current_node = 1;
    size_t slen = strlen(data);
    long count = 0;
    
@@ -428,7 +429,7 @@ seeqStringMatch
          match = 1;
          if (options & SQ_MATCH) {
             size_t j = 0;
-            size_t rnode = 0;
+            unsigned int rnode = 1;
             int d = sq->tau + 1;
             // Find match start with RDFA.
             do {
@@ -691,12 +692,13 @@ dfa_new
  int wlen,
  int tau,
  size_t vertices,
- size_t trienodes
+ size_t trienodes,
+ size_t maxmemory
 )
 // SYNOPSIS:                                                              
-//   Creates and initializes a new dfa graph with a root vertex and the specified
-//   number of preallocated vertices. Initializes a trie to keep the alignment rows
-//   with height wlen and some preallocated nodes. The DFA network is initialized
+//   Creates and initializes a new dfa graph with a cache and a root vertex and the
+//   specified number of preallocated vertices. Initializes a trie to keep the alignment
+//   rows with height wlen and some preallocated nodes. The DFA network is initialized
 //   with the first NW-alignment row [0 1 2 ... tau tau+1 tau+1 ... tau+1].
 //                                                                        
 // PARAMETERS:                                                            
@@ -715,7 +717,7 @@ dfa_new
    // Set error to 0.
    seeqerr = 0;
 
-   if (vertices < 1) vertices = 1;
+   if (vertices < 2) vertices = 2;
    if (wlen < 1 || tau < 0) return NULL;
 
    dfa_t * dfa = malloc(sizeof(dfa_t) + vertices * sizeof(vertex_t));
@@ -723,10 +725,11 @@ dfa_new
       return NULL;
    }
 
-   // Initialize state 0.
+   // Initialize state 0 (cache) and state 1 (root).
    edge_t new = {.state = 0, .match = DFA_COMPUTE};
    for (int i = 0; i < NBASES; i++) {
       dfa->states[0].next[i] = new;
+      dfa->states[1].next[i] = new;
    }
 
    trie_t * trie = trie_new(trienodes, (size_t)wlen);
@@ -737,8 +740,10 @@ dfa_new
 
    // Fill struct.
    dfa->size = vertices;
-   dfa->pos  = 1;
+   dfa->pos  = 2;
+   dfa->maxmemory = maxmemory;
    dfa->trie = trie;
+   dfa->align_cache = calloc((size_t)(wlen + 1),sizeof(int));
 
    // Compute initial NFA state.
    char * path = malloc((size_t)wlen+1);
@@ -747,7 +752,7 @@ dfa_new
    for (int i = tau + 1; i < wlen; i++) path[i] = 1;
 
    // Insert initial state into trie.
-   size_t nodeid = trie_insert(dfa, path, (size_t)tau+1, 0);
+   size_t nodeid = trie_insert(dfa, path, (size_t)tau+1, 1);
    free(path);
 
    if (nodeid == (size_t)-1) {
@@ -757,7 +762,8 @@ dfa_new
    }
 
    // Link trie leaf with DFA vertex.
-   dfa->states[0].node_id = nodeid;
+   dfa->states[0].node_id = (size_t)-1;
+   dfa->states[1].node_id = nodeid;
 
    return dfa;
 }
@@ -766,7 +772,7 @@ dfa_new
 int
 dfa_step
 (
- size_t    dfa_state,
+ unsigned int dfa_state,
  int       base,
  int       plen,
  int       tau,
@@ -800,39 +806,44 @@ dfa_step
    // Set error to 0.
    seeqerr = 0;
 
-   dfa_t  * dfa   = *dfap;
+   dfa_t * dfa   = *dfap;
+   int   * align = dfa->align_cache;
+   int     value = 1 << base;
 
-   // Return next vertex if already computed.
-   if (dfa->states[dfa_state].next[base].match != DFA_COMPUTE) {
-      *nextedge = dfa->states[dfa_state].next[base];
-      return 0;
+
+   if (dfa_state != 0) {
+      // Return next vertex if already computed.
+      if (dfa->states[dfa_state].next[base].match != DFA_COMPUTE) {
+         *nextedge = dfa->states[dfa_state].next[base];
+         return 0;
+      }
+
+      // Explore the trie backwards to find out the NFA state.
+      if (trie_getrow(dfa->trie, dfa->states[dfa_state].node_id, align) == 0) return -1;
    }
 
-   int  value = 1 << base;
-
-   // Explore the trie backwards to find out the NFA state.
-   int  * state = trie_getrow(dfa->trie, dfa->states[dfa_state].node_id);
+   // Alloc new code that will be computed.
    char * code  = calloc((size_t)plen + 1, sizeof(char));
+   if (code == NULL) return -1;
 
-   if (state == NULL || code == NULL) return -1;
 
    // Initialize first column.
-   int nextold, prev, old = state[0];
-   state[0] = prev = 0;
+   int nextold, prev, old = align[0];
+   align[0] = prev = 0;
    int last_active = 1;
 
    // Update row.
    for (int i = 1; i < plen+1; i++) {
-      nextold   = state[i];
-      state[i]  = min(tau + 1, min(old + ((value & exp[i-1]) == 0), min(prev, state[i]) + 1));
-      if (state[i] <= tau) last_active = i;
-      code[i-1] = (char) (state[i] - prev + 1);
-      prev      = state[i];
+      nextold   = align[i];
+      align[i]  = min(tau + 1, min(old + ((value & exp[i-1]) == 0), min(prev, align[i]) + 1));
+      if (align[i] <= tau) last_active = i;
+      code[i-1] = (char) (align[i] - prev + 1);
+      prev      = align[i];
       old       = nextold;
    }
 
    // Save match value.
-   dfa->states[dfa_state].next[base].match = prev;
+   nextedge->match = (int)((unsigned int)prev | set_mintomatch(plen - last_active));
    
    // Check if this state already exists.
    size_t dfalink;
@@ -840,26 +851,33 @@ dfa_step
 
    if (exists == 1) {
       // If exists, just link with the existing state.
-      dfa->states[dfa_state].next[base].state = (unsigned int) dfalink;
+      nextedge->state = (unsigned int) dfalink;
+      // Update edge in dfa.
+      if (dfa_state != 0) {
+         dfa->states[dfa_state].next[base].match = nextedge->match;   
+         dfa->states[dfa_state].next[base].state = nextedge->state;
+      }
    } else if (exists == 0) {
-      if (dfa_newstate(dfap, code, prev, base, dfa_state) == -1) {
-         free(state);
+      int retval = dfa_newstate(dfap, code, prev, base, dfa_state);
+      dfa = *dfap;
+      if (retval == 0) {
+         // Update edge in dfa.
+         dfa->states[dfa_state].next[base].match = nextedge->match;   
+         nextedge->state = dfa->states[dfa_state].next[base].state;
+      } else  if (retval == 1) {
+         // Set to cache mode if max memory is reached.
+         nextedge->state = 0;
+      } else {
          free(code);
          return -1;
       }
-      // Set min_to_match:
-      dfa = *dfap;
-      dfa->states[dfa_state].next[base].match |= set_mintomatch(plen - last_active);
    } else {
-      free(state);
       free(code);
       return -1;
    }
 
-   free(state);
    free(code);
-   
-   *nextedge = dfa->states[dfa_state].next[base];
+
    return 0;
 }
 
@@ -941,6 +959,10 @@ dfa_newstate
    // Set error to 0.
    seeqerr = 0;
 
+   // Check memory usage.
+   if ((*dfap)-> maxmemory > 0 &&
+       (*dfap)->pos * sizeof(vertex_t) + (*dfap)->trie->pos * sizeof(node_t) > (*dfap)->maxmemory) return 1;
+
    // Insert new NFA state in the trie.
    size_t nodeid = trie_insert(*dfap, code, (size_t)alignval, (*dfap)->pos);
    if (nodeid == (size_t)-1) return -1;
@@ -961,7 +983,7 @@ dfa_free
 )
 {
    if (dfa->trie != NULL) {
-      for (size_t i = 0; i < dfa->pos; i++) {
+      for (size_t i = 1; i < dfa->pos; i++) {
          char * pointer = (char *)dfa->trie->nodes[dfa->states[i].node_id].child[0];
          if (pointer != NULL) free(pointer);
       }
@@ -1065,11 +1087,12 @@ trie_search
 }
 
 
-int *
+int
 trie_getrow
 (
  trie_t * trie,
- size_t   nodeid
+ size_t   nodeid,
+ int    * path
 )
 // SYNOPSIS:                                                              
 //   Recomputes the NW row that terminates at nodeid ('nodeid' must point
@@ -1078,6 +1101,7 @@ trie_getrow
 // PARAMETERS:                                                            
 //   trie   : Pointer to the trie.
 //   nodeid : Id of the leaf at which the NW row terminates.
+//   path   : Vector of size trie->height + 1 where the path will be stored.
 //                                                                        
 // RETURN:                                                                
 //   trie_getrow returns a pointer to the start of the NW row. If an
@@ -1093,14 +1117,12 @@ trie_getrow
 
    // Alloc path.
    node_t * nodes = &(trie->nodes[0]);
-   int    * path  = malloc((trie->height + 1) * sizeof(int));
-   if (path == NULL) return NULL;
 
    if(!(nodes[nodeid].child[2] & type_msb(nodes[nodeid].child[2]))) {
       // Set error flag.
 
       // Return
-      return NULL;
+      return -1;
    }
 
    // Find height of the node.
@@ -1129,7 +1151,7 @@ trie_getrow
       id = next_id;
    } 
 
-   return path;
+   return 1;
 }
 
 

@@ -76,7 +76,9 @@ struct vertex_t {
 struct dfa_t {
    size_t     pos;
    size_t     size;
+   size_t     maxmemory;
    trie_t   * trie;
+   int      * align_cache;
    vertex_t   states[];
 };
 
@@ -114,15 +116,15 @@ static const int translate_n[256] = {
 static const char bases[NBASES] = "ACGTN";
 
 int         parse         (const char *, char *);
-dfa_t     * dfa_new       (int, int, size_t, size_t);
+dfa_t     * dfa_new       (int, int, size_t, size_t, size_t);
 size_t      dfa_newvertex (dfa_t **, size_t);
 int         dfa_newstate  (dfa_t **, char *, int, int, size_t); 
-int         dfa_step      (size_t, int, int, int, dfa_t **, char *, edge_t *);
+int         dfa_step      (unsigned int, int, int, int, dfa_t **, char *, edge_t *);
 void        dfa_free      (dfa_t *);
 trie_t    * trie_new      (size_t, size_t);
 int         trie_search   (trie_t *, char*, size_t*, size_t*);
 size_t      trie_insert   (dfa_t *, char*, size_t, size_t);
-int       * trie_getrow   (trie_t *, size_t);
+int         trie_getrow   (trie_t *, size_t, int *);
 size_t      trie_newnode  (trie_t **, size_t);
 void        trie_reset    (trie_t *);
 unsigned char * trie_encode   (const unsigned char *, size_t);

@@ -78,7 +78,7 @@ seeq
    const int tau = args.dist;
 
    if (verbose) fprintf(stderr, "opening input file... ");
-   seeq_t * sq =  seeqNew(expression, tau);
+   seeq_t * sq =  seeqNew(expression, tau, args.memory);
    if (sq == NULL) {
       fprintf(stderr, "error in 'seeqNew()'; %s\n:", seeqPrintError());
       return EXIT_FAILURE;
@@ -154,9 +154,14 @@ seeq
    if (verbose) {
       size_t * data = (size_t *) sq->dfa;
       size_t mem_dfa  = *data * (8*5+8);
-      size_t mem_trie = *(size_t *)(*(data + 2)) * 32;
+      size_t mem_trie = *(size_t *)(*(data + 3)) * 32;
       double mb = 1024.0*1024.0;
-      fprintf(stderr, "memory: %.2f MB (DFA: %ld in %.2f MB, trie: %ld in %.2f MB)\n", (mem_dfa + mem_trie)/mb, *data, mem_dfa/mb, *(size_t *)(*(data + 2)), mem_trie/mb);
+      fprintf(stderr, "DFA memory: %.2f MB (DFA: %ld in %.2f MB, trie: %ld in %.2f MB)\n", (mem_dfa + mem_trie)/mb, *data, mem_dfa/mb, *(size_t *)(*(data + 3)), mem_trie/mb);
+      data = (size_t *) sq->rdfa;
+      mem_dfa  = *data * (8*5+8);
+      mem_trie = *(size_t *)(*(data + 3)) * 32;
+      fprintf(stderr, "RDFA memory: %.2f MB (DFA: %ld in %.2f MB, trie: %ld in %.2f MB)\n", (mem_dfa + mem_trie)/mb, *data, mem_dfa/mb, *(size_t *)(*(data + 3)), mem_trie/mb);
+      
       fprintf(stderr, "done in %.3fs\n", (clock()-clk)*1.0/CLOCKS_PER_SEC);
    }
    

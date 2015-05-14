@@ -74,7 +74,7 @@ struct seeqfile_t {
    FILE  * fdi;
 };
 
-seeq_t     * seeqNew         (const char *, int);
+seeq_t     * seeqNew         (const char *, int, size_t);
 void         seeqFree        (seeq_t *);
 seeqfile_t * seeqOpen        (const char *);
 int          seeqClose       (seeqfile_t *);
