@@ -34,7 +34,7 @@ static const char * seeq_strerror[11] = {"Check errno",
                                   "Incorrect pattern (illegal character)",
                                   "Incorrect pattern (missing closing bracket)",
                                   "Illegal path value passed to 'trie_search'",
-                                  "Illegal nodeid passed to 'trie_getrow' (specified node is not a leaf).\n",
+                                  "Illegal nodeid passed to 'trie_getrow' (node is not a leaf).\n",
                                   "Illegal path value passed to 'trie_insert'",
                                   "Pattern length must be larger than matching distance",
                                   "Passed seeq_t struct does not contain a valid file pointer"};
@@ -1119,9 +1119,7 @@ trie_getrow
    node_t * nodes = &(trie->nodes[0]);
 
    if(!(nodes[nodeid].child[2] & type_msb(nodes[nodeid].child[2]))) {
-      // Set error flag.
-
-      // Return
+      seeqerr = 7;      
       return -1;
    }
 
