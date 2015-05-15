@@ -189,27 +189,31 @@ test_trie_insert
    uint id;
 
    // Insert leftmost branch in the trie.
-   id = trie_insert(&trie, "\0\0\0\0\0\0\0\0\0\0", 4897892, 1205);
-   g_assert_cmpint(id, ==, 10);
-   g_assert_cmpint(trie->pos, ==, 11);
-   g_assert_cmpint(trie->size, ==, 16);
-   for (int i = 0 ; i < 10 ; i++) {
-      node_t node = trie->nodes[i];
-      g_assert_cmpint(node.parent, ==, (i-1 < 0 ? 0 : i-1));
-      g_assert_cmpint(node.child[0], ==, i+1);
-      for (int k = 1; k < TRIE_CHILDREN; k++) {
-         g_assert_cmpint(node.child[k], ==, 0);
-      }
-   }
-   node_t node = trie->nodes[10];
-   g_assert_cmpint(node.child[0], ==, 4897892);
+   id = trie_insert(&trie, "\0\0\0\0\0\0\0\0\0\0", 12, 1205);
+   g_assert_cmpint(id, ==, 1);
+   g_assert_cmpint(trie->pos, ==, 2);
+   g_assert_cmpint(trie->size, ==, 2);
+   // This will create nodes up to level 3.
+   // [0] --0--> [1] --0--> [2] --0--> [3] --0--> (4)
+   //                                   '----1--> (5)
+   id = trie_insert(&trie, "\0\0\0\1\0\0\0\0\0\0", 51, 1205);
+   g_assert_cmpint(id, ==, 5);
+   g_assert_cmpint(trie->pos, ==. 6);
+   g_assert_cmpint(trie->size, ==, 8);
+   // The encoded path is [0,0,0,0,0,0] -> 0x0000
+   node_t node = trie->nodes[5];
+   char * data = (char *)node.child[0];
+   g_assert_cmpint(data[0], ==, 0);
+   g_assert_cmpint(data[1], ==, 0);
    g_assert_cmpint(node.child[1], ==, 1205);
+   g_assert_cmpint(node.child[2] & 0xFFFF, ==, 51);
+   g_assert_cmpint(node.parent, ==, 3);
 
    // Insert center branch in the trie.
-   id = trie_insert(&trie, "\1\1\1\1\1\1\1\1\1\1", 22923985, 834139423);
-   g_assert_cmpint(id, ==, 20);
-   g_assert_cmpint(trie->pos, ==, 21);
-   g_assert_cmpint(trie->size, ==, 32);
+   id = trie_insert(&trie, "\1\1\1\1\1\1\1\1\1\1", 2, 834139423);
+   g_assert_cmpint(id, ==, 6);
+   g_assert_cmpint(trie->pos, ==, 7);
+   g_assert_cmpint(trie->size, ==, 8);
    for (int i = 1 ; i < 10 ; i++) {
       node_t node = trie->nodes[i];
       g_assert_cmpint(node.parent, ==, i-1);

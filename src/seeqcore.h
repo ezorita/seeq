@@ -28,6 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <stdint.h>
 
 #define INITIAL_STACK_SIZE 256
 #define INITIAL_TRIE_SIZE  256
@@ -41,9 +42,9 @@
 
 #define min(a,b) (((a) < (b)) ? (a) : (b))
 #define type_msb(a) (((size_t)1)<<(sizeof(a)*8-1))
-#define set_mintomatch(a) (((unsigned int)(a)) << 16)
-#define get_mintomatch(a) (int)((((unsigned int)(a)) >> 16)&0xFFFF)
-#define get_match(a) (int)((unsigned int)(a) &0xFFFF)
+#define set_mintomatch(a) (((uint32_t)(a)) << 16)
+#define get_mintomatch(a) (int)((((uint32_t)(a)) >> 16)&0xFFFF)
+#define get_match(a) (int)((uint32_t)(a) &0xFFFF)
 
 typedef struct dfa_t    dfa_t;
 typedef struct vertex_t vertex_t;
@@ -52,8 +53,11 @@ typedef struct trie_t   trie_t;
 typedef struct node_t   node_t;
 
 struct node_t {
-   size_t child[TRIE_CHILDREN];
-   size_t parent;
+   // Type indica si es leaf o un altre node.
+   // Si es leaf el que hi ha a child es l'estat
+   // de la DFA.
+   uint32_t flags;
+   uint32_t child[TRIE_CHILDREN];
 };
 
 struct trie_t {
@@ -64,13 +68,17 @@ struct trie_t {
 };
 
 struct edge_t {
-   unsigned int state;
+   uint32_t state;
    int match;
 };
 
 struct vertex_t {
-   size_t  node_id;
-   edge_t  next[NBASES];
+   // El vertex de la DFA ja no li cal tenir
+   // un punter al trie, els vectors d'alineament
+   // s'emmagatzemen directament codificats en
+   // mallocs individuals.
+   void   * align;
+   edge_t   next[NBASES];
 };
 
 struct dfa_t {
@@ -117,19 +125,20 @@ static const char bases[NBASES] = "ACGTN";
 
 int         parse         (const char *, char *);
 dfa_t     * dfa_new       (int, int, size_t, size_t, size_t);
-size_t      dfa_newvertex (dfa_t **, size_t);
-int         dfa_newstate  (dfa_t **, char *, int, int, size_t); 
-int         dfa_step      (unsigned int, int, int, int, dfa_t **, char *, edge_t *);
+size_t      dfa_newvertex (dfa_t **);
+int         dfa_newstate  (dfa_t **, uint8_t *, int, int, size_t); 
+int         dfa_step      (uint32_t, int, int, int, dfa_t **, char *, edge_t *);
 void        dfa_free      (dfa_t *);
 trie_t    * trie_new      (size_t, size_t);
-int         trie_search   (trie_t *, char*, size_t*, size_t*);
-size_t      trie_insert   (dfa_t *, char*, size_t, size_t);
-int         trie_getrow   (trie_t *, size_t, int *);
-size_t      trie_newnode  (trie_t **, size_t);
+int         trie_search   (dfa_t *, uint8_t *, uint32_t*);
+int         trie_insert   (dfa_t *, uint8_t *, size_t);
+size_t      trie_newnode  (trie_t **);
 void        trie_reset    (trie_t *);
-unsigned char * trie_encode   (const unsigned char *, size_t);
-unsigned char * trie_decode   (const unsigned char *, size_t);
-int             trie_compare  (const unsigned char *, const unsigned char *, size_t);
+void        path_to_align (const unsigned char *, int *, size_t);
+void        align_to_path (const int *, uint8_t *, size_t);
+void        path_encode   (const uint8_t *, uint8_t *, size_t);
+void        path_decode   (const uint8_t *, uint8_t *, size_t);
+int         path_compare  (const uint8_t *, const uint8_t *, size_t);
 
 
 #define RESET       "\033[0m"

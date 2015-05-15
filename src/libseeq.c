@@ -388,7 +388,7 @@ seeqStringMatch
    // Reset search variables
    int streak_dist = sq->tau+1;
    int match = 0;
-   unsigned int current_node = 1;
+   uint32_t current_node = 1;
    size_t slen = strlen(data);
    long count = 0;
    
@@ -429,7 +429,7 @@ seeqStringMatch
          match = 1;
          if (options & SQ_MATCH) {
             size_t j = 0;
-            unsigned int rnode = 1;
+            uint32_t rnode = 1;
             int d = sq->tau + 1;
             // Find match start with RDFA.
             do {
@@ -720,6 +720,7 @@ dfa_new
    if (vertices < 2) vertices = 2;
    if (wlen < 1 || tau < 0) return NULL;
 
+   // Allocate DFA.
    dfa_t * dfa = malloc(sizeof(dfa_t) + vertices * sizeof(vertex_t));
    if (dfa == NULL) {
       return NULL;
@@ -745,25 +746,29 @@ dfa_new
    dfa->trie = trie;
    dfa->align_cache = calloc((size_t)(wlen + 1),sizeof(int));
 
-   // Compute initial NFA state.
-   char * path = malloc((size_t)wlen+1);
-   if (path == NULL) return NULL;
-   for (int i = 0; i <= tau; i++) path[i] = 2;
-   for (int i = tau + 1; i < wlen; i++) path[i] = 1;
-
-   // Insert initial state into trie.
-   size_t nodeid = trie_insert(dfa, path, (size_t)tau+1, 1);
-   free(path);
-
-   if (nodeid == (size_t)-1) {
-      free(trie);
-      free(dfa);
+   // Allocate memory for path and its encoded version.
+   uint8_t * code = malloc((size_t)wlen/5 + (wlen%5 > 0));
+   uint8_t * path = malloc((size_t)wlen);
+   if (path == NULL || code == NULL) {
+      free(path); free(code); free(dfa); free(trie);
       return NULL;
    }
 
-   // Link trie leaf with DFA vertex.
-   dfa->states[0].node_id = (size_t)-1;
-   dfa->states[1].node_id = nodeid;
+   // Compute initial alignment.
+   for (int i = 0; i <= tau; i++) path[i] = 2;
+   for (int i = tau + 1; i < wlen; i++) path[i] = 1;
+   // Compute differential code of the path.
+   path_encode(path,code,wlen);
+   // Store the encoded alignment in the DFA.
+   dfa->states[0].align = NULL;
+   dfa->states[1].align = code;
+
+   // Insert initial state into trie.
+   if (trie_insert(dfa, path, 1)) {
+      free(path); free(code); free(dfa); free(trie);
+      return NULL;
+   }
+   free(path);
 
    return dfa;
 }
@@ -772,7 +777,7 @@ dfa_new
 int
 dfa_step
 (
- unsigned int dfa_state,
+ uint32_t  dfa_state,
  int       base,
  int       plen,
  int       tau,
@@ -807,26 +812,27 @@ dfa_step
    seeqerr = 0;
 
    dfa_t * dfa   = *dfap;
-   int   * align = dfa->align_cache;
    int     value = 1 << base;
 
 
-   if (dfa_state != 0) {
-      // Return next vertex if already computed.
-      if (dfa->states[dfa_state].next[base].match != DFA_COMPUTE) {
-         *nextedge = dfa->states[dfa_state].next[base];
-         return 0;
-      }
-
-      // Explore the trie backwards to find out the NFA state.
-      if (trie_getrow(dfa->trie, dfa->states[dfa_state].node_id, align) == 0) return -1;
+   // Return next vertex if already computed.
+   if (dfa->states[dfa_state].next[base].match != DFA_COMPUTE) {
+      *nextedge = dfa->states[dfa_state].next[base];
+      return 0;
    }
+   
+   // Get the current alignment from the DFA state.
+   int     * align = dfa->align_cache;
+   uint8_t * path  = malloc((size_t)plen * sizeof(char));
+   if (path == NULL) return -1;
 
-   // Alloc new code that will be computed.
-   char * code  = calloc((size_t)plen + 1, sizeof(char));
-   if (code == NULL) return -1;
-
-
+   // Restore alignment if not running in cached mode.
+   if (dfa_state != 0) {
+      align = malloc((size_t)(plen+1) * sizeof(int));
+      path_decode((uint8_t *)dfa->states[dfa_state].align, path, plen);
+      path_to_align(path, align, plen);
+   }
+ 
    // Initialize first column.
    int nextold, prev, old = align[0];
    align[0] = prev = 0;
@@ -837,28 +843,32 @@ dfa_step
       nextold   = align[i];
       align[i]  = min(tau + 1, min(old + ((value & exp[i-1]) == 0), min(prev, align[i]) + 1));
       if (align[i] <= tau) last_active = i;
-      code[i-1] = (char) (align[i] - prev + 1);
+      path[i-1] = (char) (align[i] - prev + 1);
       prev      = align[i];
       old       = nextold;
    }
 
    // Save match value.
-   nextedge->match = (int)((unsigned int)prev | set_mintomatch(plen - last_active));
+   nextedge->match = (int)((uint32_t)prev | set_mintomatch(plen - last_active));
    
    // Check if this state already exists.
-   size_t dfalink;
-   int exists = trie_search(dfa->trie, code, NULL, &dfalink);
+   uint32_t dfalink;
+
+   // UPDATE:
+   // The entire DFA should be passed to find the remaining path stored
+   // in the DFA node (using path_compare).
+   int exists = trie_search(dfa, path, &dfalink);
 
    if (exists == 1) {
       // If exists, just link with the existing state.
-      nextedge->state = (unsigned int) dfalink;
+      nextedge->state = dfalink;
       // Update edge in dfa.
       if (dfa_state != 0) {
          dfa->states[dfa_state].next[base].match = nextedge->match;   
          dfa->states[dfa_state].next[base].state = nextedge->state;
       }
    } else if (exists == 0) {
-      int retval = dfa_newstate(dfap, code, prev, base, dfa_state);
+      int retval = dfa_newstate(dfap, path, prev, base, dfa_state);
       dfa = *dfap;
       if (retval == 0) {
          // Update edge in dfa.
@@ -868,15 +878,15 @@ dfa_step
          // Set to cache mode if max memory is reached.
          nextedge->state = 0;
       } else {
-         free(code);
+         free(path);
          return -1;
       }
    } else {
-      free(code);
+      free(path);
       return -1;
    }
 
-   free(code);
+   free(path);
 
    return 0;
 }
@@ -885,17 +895,14 @@ dfa_step
 size_t
 dfa_newvertex
 (
- dfa_t ** dfap,
- size_t   nodeid
+ dfa_t   ** dfap
 )
 // SYNOPSIS:                                                              
 //   Adds a new vertex to the dfa graph. The new vertex is not linked to any other
 //   vertex in any way, so the connection must be done manually.
 //                                                                        
 // PARAMETERS:                                                            
-//   dfap   : pointer to a memory space containing the address of the DFA.
-//   nodeid : id of the associated node in the NW row trie, i.e. where the
-//            NW row corresponding to this state is stored.
+//   dfap : pointer to a memory space containing the address of the DFA.
 //                                                                        
 // RETURN:                                                                
 //   On success, the function returns the id of the new vertex. In case of error
@@ -919,7 +926,7 @@ dfa_newvertex
    }
 
    // Initialize DFA vertex.
-   dfa->states[dfa->pos].node_id = nodeid;
+   dfa->states[dfa->pos].align = NULL;
    edge_t new = {.state = 0, .match = DFA_COMPUTE};
    for (int j = 0; j < NBASES; j++) dfa->states[dfa->pos].next[j] = new;
 
@@ -930,11 +937,11 @@ dfa_newvertex
 int
 dfa_newstate
 (
- dfa_t ** dfap,
- char   * code,
- int      alignval,
- int      edge,
- size_t   dfa_state
+ dfa_t   ** dfap,
+ uint8_t  * path,
+ int        alignval,
+ int        edge,
+ size_t     dfa_state
  )
 // SYNOPSIS:                                                              
 //   Creates a new vertex to allocate a new DFA state, which represents an 
@@ -943,7 +950,7 @@ dfa_newstate
 //                                                                        
 // PARAMETERS:                                                            
 //   dfap      : pointer to a memory space containing the address of the DFA.
-//   code      : path of the trie that represents the new NW alignment.
+//   path      : path of the trie that represents the new NW alignment.
 //   alignval  : last column of the NW alignment.
 //   dfa_state : current DFA state.
 //   edge      : the edge slot to use of the current DFA state.
@@ -956,23 +963,38 @@ dfa_newstate
 //   at the end of the funcion.
 {
 
+   //UPDATE:
+   //path must be encoded and stored in the DFA node. The only reference that will be saved
+   // will be the new DFA state and will be stored in the leaf that is as closest to the root
+   // as possible.
+
    // Set error to 0.
    seeqerr = 0;
 
    // Check memory usage.
    if ((*dfap)-> maxmemory > 0 &&
-       (*dfap)->pos * sizeof(vertex_t) + (*dfap)->trie->pos * sizeof(node_t) > (*dfap)->maxmemory) return 1;
+       (*dfap)->pos * sizeof(vertex_t) + (*dfap)->trie->pos * sizeof(node_t) > (*dfap)->maxmemory) {
+      // TODO
+      // Realloc structures to their current size?
 
-   // Insert new NFA state in the trie.
-   size_t nodeid = trie_insert(*dfap, code, (size_t)alignval, (*dfap)->pos);
-   if (nodeid == (size_t)-1) return -1;
+      return 1;
+   }
+
+   // Encode path.
+   size_t th = (*dfap)->trie->height;
+   uint8_t * code = malloc(th/5 + (th%5 > 0));
+   path_encode(path, code, th);
 
    // Create new vertex in dfa graph.
-   size_t vertexid = dfa_newvertex(dfap, nodeid);
+   size_t vertexid = dfa_newvertex(dfap);
    if (vertexid == (size_t)-1) return -1;
-
+   (*dfap)->states[vertexid].align = code;
    // Connect dfa vertices.
-   (*dfap)->states[dfa_state].next[edge].state = (unsigned int)vertexid;
+   (*dfap)->states[dfa_state].next[edge].state = (uint32_t)vertexid;
+
+   // Insert new state in the trie.
+   if (trie_insert(*dfap, path, vertexid)) return -1;
+
    return 0;
 }
 
@@ -983,12 +1005,13 @@ dfa_free
 )
 {
    if (dfa->trie != NULL) {
-      for (size_t i = 1; i < dfa->pos; i++) {
-         char * pointer = (char *)dfa->trie->nodes[dfa->states[i].node_id].child[0];
-         if (pointer != NULL) free(pointer);
-      }
       free(dfa->trie);
    }
+   for (size_t i = 1; i < dfa->pos; i++) {
+      uint8_t * pointer = dfa->states[i].align;
+      if (pointer != NULL) free(pointer);
+   }
+
    free(dfa);
 }
 
@@ -1038,10 +1061,9 @@ trie_new
 int
 trie_search
 (
- trie_t * trie,
- char   * path,
- size_t * value,
- size_t * dfastate
+ dfa_t    * dfa,
+ uint8_t  * path,
+ uint32_t * dfastate
  )
 // SYNOPSIS:                                                              
 //   Searches the trie following a specified path and returns the values stored
@@ -1063,16 +1085,20 @@ trie_search
    // Set error to 0.
    seeqerr = 0;
 
+   trie_t * trie = dfa->trie;
+
    size_t id = 0;
-   for (size_t i = 0; i < trie->height; i++) {
+   size_t i;
+   for (i = 0; i < trie->height; i++) {
       if (path[i] >= TRIE_CHILDREN || path[i] < 0) {
          seeqerr = 6;
          return -1;
       }
       // Check if current node is a leaf.
-      if (trie->nodes[id].child[2] & type_msb(trie->nodes[id].child[2])) {
+      if (trie->nodes[id].flags & (((uint32_t)1)<<path[i])) {
          // Compare paths.
-         if (trie_compare((unsigned char *)path + i, (unsigned char *) trie->nodes[id].child[0], trie->height - i) == 0) return 0;
+         uint8_t * code = dfa->states[trie->nodes[id].child[(int)path[i]]].align;
+         if (path_compare((uint8_t *)path, code , trie->height) == 0) return 0;
          else break;
       }
       // Update path.
@@ -1081,85 +1107,17 @@ trie_search
       if (id == 0) return 0;
    }
    // Save leaf value.
-   if (value != NULL) *value = trie->nodes[id].child[2] & ~type_msb(trie->nodes[id].child[2]);
-   if (dfastate != NULL) *dfastate = trie->nodes[id].child[1];
+   if (dfastate != NULL) *dfastate = trie->nodes[id].child[(int)path[i]];
    return 1;
 }
 
 
 int
-trie_getrow
-(
- trie_t * trie,
- size_t   nodeid,
- int    * path
-)
-// SYNOPSIS:                                                              
-//   Recomputes the NW row that terminates at nodeid ('nodeid' must point
-//   to a trie leaf).
-//                                                                        
-// PARAMETERS:                                                            
-//   trie   : Pointer to the trie.
-//   nodeid : Id of the leaf at which the NW row terminates.
-//   path   : Vector of size trie->height + 1 where the path will be stored.
-//                                                                        
-// RETURN:                                                                
-//   trie_getrow returns a pointer to the start of the NW row. If an
-//   error occurred during the row computation or nodeid did not point
-//   to a leaf node, a NULL pointer is returned.
-//
-// SIDE EFFECTS:
-//   An array containing the NW row is allocated using malloc and must be
-//   manually freed.
-{
-   // Set error to 0.
-   seeqerr = 0;
-
-   // Alloc path.
-   node_t * nodes = &(trie->nodes[0]);
-
-   if(!(nodes[nodeid].child[2] & type_msb(nodes[nodeid].child[2]))) {
-      seeqerr = 7;      
-      return -1;
-   }
-
-   // Find height of the node.
-   size_t height = 0;
-   size_t node   = nodeid;
-   while (node != 0) {
-      height++;
-      node = nodes[node].parent;
-   }
-
-   path[trie->height] = (int) (nodes[nodeid].child[2] & ~type_msb(nodes[nodeid].child[2]));
-   
-   // Decode stored path.
-   if (height < trie->height) {
-      unsigned char * dec_path = trie_decode((unsigned char *)nodes[nodeid].child[0], trie->height - height);
-      for (size_t i = trie->height; i > height; i--) {
-         path[i-1] = path[i] - (int)dec_path[i-1-height] + 1;
-      }
-      free(dec_path);
-   }
-
-   // Compute row from trie path.
-   for (size_t i = height, id = nodeid; i > 0; i--) {
-      size_t next_id = nodes[id].parent;
-      path[i-1] = (int)(path[i] + (nodes[next_id].child[0] == id) - (nodes[next_id].child[2] == id));
-      id = next_id;
-   } 
-
-   return 1;
-}
-
-
-size_t
 trie_insert
 (
- dfa_t  * dfa,
- char   * path,
- size_t   value,
- size_t   dfastate
+ dfa_t   * dfa,
+ uint8_t * path,
+ size_t    dfastate
 )
 // SYNOPSIS:                                                              
 //   Inserts the specified path in the trie and stores the end value and
@@ -1169,12 +1127,10 @@ trie_insert
 // PARAMETERS:                                                            
 //   trie     : pointer to a memory space containing the address of the trie.
 //   path     : The path as an array of chars containing values {0,1,2}
-//   value    : The value of the last column of the NW row.
-//   dfastate : The NW-row-associated DFA state. 
+//   dfastate : The associated DFA vertex containing the full alignment. 
 //                                                                        
 // RETURN:                                                                
-//   On success, dfa_insert returns the id of the leaf where the values were
-//   stored, -1 is returned if an error occurred.
+//   On success the function returns 0, -1 is returned if an error occurred.
 //
 // SIDE EFFECTS:
 //   If the trie has reached its limit of allocated nodes, it will be reallocated
@@ -1185,50 +1141,37 @@ trie_insert
 
    size_t id = 0;
    size_t initial_pos = dfa->trie->pos;
-
    size_t i;
-   for (i = 0; i < dfa->trie->height; i++) {
+   for (i = 0; i < dfa->trie->height - 1; i++) {
       if (path[i] < 0 || path[i] >= TRIE_CHILDREN) {
          // Bad path, revert trie and return.
          dfa->trie->pos = initial_pos;
          seeqerr = 8;
-         return (size_t)-1;
+         return -1;
       }
 
       // Check if the current node is an intermediate leaf.
-      if (dfa->trie->nodes[id].child[2] & type_msb(dfa->trie->nodes[id].child[2])) {
+      if (dfa->trie->nodes[id].flags & (((uint32_t)1)<<path[i])) {
          size_t auxid = id;
          // Save data.
-         unsigned char * data   = (unsigned char *) dfa->trie->nodes[id].child[0];
-         size_t tmpdfa = dfa->trie->nodes[id].child[1];
-         size_t tmpval = dfa->trie->nodes[id].child[2];
-         // Reset node.
-         dfa->trie->nodes[id].child[0] = dfa->trie->nodes[id].child[1] = dfa->trie->nodes[id].child[2] = 0;
+         uint32_t tmpdfa = dfa->trie->nodes[id].child[(int)path[i]];
+         // Get the other node's full path.
+         uint8_t * tmppath = malloc(dfa->trie->height);
+         path_decode(dfa->states[tmpdfa].align, tmppath, dfa->trie->height);
+         // Unflag leaf.
+         dfa->trie->nodes[auxid].flags &= ~(((uint32_t)1)<<path[i]);
          // Move down the node.
-         size_t coded_path_len = dfa->trie->height - i;
-         unsigned char * tmppath = trie_decode(data, coded_path_len);
-         size_t j = 0;
-         do {
-            size_t newid = trie_newnode(&(dfa->trie), auxid);
+         size_t j = i;
+         while ((uint8_t) path[j] == tmppath[j] && j < dfa->trie->height) {
+            size_t newid = trie_newnode(&(dfa->trie));
             dfa->trie->nodes[auxid].child[(int)tmppath[j]] = newid;
             auxid = newid;
-            j++; coded_path_len--;
-         } while ((unsigned char) path[i+j] == tmppath[j] && i+j < dfa->trie->height);
-         // Recompute encoded path.
-         unsigned char * newdata;
-         if (coded_path_len) {
-            newdata = trie_encode(tmppath+j, coded_path_len);
-         } else newdata = NULL;
-         // Free old path.
-         free(tmppath);
-         free(data);
-         // Copy data.
-         dfa->trie->nodes[auxid].child[0] = (size_t) newdata;
-         dfa->trie->nodes[auxid].child[1] = tmpdfa;
-         dfa->trie->nodes[auxid].child[2] = tmpval;
-            
-         // Update DFA pointer.
-         dfa->states[tmpdfa].node_id = auxid;
+            j++;
+         } 
+         // Copy data and flag leaf.
+         dfa->trie->nodes[auxid].child[(int)tmppath[j]] = tmpdfa;
+         dfa->trie->nodes[auxid].flags |= (((uint32_t)1)<<path[i]);
+         free(tmppath);            
       }
 
       // Walk the tree.
@@ -1238,28 +1181,18 @@ trie_insert
       } else break;
    }
 
-   // Create new leaf. 
-   size_t newid = trie_newnode(&(dfa->trie), id);
-   dfa->trie->nodes[id].child[(int)path[i++]] = newid;
+   // Write leaf: Store DFA reference vertex and flag leaf.
+   dfa->trie->nodes[id].child[(int)path[i]] = dfastate;
+   dfa->trie->nodes[id].flags |= (((uint32_t)1)<<path[i]);
 
-   // Write leaf information.
-   unsigned char * data;
-   if (i < dfa->trie->height)
-      data = trie_encode((unsigned char *)path + i, dfa->trie->height - i);
-   else data = NULL;
-   dfa->trie->nodes[newid].child[0] = (size_t) data;
-   dfa->trie->nodes[newid].child[1] = dfastate;
-   dfa->trie->nodes[newid].child[2] = value | type_msb(dfa->trie->nodes[id].child[2]); // Flag leaf (MSB).
-
-   return newid;
+   return 0;
 }
 
 size_t
 trie_newnode
 (
- trie_t ** triep,
- size_t parent
- )
+ trie_t ** triep
+)
 {
    trie_t * trie = *triep;
 
@@ -1274,11 +1207,10 @@ trie_newnode
       
    // Consume one node of the trie.
    size_t newid = trie->pos;
-   trie->nodes[newid].parent = parent;
    trie->nodes[newid].child[0] = trie->nodes[newid].child[1] = trie->nodes[newid].child[2] = 0;
+   trie->nodes[newid].flags = 0;
    trie->pos++;
 
-   // Go one level deeper.
    return newid;
 }
 
@@ -1305,54 +1237,88 @@ trie_reset
    memset(&(trie->nodes[0]), 0, sizeof(node_t));
 }
 
-unsigned char *
-trie_encode
+void
+code_to_align
 (
- const unsigned char * path,
+ const uint8_t * data,
+ int * align,
  size_t nelements
-)
+ )
 {
-   static const unsigned char power[5] = {81,27,9,3,1};
-   // Allocate data.
-   unsigned char * data = calloc(nelements/5 + (nelements%5 > 0), sizeof(char));
-   // Convert ternary alphabet to binary. (5 ternary symbols per byte)
-   for (size_t i = 0; i < nelements; i++) data[i/5] += path[i] * power[i%5];
-   // Return.
-   return data;
+   uint8_t * path = malloc(nelements * sizeof(uint8_t));
+   path_decode(data, path, nelements);
+   path_to_align(path, align, nelements);
+   free(path);
 }
 
-unsigned char *
-trie_decode
+void
+path_to_align
 (
- const unsigned char * data,
+ const uint8_t * path,
+ int * align,
  size_t nelements
 )
 {
-   static const unsigned char power[5] = {81,27,9,3,1};
+   align[0] = 0;
+   for (size_t i = 0; i < nelements; i++) align[i+1] = align[i] + path[i] - 1;
+}
+
+void
+align_to_path
+(
+ const int * align,
+ uint8_t * path,
+ size_t nelements
+)
+{
+   for (size_t i = 0; i < nelements; i++) path[i] = align[i+1] - align[i];
+}
+
+void
+path_encode
+(
+ const uint8_t * path,
+ uint8_t * data,
+ size_t nelements
+)
+{
+   static const uint8_t power[5] = {81,27,9,3,1};
+   // Set memory.
+   memset(data, 0, nelements/5 + (nelements%5 > 0));
+   // Convert ternary alphabet to binary. (5 ternary symbols per byte)
+   for (size_t i = 0; i < nelements; i++) data[i/5] += path[i] * power[i%5];
+}
+
+void
+path_decode
+(
+ const uint8_t * data,
+ uint8_t * path,
+ size_t nelements
+)
+{
+   static const uint8_t power[5] = {81,27,9,3,1};
    // Allocate path.
-   unsigned char * path = malloc(nelements);
-   unsigned char tmp = 0;
+   uint8_t tmp = 0;
    // Convert binary to ternary alphabet. (One byte yields 5 ternary symbols)
    for (size_t i = 0; i < nelements; i++) {
       if (i%5 == 0) tmp = data[i/5];
       path[i] = tmp / power[i%5];
       tmp = tmp % power[i%5];
    }
-   // Return.
-   return path;
 }
 
 
 int
-trie_compare
+path_compare
 (
- const unsigned char * path,
- const unsigned char * data,
+ const uint8_t * path,
+ const uint8_t * data,
  size_t nelements
 )
 {
-   static const unsigned char power[5] = {81,27,9,3,1};
-   unsigned char tmp = data[0];
+   static const uint8_t power[5] = {81,27,9,3,1};
+   uint8_t tmp = data[0];
    // Direct comparion of ternary symbols with its binary representation.
    for (size_t i = 0; i < nelements; i++) {
       if (i % 5 == 0) tmp = data[i/5];
