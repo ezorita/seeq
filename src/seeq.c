@@ -155,13 +155,11 @@ seeq
       size_t * data = (size_t *) sq->dfa;
       size_t mem_dfa  = *data * ((8*4) + strlen(expression)/5 + (strlen(expression)%5 > 0));
       size_t mem_trie = *(size_t *)(*(data + 3)) * 16;
-      double mb = 1024.0*1024.0;
-      fprintf(stderr, "DFA memory: %.2f MB (DFA: %ld in %.2f MB, trie: %ld in %.2f MB)\n", (mem_dfa + mem_trie)/mb, *data, mem_dfa/mb, *(size_t *)(*(data + 3)), mem_trie/mb);
       data = (size_t *) sq->rdfa;
-      mem_dfa  = *data * (8*5+8);
-      mem_trie = *(size_t *)(*(data + 3)) * 32;
-      fprintf(stderr, "RDFA memory: %.2f MB (DFA: %ld in %.2f MB, trie: %ld in %.2f MB)\n", (mem_dfa + mem_trie)/mb, *data, mem_dfa/mb, *(size_t *)(*(data + 3)), mem_trie/mb);
-      
+      size_t mem_rdfa  = *data * ((8*4) + strlen(expression)/5 + (strlen(expression)%5 > 0));
+      size_t mem_rtrie = *(size_t *)(*(data + 3)) * 16;
+      double mb = 1024.0*1024.0;
+      fprintf(stderr, "memory: %.2f MB (DFA: %.2f MB, F-trie: %.2f MB)\n", (mem_dfa + mem_trie + mem_rdfa + mem_rtrie)/mb, (mem_dfa+mem_rdfa)/mb, (mem_trie+mem_rtrie)/mb);
       fprintf(stderr, "done in %.3fs\n", (clock()-clk)*1.0/CLOCKS_PER_SEC);
    }
    
