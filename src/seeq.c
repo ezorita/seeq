@@ -107,7 +107,7 @@ seeq
       if (args.invert) match_options = SQ_NOMATCH;
       else match_options = SQ_MATCH;
       if (args.best) match_options |= SQ_BEST;
-      if (!args.skip) match_options |= SQ_CONT;
+      if (!args.skip) match_options |= SQ_CONTINUE;
 
       long retval;
       while ((retval = seeqFileMatch(sqfile, sq, match_options)) > 0) {

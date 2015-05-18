@@ -33,14 +33,14 @@
 #define COLOR_TERMINAL 1
 
 // Match options.
-#define SQ_ANY        0x00
+#define SQ_ANY        0x03
 #define SQ_MATCH      0x01
 #define SQ_NOMATCH    0x02
 #define SQ_COUNTLINES 0x04
 #define SQ_COUNTMATCH 0x08
 #define SQ_BEST       0x10
 #define SQ_FIRST      0x00
-#define SQ_CONT       0x20
+#define SQ_CONTINUE   0x20
 #define SQ_SKIP       0x00
 
 #include <stdio.h>
