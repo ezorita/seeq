@@ -758,7 +758,7 @@ dfa_new
    for (int i = 0; i <= tau; i++) path[i] = 2;
    for (int i = tau + 1; i < wlen; i++) path[i] = 1;
    // Compute differential code of the path.
-   path_encode(path,code,wlen);
+   path_encode(path,code,(size_t)wlen);
    // Store the encoded alignment in the DFA.
    dfa->states[0].align = NULL;
    dfa->states[1].align = code;
@@ -828,9 +828,8 @@ dfa_step
 
    // Restore alignment if not running in cached mode.
    if (dfa_state != 0) {
-      align = malloc((size_t)(plen+1) * sizeof(int));
-      path_decode((uint8_t *)dfa->states[dfa_state].align, path, plen);
-      path_to_align(path, align, plen);
+      path_decode((uint8_t *)dfa->states[dfa_state].align, path, (size_t)plen);
+      path_to_align(path, align, (size_t)plen);
    }
  
    // Initialize first column.
@@ -843,7 +842,7 @@ dfa_step
       nextold   = align[i];
       align[i]  = min(tau + 1, min(old + ((value & exp[i-1]) == 0), min(prev, align[i]) + 1));
       if (align[i] <= tau) last_active = i;
-      path[i-1] = (char) (align[i] - prev + 1);
+      path[i-1] = (uint8_t)(align[i] - prev + 1);
       prev      = align[i];
       old       = nextold;
    }
@@ -867,8 +866,8 @@ dfa_step
          dfa->states[dfa_state].next[base].match = nextedge->match;   
          dfa->states[dfa_state].next[base].state = nextedge->state;
       }
-   } else if (exists == 0) {
-      int retval = dfa_newstate(dfap, path, prev, base, dfa_state);
+   } else if (exists == 0 && dfa_state != 0) {
+      int retval = dfa_newstate(dfap, path, base, dfa_state);
       dfa = *dfap;
       if (retval == 0) {
          // Update edge in dfa.
@@ -881,7 +880,7 @@ dfa_step
          free(path);
          return -1;
       }
-   } else {
+   } else if (exists == -1) {
       free(path);
       return -1;
    }
@@ -892,7 +891,7 @@ dfa_step
 }
 
 
-size_t
+uint32_t
 dfa_newvertex
 (
  dfa_t   ** dfap
@@ -920,9 +919,11 @@ dfa_newvertex
 
    // Create new vertex in DFA graph.
    if (dfa->pos >= dfa->size) {
-      dfa->size *= 2;
-      *dfap = dfa = realloc(dfa, sizeof(dfa_t) + dfa->size * sizeof(vertex_t));
-      if (dfa == NULL) return (size_t)-1;
+      size_t newsize = dfa->size * 2;
+      if (newsize > ABS_MAX_POS) newsize = ABS_MAX_POS;
+      *dfap = dfa = realloc(dfa, sizeof(dfa_t) + newsize * sizeof(vertex_t));
+      if (dfa == NULL) return U32T_ERROR;
+      dfa->size = newsize;
    }
 
    // Initialize DFA vertex.
@@ -931,7 +932,7 @@ dfa_newvertex
    for (int j = 0; j < NBASES; j++) dfa->states[dfa->pos].next[j] = new;
 
    // Increase counter.
-   return dfa->pos++;
+   return (uint32_t)(dfa->pos++);
 }
 
 int
@@ -939,7 +940,6 @@ dfa_newstate
 (
  dfa_t   ** dfap,
  uint8_t  * path,
- int        alignval,
  int        edge,
  size_t     dfa_state
  )
@@ -951,7 +951,6 @@ dfa_newstate
 // PARAMETERS:                                                            
 //   dfap      : pointer to a memory space containing the address of the DFA.
 //   path      : path of the trie that represents the new NW alignment.
-//   alignval  : last column of the NW alignment.
 //   dfa_state : current DFA state.
 //   edge      : the edge slot to use of the current DFA state.
 //                                                                        
@@ -972,11 +971,18 @@ dfa_newstate
    seeqerr = 0;
 
    // Check memory usage.
-   if ((*dfap)-> maxmemory > 0 &&
-       (*dfap)->pos * sizeof(vertex_t) + (*dfap)->trie->pos * sizeof(node_t) > (*dfap)->maxmemory) {
+   size_t memory = (*dfap)->pos * sizeof(vertex_t); // DFA memory.
+   memory += (*dfap)->pos * ((*dfap)->trie->height/5 + ((*dfap)->trie->height%5 > 0)); // Cached alignments.
+   memory += (*dfap)->trie->pos * sizeof(node_t); // Trie memory.
+   if ((*dfap)->maxmemory > 0 && memory > (*dfap)->maxmemory) {
       // TODO
       // Realloc structures to their current size?
-
+      (*dfap)->trie = realloc((*dfap)->trie, sizeof(trie_t) + (*dfap)->trie->pos * sizeof(node_t));
+      if ((*dfap)->trie == NULL) return -1;
+      (*dfap)->trie->size = (*dfap)->trie->pos;
+      *dfap = realloc(*dfap, sizeof(dfa_t) + (*dfap)->pos * sizeof(vertex_t));
+      if (*dfap == NULL) return -1;
+      (*dfap)->size = (*dfap)->pos;
       return 1;
    }
 
@@ -986,16 +992,18 @@ dfa_newstate
    path_encode(path, code, th);
 
    // Create new vertex in dfa graph.
-   size_t vertexid = dfa_newvertex(dfap);
-   if (vertexid == (size_t)-1) return -1;
+   if ((*dfap)->pos == ABS_MAX_POS) {
+      free(code);
+      return 1;
+   }
+   uint32_t vertexid = dfa_newvertex(dfap);
+   if (vertexid == U32T_ERROR) return -1;
    (*dfap)->states[vertexid].align = code;
    // Connect dfa vertices.
    (*dfap)->states[dfa_state].next[edge].state = (uint32_t)vertexid;
 
    // Insert new state in the trie.
-   if (trie_insert(*dfap, path, vertexid)) return -1;
-
-   return 0;
+   return trie_insert(*dfap, path, vertexid);
 }
 
 void
@@ -1117,7 +1125,7 @@ trie_insert
 (
  dfa_t   * dfa,
  uint8_t * path,
- size_t    dfastate
+ uint32_t  dfastate
 )
 // SYNOPSIS:                                                              
 //   Inserts the specified path in the trie and stores the end value and
@@ -1163,15 +1171,21 @@ trie_insert
          // Move down the node.
          size_t j = i;
          while ((uint8_t) path[j] == tmppath[j] && j < dfa->trie->height) {
-            size_t newid = trie_newnode(&(dfa->trie));
+            if (dfa->trie->pos == ABS_MAX_POS) {
+               // Memory limit reached.
+               dfa->trie->pos = initial_pos;
+               return 1;
+            }
+            uint32_t newid = trie_newnode(&(dfa->trie));
+            if (newid == U32T_ERROR) return -1;
             dfa->trie->nodes[auxid].child[(int)tmppath[j]] = newid;
             auxid = newid;
             j++;
-         } 
+         }
          // Copy data and flag leaf.
          dfa->trie->nodes[auxid].child[(int)tmppath[j]] = tmpdfa;
-         dfa->trie->nodes[auxid].flags |= (((uint32_t)1)<<path[i]);
-         free(tmppath);            
+         dfa->trie->nodes[auxid].flags |= (((uint32_t)1) << tmppath[j]);
+         free(tmppath);
       }
 
       // Walk the tree.
@@ -1188,7 +1202,7 @@ trie_insert
    return 0;
 }
 
-size_t
+uint32_t
 trie_newnode
 (
  trie_t ** triep
@@ -1199,8 +1213,9 @@ trie_newnode
    // Check trie size.
    if (trie->pos >= trie->size) {
       size_t newsize = trie->size * 2;
+      if (newsize > ABS_MAX_POS) newsize = ABS_MAX_POS;
       *triep = trie = realloc(trie, sizeof(trie_t) + newsize * sizeof(node_t));
-      if (trie == NULL) return (size_t)-1;
+      if (trie == NULL) return U32T_ERROR;
       // Initialize new nodes.
       trie->size = newsize;
    }
@@ -1211,7 +1226,7 @@ trie_newnode
    trie->nodes[newid].flags = 0;
    trie->pos++;
 
-   return newid;
+   return (uint32_t)newid;
 }
 
 
@@ -1238,20 +1253,6 @@ trie_reset
 }
 
 void
-code_to_align
-(
- const uint8_t * data,
- int * align,
- size_t nelements
- )
-{
-   uint8_t * path = malloc(nelements * sizeof(uint8_t));
-   path_decode(data, path, nelements);
-   path_to_align(path, align, nelements);
-   free(path);
-}
-
-void
 path_to_align
 (
  const uint8_t * path,
@@ -1271,7 +1272,7 @@ align_to_path
  size_t nelements
 )
 {
-   for (size_t i = 0; i < nelements; i++) path[i] = align[i+1] - align[i];
+   for (size_t i = 0; i < nelements; i++) path[i] = (uint8_t) (align[i+1] - align[i]);
 }
 
 void

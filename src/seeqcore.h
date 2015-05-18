@@ -30,6 +30,8 @@
 #include <errno.h>
 #include <stdint.h>
 
+#define ABS_MAX_POS        0xFFFFFFFE
+#define U32T_ERROR         0xFFFFFFFF
 #define INITIAL_STACK_SIZE 256
 #define INITIAL_TRIE_SIZE  256
 #define INITIAL_DFA_SIZE   256
@@ -77,8 +79,8 @@ struct vertex_t {
    // un punter al trie, els vectors d'alineament
    // s'emmagatzemen directament codificats en
    // mallocs individuals.
-   void   * align;
-   edge_t   next[NBASES];
+   uint8_t * align;
+   edge_t    next[NBASES];
 };
 
 struct dfa_t {
@@ -89,8 +91,6 @@ struct dfa_t {
    int      * align_cache;
    vertex_t   states[];
 };
-
-
 
 //   [0 ... 255] = 6,
 //   ['a'] = 0, ['c'] = 1, ['g'] = 2, ['t'] = 3, ['u'] = 3, ['n'] = 4, ['\0'] = 5,
@@ -119,20 +119,18 @@ static const int translate_n[256] = {
    4,4,4,4,4,4,4,4,4,4, 4,4,4,4,4,4
 };
 
-
-
 static const char bases[NBASES] = "ACGTN";
 
 int         parse         (const char *, char *);
 dfa_t     * dfa_new       (int, int, size_t, size_t, size_t);
-size_t      dfa_newvertex (dfa_t **);
-int         dfa_newstate  (dfa_t **, uint8_t *, int, int, size_t); 
+uint32_t    dfa_newvertex (dfa_t **);
+int         dfa_newstate  (dfa_t **, uint8_t *, int, size_t); 
 int         dfa_step      (uint32_t, int, int, int, dfa_t **, char *, edge_t *);
 void        dfa_free      (dfa_t *);
 trie_t    * trie_new      (size_t, size_t);
 int         trie_search   (dfa_t *, uint8_t *, uint32_t*);
-int         trie_insert   (dfa_t *, uint8_t *, size_t);
-size_t      trie_newnode  (trie_t **);
+int         trie_insert   (dfa_t *, uint8_t *, uint32_t);
+uint32_t    trie_newnode  (trie_t **);
 void        trie_reset    (trie_t *);
 void        path_to_align (const unsigned char *, int *, size_t);
 void        align_to_path (const int *, uint8_t *, size_t);
