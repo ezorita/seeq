@@ -38,7 +38,7 @@
 #define INITIAL_LINE_SIZE  50
 #define DFA_FORWARD        1
 #define DFA_REVERSE        0
-#define DFA_COMPUTE        -1
+#define DFA_COMPUTE        0xFFFFFFFF
 #define NBASES             5 // Should never be set larger than 32.
 #define TRIE_CHILDREN      3
 
@@ -69,18 +69,14 @@ struct trie_t {
    node_t  nodes[];
 };
 
-struct edge_t {
-   uint32_t state;
-   int match;
-};
-
 struct vertex_t {
    // El vertex de la DFA ja no li cal tenir
    // un punter al trie, els vectors d'alineament
    // s'emmagatzemen directament codificats en
    // mallocs individuals.
    uint8_t * align;
-   edge_t    next[NBASES];
+   uint32_t  match;
+   uint32_t  next[NBASES];
 };
 
 struct dfa_t {
@@ -125,7 +121,7 @@ int         parse         (const char *, char *);
 dfa_t     * dfa_new       (int, int, size_t, size_t, size_t);
 uint32_t    dfa_newvertex (dfa_t **);
 int         dfa_newstate  (dfa_t **, uint8_t *, int, size_t); 
-int         dfa_step      (uint32_t, int, int, int, dfa_t **, char *, edge_t *);
+int         dfa_step      (uint32_t, int, int, int, dfa_t **, char *, uint32_t *);
 void        dfa_free      (dfa_t *);
 trie_t    * trie_new      (size_t, size_t);
 int         trie_search   (dfa_t *, uint8_t *, uint32_t*);

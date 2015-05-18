@@ -396,17 +396,15 @@ seeqStringMatch
    for (size_t i = 0; i <= slen; i++) {
       // Update DFA.
       int cin = (int)translate[(int)data[i]];
-      edge_t next;
       int current_dist = sq->tau+1;
       size_t min_to_match = slen;
-
       if(cin < NBASES) {
-         next = ((dfa_t *) sq->dfa)->states[current_node].next[cin];
-         if (next.match == DFA_COMPUTE)
+         uint32_t next = ((dfa_t *) sq->dfa)->states[current_node].next[cin];
+         if (next == DFA_COMPUTE)
             if (dfa_step(current_node, cin, sq->wlen, sq->tau, (dfa_t **) &(sq->dfa), sq->keys, &next)) return -1;
-         current_node = next.state;
-         current_dist = get_match(next.match);
-         min_to_match = (size_t) get_mintomatch(next.match);
+         current_node = next;
+         current_dist = get_match(((dfa_t *) sq->dfa)->states[current_node].match);
+         min_to_match = (size_t) get_mintomatch(((dfa_t *) sq->dfa)->states[current_node].match);
       }
       else if (cin == 6) break;
 
@@ -434,11 +432,11 @@ seeqStringMatch
             // Find match start with RDFA.
             do {
                int c = (int)translate[(int)data[i-++j]];
-               edge_t rnext = ((dfa_t *) sq->rdfa)->states[rnode].next[c];
-               if (rnext.match == DFA_COMPUTE)
-                  if (dfa_step(rnode, c, sq->wlen, sq->tau, (dfa_t **) &(sq->rdfa), sq->rkeys, &rnext)) return -1;
-               rnode = rnext.state;
-               d     = get_match(rnext.match);
+               uint32_t next = ((dfa_t *) sq->rdfa)->states[rnode].next[c];
+               if (next == DFA_COMPUTE)
+                  if (dfa_step(rnode, c, sq->wlen, sq->tau, (dfa_t **) &(sq->rdfa), sq->rkeys, &next)) return -1;
+               rnode = next;
+               d = get_match(((dfa_t *) sq->rdfa)->states[rnode].match);
             } while (d > streak_dist && j < i);
 
             // Compute match length.
@@ -727,10 +725,10 @@ dfa_new
    }
 
    // Initialize state 0 (cache) and state 1 (root).
-   edge_t new = {.state = 0, .match = DFA_COMPUTE};
+   dfa->states[0].match = dfa->states[1].match = tau+1;
    for (int i = 0; i < NBASES; i++) {
-      dfa->states[0].next[i] = new;
-      dfa->states[1].next[i] = new;
+      dfa->states[0].next[i] = DFA_COMPUTE;
+      dfa->states[1].next[i] = DFA_COMPUTE;
    }
 
    trie_t * trie = trie_new(trienodes, (size_t)wlen);
@@ -777,13 +775,13 @@ dfa_new
 int
 dfa_step
 (
- uint32_t  dfa_state,
- int       base,
- int       plen,
- int       tau,
- dfa_t  ** dfap,
- char   *  exp,
- edge_t *  nextedge
+ uint32_t   dfa_state,
+ int        base,
+ int        plen,
+ int        tau,
+ dfa_t   ** dfap,
+ char     * exp,
+ uint32_t * dfa_next
 )
 // SYNOPSIS:                                                              
 //   Updates the current status of DFA graph. Based on the parameters passed,
@@ -800,7 +798,7 @@ dfa_step
 //   dfap      : pointer to a memory space containing the address of the DFA.
 //   trie      : pointer to a memory space containing the address of the associated trie.
 //   exp       : expression keys, as returned by parse.
-//   nextedge  : a pointer to an edge_t struct where the computed transition will be placed,
+//   nextdfa   : a pointer to an uint32_t where the computed transition will be placed,
 //
 // RETURN:                                                                
 //   dfa_step returns 0 on success, or -1 if an error occurred.
@@ -816,8 +814,8 @@ dfa_step
 
 
    // Return next vertex if already computed.
-   if (dfa->states[dfa_state].next[base].match != DFA_COMPUTE) {
-      *nextedge = dfa->states[dfa_state].next[base];
+   if (dfa->states[dfa_state].next[base] != DFA_COMPUTE) {
+      *dfa_next = dfa->states[dfa_state].next[base];
       return 0;
    }
    
@@ -848,7 +846,7 @@ dfa_step
    }
 
    // Save match value.
-   nextedge->match = (int)((uint32_t)prev | set_mintomatch(plen - last_active));
+   uint32_t match = ((uint32_t)prev | set_mintomatch(plen - last_active));
    
    // Check if this state already exists.
    uint32_t dfalink;
@@ -860,27 +858,31 @@ dfa_step
 
    if (exists == 1) {
       // If exists, just link with the existing state.
-      nextedge->state = dfalink;
+      *dfa_next = dfalink;
       // Update edge in dfa.
-      if (dfa_state != 0) {
-         dfa->states[dfa_state].next[base].match = nextedge->match;   
-         dfa->states[dfa_state].next[base].state = nextedge->state;
-      }
-   } else if (exists == 0 && dfa_state != 0) {
+      if (dfa_state != 0) dfa->states[dfa_state].next[base] = dfalink;   
+   } else if (dfa_state == 0) {
+      *dfa_next = 0;
+      dfa->states[0].match = match;
+   } else if (exists == 0) {
       int retval = dfa_newstate(dfap, path, base, dfa_state);
       dfa = *dfap;
       if (retval == 0) {
          // Update edge in dfa.
-         dfa->states[dfa_state].next[base].match = nextedge->match;   
-         nextedge->state = dfa->states[dfa_state].next[base].state;
-      } else  if (retval == 1) {
+         *dfa_next = dfa->states[dfa_state].next[base];
+         dfa->states[*dfa_next].match = match;
+      }
+      else  if (retval == 1) {
          // Set to cache mode if max memory is reached.
-         nextedge->state = 0;
-      } else {
+         *dfa_next = 0;
+         dfa->states[0].match = match;
+      }
+      else {
          free(path);
          return -1;
       }
-   } else if (exists == -1) {
+   }
+   else if (exists == -1) {
       free(path);
       return -1;
    }
@@ -928,8 +930,7 @@ dfa_newvertex
 
    // Initialize DFA vertex.
    dfa->states[dfa->pos].align = NULL;
-   edge_t new = {.state = 0, .match = DFA_COMPUTE};
-   for (int j = 0; j < NBASES; j++) dfa->states[dfa->pos].next[j] = new;
+   for (int j = 0; j < NBASES; j++) dfa->states[dfa->pos].next[j] = DFA_COMPUTE;
 
    // Increase counter.
    return (uint32_t)(dfa->pos++);
@@ -942,7 +943,7 @@ dfa_newstate
  uint8_t  * path,
  int        edge,
  size_t     dfa_state
- )
+)
 // SYNOPSIS:                                                              
 //   Creates a new vertex to allocate a new DFA state, which represents an 
 //   unseen NW alignment row. This function inserts the new NW alignment row in
@@ -1000,7 +1001,7 @@ dfa_newstate
    if (vertexid == U32T_ERROR) return -1;
    (*dfap)->states[vertexid].align = code;
    // Connect dfa vertices.
-   (*dfap)->states[dfa_state].next[edge].state = (uint32_t)vertexid;
+   (*dfap)->states[dfa_state].next[edge] = (uint32_t)vertexid;
 
    // Insert new state in the trie.
    return trie_insert(*dfap, path, vertexid);
