@@ -118,18 +118,17 @@ seeqNew
    }
 
    // Set seeq_t struct.
-   sq->tau   = mismatches;
-   sq->wlen  = wlen;
-   sq->keys  = keys;
-   sq->rkeys = rkeys;
-   sq->dfa   = (void *) dfa;
-   sq->rdfa  = (void *) rdfa;
-   // Initialize match_t struct.
-   sq->match.start  = 0;
-   sq->match.end    = 0;
-   sq->match.line   = 0;
-   sq->match.dist   = mismatches + 1;
-   sq->match.string = NULL;
+   sq->tau    = mismatches;
+   sq->wlen   = wlen;
+   sq->keys   = keys;
+   sq->rkeys  = rkeys;
+   sq->dfa    = (void *) dfa;
+   sq->rdfa   = (void *) rdfa;
+   sq->string = NULL;
+   // Initialize match_t stack.
+   sq->hits = 0;
+   sq->stacksize = INITIAL_MATCH_STACK_SIZE;
+   sq->match  = malloc(sq->stacksize * sizeof(match_t));
 
    return sq;
 }
@@ -153,7 +152,8 @@ seeqFree
 //   The memory pointed by sq will be freed.
 {
    // Free string if allocated.
-   if (sq->match.string != NULL) free(sq->match.string);
+   if (sq->string != NULL) free(sq->string);
+   free(sq->match);
    free(sq->keys);
    free(sq->rkeys);
    dfa_free(sq->dfa);
@@ -161,173 +161,6 @@ seeqFree
    free(sq);
 }
 
-seeqfile_t *
-seeqOpen
-(
- const char * file
-)
-// SYNOPSIS:                                                              
-//   Creates a seeqfile_t structure to match a file directly against a pattern.
-//   If 'file' is set to NULL, the lines will be read from 'stdin'. The returned
-//   structure must be passed to 'seeqFileMatch'.
-//                                                                        
-// PARAMETERS:                                                            
-//   file       : name of the file to match. Set to NULL to read from stdin.
-//
-// RETURN:                                                                
-//   Returns a pointer to a seeqfile_t structure or NULL in case of error, and seeqerr
-//   is set appropriately.
-//
-// SIDE EFFECTS:
-//   The returned seeqfile_t structure must be safely freed using 'seeqClose'.
-{
-   // Set error to 0.
-   seeqerr = 0;
-
-   seeqfile_t * sqfile = malloc(sizeof(seeqfile_t));
-   if (sqfile == NULL) return NULL;
-
-   // Open file or set to stdin
-   FILE * fdi = stdin;
-   if (file != NULL) fdi = fopen(file, "r");
-   if (fdi  == NULL) return NULL;
-
-   sqfile->line = 0;
-   sqfile->fdi = fdi;
-
-   return sqfile;
-}
-
-int
-seeqClose
-(
- seeqfile_t * sqfile
-)
-// SYNOPSIS:                                                              
-//   Closes the file (if any) and safely frees a seeqfile_t structure.
-//                                                                        
-// PARAMETERS:                                                            
-//   sqfile : a pointer to an allocated seeqfile_t structure.
-//
-// RETURN:                                                                
-//   Returns zero on success or -1 in case of error.
-//
-// SIDE EFFECTS:
-//   The memory pointed by sqfile will be freed.
-{
-   // Set error to 0.
-   seeqerr = 0;
-   // Close file.
-   if (sqfile->fdi != stdin && sqfile->fdi != NULL) if (fclose(sqfile->fdi) != 0) return -1;
-   // Free structure.
-   free(sqfile);
-   return 0;
-}
-
-long
-seeqFileMatch
-(
- seeqfile_t * sqfile,
- seeq_t     * sq,
- int          options
-)
-// SYNOPSIS:                                                              
-//   Finds the next match in the file pointed by 'sqfile', starting from the position where
-//   the previous call to 'seeqFileMatch' returned. The matching pattern and distance are
-//   determined by the seeq_t structure. The matching behavior can be specified in 'options'
-//   using the defined SQ_ macros.
-//                                                                        
-// PARAMETERS:                                                            
-//   sqfile  : pointer to a seeqfile_t structure obtained with 'seeqOpen'.
-//   sq      : pointer to a seeq_t structure obtained with 'seeqNew'.
-//   options : matching options. When set to 0, the default options are (SQ_ANY|SQ_FIRST).
-//             The following macros can be bitwise-OR'd: 
-//             
-//             * SQ_COUNTLINES: Counts the number of matching lines, starting from the
-//               current position until the end of the file.
-//             * SQ_COUNTMATCH: Counts all the non-overlapping matches found in the file
-//               that have a Levenshtein distance less or equal than the specified in
-//               'seeqOpen()'. Note that there may be more than one match per line.
-//
-//             * SQ_MATCH: returns when a matching line is found.
-//             * SQ_NOMATCH: returns when a non-matching line is found.
-//             * SQ_ANY: returns after the end of the current line. (SQ_MATCH | SQ_NOMATCH).
-//
-//             * SQ_FIRST: searches the line until the first match.
-//             * SQ_BEST: searches the whole line to find the best match, i.e. the one with
-//               minimum matching distance. In case of many best matches, the first is returned.
-//
-//             * SQ_SKIP: stops searching the line if an illegal character is found 
-//               (allowed characters are 'a','A','c','C','g','G','t','T','u','U','n','N','\0','\n').
-//             * SQ_CONTINUE: illegal characters will be substituted by mismatches ('N').
-//             
-//             If SQ_COUNTLINES or SQ_COUNTMATCH are specified, the other options are ignored.
-//             SQ_MATCH and SQ_ANY can be OR'd with SQ_FIRST/SQ_BEST.
-//
-//
-// RETURN:                                                                
-//   If SQ_COUNTLINES is set, returns the number of matching lines.
-//   If SQ_COUNTMATCH is set, returns the total number of matches in the file.
-//   If SQ_MATCH is set, returns 1 if a match is found before EOF, 0 otherwise.
-//   If SQ_BEST is set, returns the number of matches found in the line or 0 if EOF is
-//   reached before finding any match.
-//   If SQ_NOMATCH is set, returns 1 if a non-matching line is found before EOF, 0 otherwise.
-//   If SQ_ANY is set, reads one line and returns 1.
-//
-//   Returns 0 when the end of the file has been reached. In case of error, -1 is returned and
-//   seeqerr is set appropriately.
-//
-//   Whenever this function returns 1, the information about the match can be read by passing
-//   the 'seeq_t' structure to the 'seeqGet*' functions. The non-matching lines are indicated
-//   with a matching distance of -1 (this can be checked either using 'seeqGetDistance()' or
-//   directly reading sqfile->match.dist).
-//
-// SIDE EFFECTS:
-//   The match details of the last match stored in 'sq' overriden and the file pointer offset
-//   in 'seeqfile' is updated to the new matching position.
-{
-   // Set error to 0.
-   seeqerr = 0;
-
-   if (sqfile->fdi == NULL) {
-      seeqerr = 10;
-      return -1;
-   }
-
-   if (options & (SQ_COUNTLINES | SQ_COUNTMATCH)) options &= ~SQ_ANY;
-
-   // Set structure to non-matched.
-   sq->match.start = sq->match.end = sq->match.line = (size_t)(-1);
-   sq->match.dist  = sq->tau + 1;
-
-   // Aux vars.
-   long count = 0;
-   size_t startline = sqfile->line;
-   size_t bufsz = INITIAL_LINE_SIZE;
-   ssize_t readsz;
-
-   while ((readsz = getline(&(sq->match.string), &bufsz, sqfile->fdi)) > 0) {
-      sqfile->line++;
-      // Remove newline.
-      char * data = sq->match.string;
-      if (data[readsz-1] == '\n') data[--readsz] = 0;
-
-      // Call String Match
-      long rval = seeqStringMatch(data, sq, options);
-      if (rval == -1) return -1;
-      else count += rval;
-
-      // Break when match is found.
-      if ((count > 0 && (options & SQ_MATCH)) || ((count == 0) && (options & SQ_NOMATCH))) {
-         sq->match.line = sqfile->line;
-         return (count > 0 ? count : 1);
-      }
-   }
-
-   // If nothing was read, return 0.
-   if (sqfile->line == startline) return 0;
-   else return count;
-}
 
 long
 seeqStringMatch
@@ -337,56 +170,63 @@ seeqStringMatch
  int          options
 )
 // SYNOPSIS:                                                              
-//   Match the pattern of the seeq_t structure in the string 'data'. The matching behavior
-//   can be specified in 'options' using the defined SQ_* macros.
+//   Finds a pattern in the string 'data'. The matching pattern is the one specified
+//   in the call to seeqNew().
 //                                                                        
 // PARAMETERS:                                                            
 //   data    : string to match.
-//   sq      : pointer to a seeq_t structure obtained with 'seeqOpen'.
-//   options : matching options. When set to 0, the default options are (SQ_SKIP|SQ_FIRST).
-//             The following macros can be bitwise-OR'd: 
-//             * SQ_COUNTLINES: Returns 1 if the passed string contains a match, 0 otherwise.
-//             * SQ_COUNTMATCH: Counts all the non-equivalent matches found in the string that
-//               have a Levenshtein distance less or equal than the specified in 'seeqOpen()'.
+//   sq      : pointer to a seeq_t structure. (see 'seeqNew')
+//   options : matching options. Set to 0 for default (SQ_FIRST|SQ_FAIL|SQ_LINES).
+//             Bitwise-OR the following macros to set different options.
+//             Macros from the same group are mutually exclusive. If two options from
+//             the same group are set, undefined behavior occurs.
 //
-//             * SQ_FIRST: searches the line until the first match.
+//             MATCH OPTIONS:
+//             * SQ_FIRST: searches the line until the first match is found. [DEFAULT]
 //             * SQ_BEST: searches the whole line to find the best match, i.e. the one with
 //               minimum matching distance. In case of many best matches, the first is stored
-//               in 'sq' and the number of matches found is returned.
+//               in 'sq'.
+//             * SQ_ALL: finds and stores in 'sq' all the matching positions of the line.
+//             * SQ_COUNT: searches the whole line and returns the match count. The match
+//               positions are not stored in 'sq'.
 //
-//             * SQ_SKIP: stops searching the current line if an illegal character is
+//             NON-DNA TEXT OPTIONS:
+//             * SQ_FAIL: stops searching the current line if an illegal character is
 //               found (allowed characters are 'a','A','c','C','g','G','t','T','u','U','n','N',
-//               '\0','\n').
-//             * SQ_CONTINUE: illegal characters will be substituted by mismatches ('N').
-//             
-//             If SQ_COUNTLINES or SQ_COUNTMATCH are specified, the other options are ignored.
-//             SQ_MATCH and SQ_ANY can be OR'd with SQ_FIRST/SQ_BEST. The non-matching lines
-//             are returned with a matching distance of -1 (this can be checked either using
-//             'seeqGetDistance()' or directly reading sqfile->match.dist). The matching line
-//             and position can also be read using the 'seeqGet*' functions.
+//               '\0','\n'). [DEFAULT]
+//             * SQ_IGNORE: illegal characters will be ignored.
+//             * SQ_CONVERT: illegal characters will be substituted by mismatches ('N').
 //
+//             INPUT OPTIONS:
+//             * SQ_LINES: Search until '\n' or '\0' is found. [DEFAULT]
+//             * SQ_STREAM: Search until '\0' is found, newline characters will be ignored.
+//             
 // RETURN:                                                                
-//   Returns the number of matches found, 0 if none was found or -1 in case of error and
+//   Returns the number of matches discovered, 0 if none was found or -1 in case of error and
 //   seeqerr is set appropriately. 
 //
 // SIDE EFFECTS:
-//   The match details of the last match stored in 'sq' are overriden.
+//   The match stack and the cached string of 'sq' are modified.
 {
    // Set error to 0.
    seeqerr = 0;
 
    // Count replaces all other options.
-   int opt_count  = options & (SQ_COUNTMATCH | SQ_COUNTLINES);
-   int countall   = options & SQ_COUNTMATCH;
-   int best_match = options & SQ_BEST;
+   int match_opt = options & MASK_MATCH;
+   int opt_count = match_opt == SQ_COUNT;
+   int opt_best  = match_opt == SQ_BEST;
+   int all_match = match_opt == SQ_ALL || opt_best || opt_count;
 
-   const int * translate;
-   if (options & SQ_CONTINUE) translate = translate_n;
-   else translate = translate_halt;
+   int nondna_opt = options & MASK_NONDNA;
+   int opt_ignore = nondna_opt == SQ_IGNORE;
+   const int * translate = translate_ignore;
+   if (nondna_opt == SQ_CONVERT) translate = translate_convert;
+
+   int stream_opt = options & MASK_INPUT;
+   
 
    // Set structure to non-matched.
-   sq->match.start = sq->match.end = sq->match.line = (size_t)(-1);
-   sq->match.dist  = sq->tau + 1;
+   sq->hits = 0;
 
    // Reset search variables
    int streak_dist = sq->tau+1;
@@ -394,6 +234,7 @@ seeqStringMatch
    uint32_t current_node = 1;
    size_t slen = strlen(data);
    long count = 0;
+   int end = 0;
    
    // DFA state.
    for (size_t i = 0; i <= slen; i++) {
@@ -409,17 +250,15 @@ seeqStringMatch
          current_dist = get_match(((dfa_t *) sq->dfa)->states[current_node].match);
          min_to_match = (size_t) get_mintomatch(((dfa_t *) sq->dfa)->states[current_node].match);
       }
-      else if (cin == 6) break;
-
-      if (cin == 5 || slen - i - 1 < (size_t) min_to_match) {
+      else if (cin == 6 && stream_opt) continue;
+      else if (cin == 7 && opt_ignore) continue;
+      else if (cin >= 5) {
          current_dist = sq->tau+1;
-         if (count == 0 && streak_dist >= current_dist) {
-            sq->match.line  = 0;
-            sq->match.start = 0;
-            sq->match.end   = slen;
-            sq->match.dist  = -1;
-            break;
-         }
+         end = 1;
+      }
+      if (slen - i - 1 < (size_t) min_to_match) {
+         current_dist = sq->tau + 1;
+         end = 1;
       }
 
       // Update streak.
@@ -428,31 +267,35 @@ seeqStringMatch
       } else if (!match && streak_dist < current_dist) {
          match = 1;
          count++;
-         if (!opt_count && streak_dist < sq->match.dist) {
+         if (!opt_count && !(opt_best && sq->hits && streak_dist >= (int)sq->match[0].dist)) {
             size_t j = 0;
             uint32_t rnode = 1;
             int d = sq->tau + 1;
             // Find match start with RDFA.
             do {
                int c = (int)translate[(int)data[i-++j]];
-               uint32_t next = ((dfa_t *) sq->rdfa)->states[rnode].next[c];
-               if (next == DFA_COMPUTE)
-                  if (dfa_step(rnode, c, sq->wlen, sq->tau, (dfa_t **) &(sq->rdfa), sq->rkeys, &next)) return -1;
-               rnode = next;
-               d = get_match(((dfa_t *) sq->rdfa)->states[rnode].match);
+               if (c < NBASES) {
+                  uint32_t next = ((dfa_t *) sq->rdfa)->states[rnode].next[c];
+                  if (next == DFA_COMPUTE)
+                     if (dfa_step(rnode, c, sq->wlen, sq->tau, (dfa_t **) &(sq->rdfa), sq->rkeys, &next)) return -1;
+                  rnode = next;
+                  d = get_match(((dfa_t *) sq->rdfa)->states[rnode].match);
+               } else continue;
             } while (d > streak_dist && j < i);
 
-            // Compute match length.
-            j = i - j;
             // Save match.
-            sq->match.start = j;
-            sq->match.end   = i;
-            sq->match.line  = 0;
-            sq->match.dist  = streak_dist;
+            if (opt_best) {
+               sq->match[0] = (match_t) {i-j, i,(size_t)streak_dist};
+               sq->hits = 1;
+            }
+            else if (match_add(sq, i - j, i, (size_t)streak_dist)) return -1;
          }
 
-         if (!best_match && !countall) break;
+         if (!all_match) end = 1;
       }
+
+      // Check end value.
+      if (end) break;
 
       // Track distance.
       streak_dist   = current_dist;
@@ -461,90 +304,47 @@ seeqStringMatch
    return count;
 }
 
-
-size_t
-seeqGetLine
-(
- seeq_t * sq
-)
-// SYNOPSIS:                                                              
-//   Returns the file line of the last match.
-//                                                                        
-// PARAMETERS:                                                            
-//   sq: a seeq_t struct created with 'seeqOpen()' and matched with 'seeqStringMatch()'
-//       or 'seeqMatch()'.
-//
-// RETURN:                                                                
-//   Returns the file line of the last match.
-//
-// SIDE EFFECTS:
-//   None.
-{
-   return sq->match.line;
-}
-
 int
-seeqGetDistance
+match_add
 (
- seeq_t * sq
+ seeq_t * sq,
+ size_t   start,
+ size_t   end,
+ size_t   dist
 )
-// SYNOPSIS:                                                              
-//   Returns the Levenshtein distance of the last match.
-//                                                                        
-// PARAMETERS:                                                            
-//   sq: a seeq_t struct created with 'seeqOpen()' and matched with 'seeqStringMatch()'
-//       or 'seeqMatch()'.
-//
-// RETURN:                                                                
-//   Returns the Levenshtein distance of the last match.
-//
-// SIDE EFFECTS:
-//   None.
 {
-   return sq->match.dist;
+   if (sq->hits >= sq->stacksize) {
+      size_t newsize = sq->stacksize * 2;
+      sq->match = realloc(sq->match, newsize * sizeof(match_t));
+      if (sq->match == NULL) return -1;
+      sq->stacksize = newsize;
+   }
+
+   sq->match[sq->hits++] = (match_t){start, end, dist};
+   return 0;
 }
 
-size_t
-seeqGetStart
-(
- seeq_t * sq
-)
-// SYNOPSIS:                                                              
-//   Returns the start position of the last match.
-//                                                                        
-// PARAMETERS:                                                            
-//   sq: a seeq_t struct created with 'seeqOpen()' and matched with 'seeqStringMatch()'
-//       or 'seeqMatch()'.
-//
-// RETURN:                                                                
-//   Returns the start position of the last match.
-//
-// SIDE EFFECTS:
-//   None.
-{
-   return sq->match.start;
-}
 
-size_t
-seeqGetEnd
+match_t *
+seeqMatchIter
 (
  seeq_t * sq
 )
 // SYNOPSIS:                                                              
-//   Returns the end position of the last match. The position returned points to the
-//   first non-matching character after the match.
+//   Returns the file line of the last match.
 //                                                                        
 // PARAMETERS:                                                            
 //   sq: a seeq_t struct created with 'seeqOpen()' and matched with 'seeqStringMatch()'
 //       or 'seeqMatch()'.
 //
 // RETURN:                                                                
-//   Returns the end position of the last match.
+//   Returns the file line of the last match.
 //
 // SIDE EFFECTS:
 //   None.
 {
-   return sq->match.end;
+   if (sq->hits == 0) return NULL;
+   return sq->match + --sq->hits;
 }
 
 char *
@@ -556,17 +356,16 @@ seeqGetString
 //   Returns a pointer to the last matched line.
 //                                                                        
 // PARAMETERS:                                                            
-//   sq: a seeq_t struct created with 'seeqOpen()' and matched with 'seeqStringMatch()'
-//       or 'seeqMatch()'.
+//   sq: a seeq_t struct created with 'seeqOpen()' and passed to a Match function.
 //
 // RETURN:                                                                
-//   Returns a pointer to the last matched line.
+//   Returns a pointer to the last matched line. The contents of the pointer will be
+//   modified if the passed structure is used to match again.
 //
 // SIDE EFFECTS:
-//   A string is allocated to store the matched line and must be freed by the user.
+//   None.
 {
-   if (sq->match.string == NULL) return NULL;
-   return strdup(sq->match.string);
+   return sq->string;
 }
 
 const char *
@@ -729,7 +528,7 @@ dfa_new
    }
 
    // Initialize state 0 (cache) and state 1 (root).
-   dfa->states[0].match = dfa->states[1].match = tau+1;
+   dfa->states[0].match = dfa->states[1].match = (uint32_t) tau+1;
    for (int i = 0; i < NBASES; i++) {
       dfa->states[0].next[i] = DFA_COMPUTE;
       dfa->states[1].next[i] = DFA_COMPUTE;

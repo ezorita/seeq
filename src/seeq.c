@@ -22,7 +22,6 @@
 **
 */
 
-#include "libseeq.h"
 #include "seeq.h"
 #include <unistd.h>
 #include <string.h>
@@ -98,53 +97,68 @@ seeq
       clk = clock();
    }
 
+   int match_options = 0;
+   if (args.non_dna == 1) match_options |= SQ_CONVERT;
+   else if (args.non_dna == 2) match_options |= SQ_IGNORE;
+
    if (args.count) {
-      long retval = seeqFileMatch(sqfile, sq, SQ_COUNTLINES);
+      long retval = seeqFileMatch(sqfile, sq, match_options, SQ_COUNTLINES);
       if (retval < 0) fprintf(stderr, "error in 'seeqFileMatch()': %s\n", seeqPrintError());
       else fprintf(stdout, "%ld\n", retval);
    } else {
-      int match_options = 0;
-      if (args.invert) match_options = SQ_NOMATCH;
-      else match_options = SQ_MATCH;
-      if (args.best) match_options |= SQ_BEST;
-      if (!args.skip) match_options |= SQ_CONTINUE;
+      if (args.all) {
+         match_options |= SQ_ALL;
+         args.matchonly = 1;
+      }
+      else if (args.best) match_options |= SQ_BEST;
 
-      long retval;
-      while ((retval = seeqFileMatch(sqfile, sq, match_options)) > 0) {
-         if (args.compact) fprintf(stdout, "%ld:%ld-%ld:%d",sq->match.line, sq->match.start, sq->match.end-1, sq->match.dist);
-         else {
-            if (args.showline) fprintf(stdout, "%ld ", sq->match.line);
-            if (args.showpos)  fprintf(stdout, "%ld-%ld ", sq->match.start, sq->match.end-1);
-            if (args.showdist) fprintf(stdout, "%d ", sq->match.dist);
-            if (args.matchonly) {
-               sq->match.string[sq->match.end] = 0;
-               fprintf(stdout, "%s", sq->match.string + sq->match.start);
-            } else if (args.prefix) {
-               sq->match.string[sq->match.start] = 0;
-               fprintf(stdout, "%s", sq->match.string);
-            } else if (args.endline) {
-               fprintf(stdout, "%s", sq->match.string + sq->match.end);
-            } else if (args.printline) {
-               if (COLOR_TERMINAL && isatty(fileno(stdout))) {
-                  // Prefix.
-                  char tmp = sq->match.string[sq->match.start];
-                  sq->match.string[sq->match.start] = 0;
-                  fprintf(stdout, "%s", sq->match.string);
-                  sq->match.string[sq->match.start] = tmp;
-                  // Color match.
-                  fprintf(stdout, (sq->match.dist ? BOLDRED : BOLDGREEN));
-                  tmp = sq->match.string[sq->match.end];
-                  sq->match.string[sq->match.end] = 0;
-                  fprintf(stdout, "%s" RESET, sq->match.string + sq->match.start);
-                  sq->match.string[sq->match.end] = tmp;
-                  fprintf(stdout, "%s", sq->match.string + sq->match.end);
+
+      long retval = 0;
+      if (args.invert) {
+         while ((retval = seeqFileMatch(sqfile, sq, match_options, SQ_NOMATCH)) > 0) {
+            if (args.showline) fprintf(stdout, "%ld ", sqfile->line);
+            fprintf(stdout, "%s\n", sq->string);
+         }
+      } else {
+         while ((retval = seeqFileMatch(sqfile, sq, match_options, SQ_MATCH)) > 0) {
+            for (size_t i = 0; i < sq->hits; i++) {
+               match_t * match = sq->match + i;
+               if (args.compact) fprintf(stdout, "%ld:%ld-%ld:%ld",sqfile->line, match->start, match->end-1, match->dist);
+               else {
+                  if (args.showline) fprintf(stdout, "%ld ", sqfile->line);
+                  if (args.showpos)  fprintf(stdout, "%ld-%ld ", match->start, match->end-1);
+                  if (args.showdist) fprintf(stdout, "%ld ", match->dist);
+                  if (args.matchonly) {
+                     char tmp = sq->string[match->end];
+                     sq->string[match->end] = 0;
+                     fprintf(stdout, "%s", sq->string + match->start);
+                     sq->string[match->end] = tmp;
+                  } else if (args.prefix) {
+                     sq->string[match->start] = 0;
+                     fprintf(stdout, "%s", sq->string);
+                  } else if (args.endline) {
+                     fprintf(stdout, "%s", sq->string + match->end);
+                  } else if (args.printline) {
+                     if (COLOR_TERMINAL && isatty(fileno(stdout))) {
+                        // Prefix.
+                        char tmp = sq->string[match->start];
+                        sq->string[match->start] = 0;
+                        fprintf(stdout, "%s", sq->string);
+                        sq->string[match->start] = tmp;
+                        // Color match.
+                        fprintf(stdout, (match->dist ? BOLDRED : BOLDGREEN));
+                        tmp = sq->string[match->end];
+                        sq->string[match->end] = 0;
+                        fprintf(stdout, "%s" RESET, sq->string + match->start);
+                        sq->string[match->end] = tmp;
+                        fprintf(stdout, "%s", sq->string + match->end);
+                     }
+                     else fprintf(stdout, "%s", sq->string);
+                  }
                }
-               else fprintf(stdout, "%s", sq->match.string);
-            } else if (args.invert) {
-               fprintf(stdout, "%s", sq->match.string);
+               fprintf(stdout, "\n");
             }
-      } 
-         fprintf(stdout, "\n");
+         }
       }
       if (retval == -1) {
          fprintf(stderr, "error in 'seeqFileMatch()': %s\n", seeqPrintError());
@@ -169,3 +183,152 @@ seeq
    return EXIT_SUCCESS;
 }
 
+seeqfile_t *
+seeqOpen
+(
+ const char * file
+)
+// SYNOPSIS:                                                              
+//   Creates a seeqfile_t structure to match a file directly against a pattern.
+//   If 'file' is set to NULL, the lines will be read from 'stdin'. The returned
+//   structure must be passed to 'seeqFileMatch'.
+//                                                                        
+// PARAMETERS:                                                            
+//   file       : name of the file to match. Set to NULL to read from stdin.
+//
+// RETURN:                                                                
+//   Returns a pointer to a seeqfile_t structure or NULL in case of error, and seeqerr
+//   is set appropriately.
+//
+// SIDE EFFECTS:
+//   The returned seeqfile_t structure must be safely freed using 'seeqClose'.
+{
+   // Set error to 0.
+   seeqerr = 0;
+
+   seeqfile_t * sqfile = malloc(sizeof(seeqfile_t));
+   if (sqfile == NULL) return NULL;
+
+   // Open file or set to stdin
+   FILE * fdi = stdin;
+   if (file != NULL) fdi = fopen(file, "r");
+   if (fdi  == NULL) return NULL;
+
+   sqfile->line = 0;
+   sqfile->fdi = fdi;
+
+   return sqfile;
+}
+
+int
+seeqClose
+(
+ seeqfile_t * sqfile
+)
+// SYNOPSIS:                                                              
+//   Closes the file (if any) and safely frees a seeqfile_t structure.
+//                                                                        
+// PARAMETERS:                                                            
+//   sqfile : a pointer to an allocated seeqfile_t structure.
+//
+// RETURN:                                                                
+//   Returns zero on success or -1 in case of error.
+//
+// SIDE EFFECTS:
+//   The memory pointed by sqfile will be freed.
+{
+   // Set error to 0.
+   seeqerr = 0;
+   // Close file.
+   if (sqfile->fdi != stdin && sqfile->fdi != NULL) if (fclose(sqfile->fdi) != 0) return -1;
+   // Free structure.
+   free(sqfile);
+   return 0;
+}
+
+long
+seeqFileMatch
+(
+ seeqfile_t * sqfile,
+ seeq_t     * sq,
+ int          match_opt,
+ int          file_opt
+)
+// SYNOPSIS:                                                              
+//   Finds the next match in the file pointed by 'sqfile', starting from the position where
+//   the previous call to 'seeqFileMatch' returned. The matching pattern and distance are
+//   determined by the seeq_t structure. The matching behavior can be specified in 'options'
+//   using the defined SQ_ macros.
+//                                                                        
+// PARAMETERS:                                                            
+//   sqfile   : pointer to a seeqfile_t structure obtained with 'seeqOpen'.
+//   sq       : pointer to a seeq_t structure obtained with 'seeqNew'.
+//   match_opt: matching options. (see 'seeqStringMatch').
+//   file_opt : file matching options.
+//              * SQ_ANY         At the end of each line.
+//              * SQ_MATCH       After a matching line is found.
+//              * SQ_NOMATCH     After a non-matching line is found.
+//              * SQ_COUNTLINES  Processes the whole file and returns the number of matching 
+//                               lines.
+//              * SQ_COUNTMATCH  Processes the whole file and returns the count of matching
+//                               positions.
+//
+// RETURN:                                                                
+//   If SQ_COUNTLINES is set, returns the number of matching lines.
+//   If SQ_COUNTMATCH is set, returns the total number of matches in the file.
+//   If SQ_MATCH is set, returns 1 if a match is found before EOF, 0 otherwise.
+//   If SQ_BEST is set, returns the number of matches found in the line or 0 if EOF is
+//   reached before finding any match.
+//   If SQ_NOMATCH is set, returns 1 if a non-matching line is found before EOF, 0 otherwise.
+//   If SQ_ANY is set, reads one line and returns 1.
+//
+//   Returns 0 when the end of the file has been reached. In case of error, -1 is returned and
+//   seeqerr is set appropriately.
+//
+//   Whenever this function returns 1, the information about the match can be read by passing
+//   the 'seeq_t' structure to the 'seeqGet*' functions. The non-matching lines are indicated
+//   with a matching distance of -1 (this can be checked either using 'seeqGetDistance()' or
+//   directly reading sqfile->match.dist).
+//
+// SIDE EFFECTS:
+//   The match details of the last match stored in 'sq' overriden and the file pointer offset
+//   in 'seeqfile' is updated to the new matching position.
+{
+   // Set error to 0.
+   seeqerr = 0;
+
+   // Replace match options.
+   if (file_opt == SQ_COUNTMATCH) match_opt = (match_opt & ~MASK_MATCH) | SQ_COUNT;
+   else if (file_opt == SQ_COUNTLINES) match_opt = (match_opt & ~MASK_MATCH) | SQ_FIRST;
+
+   if (sqfile->fdi == NULL) {
+      seeqerr = 10;
+      return -1;
+   }
+
+   // Aux vars.
+   long count = 0;
+   size_t startline = sqfile->line;
+   size_t bufsz = 0;
+   ssize_t readsz;
+
+   while ((readsz = getline(&(sq->string), &bufsz, sqfile->fdi)) > 0) {
+      sqfile->line++;
+      // Remove newline.
+      char * data = sq->string;
+      if (data[readsz-1] == '\n') data[--readsz] = 0;
+
+      // Call String Match
+      long rval = seeqStringMatch(data, sq, match_opt);
+      if (rval == -1) return -1;
+      else count += rval;
+
+      // Break when match is found.
+      if (file_opt == SQ_ANY || (count > 0 && (file_opt == SQ_MATCH)) || ((rval == 0) && (file_opt == SQ_NOMATCH)))
+         return 1;
+   }
+
+   // If nothing was read, return 0.
+   if (sqfile->line == startline) return 0;
+   else return count;
+}

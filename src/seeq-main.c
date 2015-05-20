@@ -38,17 +38,18 @@ void SIGSEGV_handler(int) __attribute__ ((noreturn));
 static const char *USAGE = "Usage:"
 "  seeq [options] pattern inputfile\n"
 "\n   MATCHING OPTIONS:\n"
-"    -d --distance        maximum Levenshtein distance (default 0)\n"
-"    -s --skip            skip lines containing non-DNA characters\n"
+"    -d --distance [#]    maximum Levenshtein distance [default 0]\n"
 "    -i --invert          return only the non-matching lines\n"
-"    -b --best            scan the whole line to find the best match (default: first match only)\n"
+"    -b --best            scan the whole line to find the best match [default: first match only]\n"
+"    -a --all             returns all the matches (implies -m) [default: first match only]\n"
+"    -x --nondna [0,1,2]  non-DNA characters: 0-skip line, 1-convert to 'N', 2-ignore. [default 0]\n"
 "\n   FORMAT OPTIONS:\n"
 "    -c --count           returns the count of matching lines\n"
-"    -m --match-only      print only the matched part of the matched lines\n"
-"    -n --no-printline    does not print the matching line\n"
-"    -l --lines           prints the original line number of the match\n"
-"    -p --positions       prints the position of the match within the matched line\n"
-"    -k --print-dist      prints the Levenshtein distance of the match\n"
+"    -m --match-only      print only the matched sequence\n"
+"    -n --no-printline    do not print the matched sequence\n"
+"    -l --lines           shows the line number of the match\n"
+"    -p --positions       shows the position of the match\n"
+"    -k --print-dist      shows the Levenshtein distance of the match\n"
 "    -f --compact         prints output in compact format (line:pos:dist)\n"
 "    -e --end             print only the end of the line, starting after the match\n"
 "    -r --prefix          print only the prefix, ending before the match\n"
@@ -100,8 +101,9 @@ main
    int endline_flag   = -1;
    int prefix_flag    = -1;
    int best_flag      = -1;
-   int skip_flag      = -1;
+   int nondna_flag    = -1;
    int memory_flag    = -1;
+   int all_flag       = -1;
 
    // Unset options (value 'UNSET').
    input = NULL;
@@ -120,7 +122,7 @@ main
          {"match-only",    no_argument, 0, 'm'},
          {"no-printline",  no_argument, 0, 'n'},
          {"print-dist",    no_argument, 0, 'k'},
-         {"skip",          no_argument, 0, 's'},
+         {"nondna",  required_argument, 0, 'x'},
          {"lines",         no_argument, 0, 'l'},
          {"count",         no_argument, 0, 'c'},
          {"invert",        no_argument, 0, 'i'},
@@ -131,12 +133,13 @@ main
          {"end",           no_argument, 0, 'e'},         
          {"prefix",        no_argument, 0, 'r'},                  
          {"best",          no_argument, 0, 'b'},                  
+         {"all",           no_argument, 0, 'a'},                  
          {"memory",  required_argument, 0, 'y'},                  
          {"distance",required_argument, 0, 'd'},
          {0, 0, 0, 0}
       };
 
-      c = getopt_long(argc, argv, "pmnislczfvkherby:d:",
+      c = getopt_long(argc, argv, "apmnilczfvkherby:d:x:",
             long_options, &option_index);
  
       /* Detect the end of the options. */
@@ -203,19 +206,38 @@ main
          }
          else {
             say_version();
-            fprintf(stderr, "error: prefix option set more than once.\n");
+            fprintf(stderr, "error: 'prefix' option set more than once.\n");
             say_help();
             return EXIT_FAILURE;
          }
          break;
 
-      case 's':
-         if (skip_flag < 0) {
-            skip_flag = 1;
+      case 'a':
+         if (all_flag < 0) {
+            all_flag = 1;
          }
          else {
             say_version();
-            fprintf(stderr, "error: 'skip' option set more than once.\n");
+            fprintf(stderr, "error: 'all' option set more than once.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         break;
+
+      case 'x':
+         if (nondna_flag < 0) {
+            int nondna = atoi(optarg);
+            if (nondna < 0 || nondna > 2) {
+               say_version();
+               fprintf(stderr, "error: nondna value must be either 0, 1 or 2.\n");
+               say_help();
+               return EXIT_FAILURE;
+            }               
+            nondna_flag = nondna;
+         }
+         else {
+            say_version();
+            fprintf(stderr, "error: 'nondna' option set more than once.\n");
             say_help();
             return EXIT_FAILURE;
          }
@@ -384,8 +406,9 @@ main
    if (endline_flag == -1) endline_flag = 0;
    if (prefix_flag == -1) prefix_flag = 0;
    if (best_flag == -1) best_flag = 0;
-   if (skip_flag == -1) skip_flag = 0;
+   if (nondna_flag == -1) nondna_flag = 0;
    if (memory_flag == -1) memory_flag = 0;
+   if (all_flag == -1) all_flag = 0;
    if (printline_flag == -1) printline_flag = (!matchonly_flag && !endline_flag && !prefix_flag);
 
    if (!showdist_flag && !showpos_flag && !printline_flag && !matchonly_flag && !showline_flag && !count_flag && !compact_flag && !prefix_flag && !endline_flag) {
@@ -413,7 +436,8 @@ main
    args.prefix    = prefix_flag * maskinv;
    args.invert    = invert_flag * maskcnt;
    args.best      = best_flag * maskinv;
-   args.skip      = skip_flag;
+   args.non_dna    = nondna_flag;
+   args.all       = all_flag;
    args.memory    = (size_t)memory_flag * 1024*1024;
    return seeq(expr, input, args);
 }

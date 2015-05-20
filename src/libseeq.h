@@ -33,15 +33,23 @@
 #define COLOR_TERMINAL 1
 
 // Match options.
-#define SQ_ANY        0x03
-#define SQ_MATCH      0x01
-#define SQ_NOMATCH    0x02
-#define SQ_COUNTLINES 0x04
-#define SQ_COUNTMATCH 0x08
-#define SQ_BEST       0x10
+#define MASK_MATCH    0x03
 #define SQ_FIRST      0x00
-#define SQ_CONTINUE   0x20
-#define SQ_SKIP       0x00
+#define SQ_BEST       0x01
+#define SQ_ALL        0x02
+#define SQ_COUNT      0x03
+
+#define MASK_NONDNA   0x0C
+#define SQ_FAIL       0x00
+#define SQ_CONVERT    0x04
+#define SQ_IGNORE     0x08
+
+#define MASK_INPUT    0x10
+#define SQ_LINES      0x00
+#define SQ_STREAM     0x10
+
+// Init options
+#define INITIAL_MATCH_STACK_SIZE 64
 
 #include <stdio.h>
 
@@ -49,43 +57,33 @@ extern int seeqerr;
 
 typedef struct seeq_t     seeq_t;
 typedef struct match_t    match_t;
-typedef struct seeqfile_t seeqfile_t;
 
 struct match_t {
    size_t   start;
    size_t   end;
-   size_t   line;
-   int      dist;
-   char   * string;
+   size_t   dist;
 };
 
 struct seeq_t {
-   match_t match;
-   int     tau;
-   int     wlen;
-   char  * keys;
-   char  * rkeys;
-   void  * dfa;
-   void  * rdfa;
-};
-
-struct seeqfile_t {
-   size_t  line;
-   FILE  * fdi;
+   size_t    hits;
+   size_t    stacksize;
+   match_t * match;
+   char    * string;
+   int       tau;
+   int       wlen;
+   char    * keys;
+   char    * rkeys;
+   void    * dfa;
+   void    * rdfa;
 };
 
 seeq_t     * seeqNew         (const char *, int, size_t);
 void         seeqFree        (seeq_t *);
-seeqfile_t * seeqOpen        (const char *);
-int          seeqClose       (seeqfile_t *);
-long         seeqFileMatch   (seeqfile_t *, seeq_t *, int);
-long         seeqStringMatch (const char *, seeq_t *, int);
-size_t       seeqGetLine     (seeq_t *);
-size_t       seeqGetStart    (seeq_t *);
-size_t       seeqGetEnd      (seeq_t *);
-int          seeqGetDistance (seeq_t *);
+match_t    * seeqMatchIter   (seeq_t *);
 char       * seeqGetString   (seeq_t *);
+long         seeqStringMatch (const char *, seeq_t *, int);
 const char * seeqPrintError  (void);
+int          match_add       (seeq_t *, size_t, size_t, size_t);
 
 #define RESET       "\033[0m"
 #define BOLDRED     "\033[1m\033[31m"      /* Bold Red */
