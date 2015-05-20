@@ -32,10 +32,13 @@
 
 #define ABS_MAX_POS        0xFFFFFFFE
 #define U32T_ERROR         0xFFFFFFFF
+
 #define INITIAL_STACK_SIZE 256
 #define INITIAL_TRIE_SIZE  256
 #define INITIAL_DFA_SIZE   256
 #define INITIAL_LINE_SIZE  50
+
+#define DFA_ROOT_STATE     1
 #define DFA_FORWARD        1
 #define DFA_REVERSE        0
 #define DFA_COMPUTE        0xFFFFFFFF
@@ -131,7 +134,6 @@ trie_t    * trie_new      (size_t, size_t);
 int         trie_search   (dfa_t *, uint8_t *, uint32_t*);
 int         trie_insert   (dfa_t *, uint8_t *, uint32_t);
 uint32_t    trie_newnode  (trie_t **);
-void        trie_reset    (trie_t *);
 void        path_to_align (const unsigned char *, int *, size_t);
 void        align_to_path (const int *, uint8_t *, size_t);
 void        path_encode   (const uint8_t *, uint8_t *, size_t);

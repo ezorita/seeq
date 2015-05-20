@@ -230,7 +230,7 @@ seeqStringMatch
    // Reset search variables
    int streak_dist = sq->tau+1;
    int match = 0;
-   uint32_t current_node = 1;
+   uint32_t current_node = DFA_ROOT_STATE;
    size_t slen = strlen(data);
    long count = 0;
    int end = 0;
@@ -265,6 +265,8 @@ seeqStringMatch
          match = 0;
       } else if (!match && streak_dist < current_dist) {
          match = 1;
+         // Reset DFA.
+         current_node = DFA_ROOT_STATE;
          count++;
          if (!opt_count && !(opt_best && sq->hits && streak_dist >= (int)sq->match[0].dist)) {
             size_t j = 0;
@@ -289,6 +291,8 @@ seeqStringMatch
             }
             else if (match_add(sq, i - j, i, (size_t)streak_dist)) return -1;
          }
+         // Go back one position in the text (the DFA has been reset).
+         i--;
 
          if (!all_match) end = 1;
       }
@@ -809,6 +813,7 @@ dfa_free
  dfa_t * dfa
 )
 {
+   if (dfa->align_cache != NULL) free(dfa->align_cache);
    if (dfa->trie != NULL) {
       free(dfa->trie);
    }
@@ -847,6 +852,7 @@ trie_new
 
    // Allocate at least one node.
    if (initial_size < 1) initial_size = 1;
+   if (height < 1) height = 1;
 
    trie_t * trie = malloc(sizeof(trie_t) + initial_size*sizeof(node_t));
    if (trie == NULL) return NULL;
@@ -942,17 +948,18 @@ trie_insert
    // Set error to 0.
    seeqerr = 0;
 
-   size_t id = 0;
-   size_t initial_pos = dfa->trie->pos;
-   size_t i;
-   for (i = 0; i < dfa->trie->height - 1; i++) {
+   // Check path.
+   for (size_t i = 0; i < dfa->trie->height; i++) {
       if (path[i] < 0 || path[i] >= TRIE_CHILDREN) {
          // Bad path, revert trie and return.
-         dfa->trie->pos = initial_pos;
          seeqerr = 8;
          return -1;
       }
+   }
 
+   size_t id = 0;
+   size_t i;
+   for (i = 0; i < dfa->trie->height - 1; i++) {
       // Check if the current node is an intermediate leaf.
       if (dfa->trie->nodes[id].flags & (((uint32_t)1)<<path[i])) {
          size_t auxid = id;
@@ -967,8 +974,9 @@ trie_insert
          size_t j = i;
          while ((uint8_t) path[j] == tmppath[j] && j < dfa->trie->height) {
             if (dfa->trie->pos == ABS_MAX_POS) {
-               // Memory limit reached.
-               dfa->trie->pos = initial_pos;
+               // Memory limit reached. Revert movement.
+               dfa->trie->nodes[id].flags |= (((uint32_t)1)<<path[i]);
+               dfa->trie->nodes[id].child[(int)path[i]] = tmpdfa;
                return 1;
             }
             uint32_t newid = trie_newnode(&(dfa->trie));
@@ -1024,28 +1032,6 @@ trie_newnode
    return (uint32_t)newid;
 }
 
-
-void
-trie_reset
-(
- trie_t * trie
-)
-// SYNOPSIS:                                                              
-//   Resets the trie by pruning the root node. The size of the trie, in terms
-//   of preallocated nodes is maintained.
-//                                                                        
-// PARAMETERS:                                                            
-//   trie   : Pointer to the trie.
-//                                                                        
-// RETURN:                                                                
-//   void.
-//
-// SIDE EFFECTS:
-//   None.
-{
-   trie->pos = 0;
-   memset(&(trie->nodes[0]), 0, sizeof(node_t));
-}
 
 void
 path_to_align
