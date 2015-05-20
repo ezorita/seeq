@@ -52,8 +52,7 @@ seeqNew
 // SYNOPSIS:                                                              
 //   Creates a new seeq_t structure for the defined pattern and matching distance.
 //   An empty DFA network is created and stored internally. The DFA network grows
-//   each time this structure is passed to 'seeqStringMatch' or 'seeqFileMatch'.
-//   Use 'seeqFree' to safely free the structure and the underlying DFA.
+//   each time this structure is passed to a matching function.
 //                                                                        
 // PARAMETERS:                                                            
 //   pattern    : matching pattern (accepted characters 'A','C','G','T','U','N','[',']').
@@ -140,7 +139,7 @@ seeqFree
 )
 // SYNOPSIS:                                                              
 //   Safely frees a seeq_t structure created with 'seeqNew'. This function must be used
-//   instead of 'free()', otherwise the pointers to the internal structures will be lost.
+//   instead of 'free()', otherwise the references to the internal structures will be lost.
 //                                                                        
 // PARAMETERS:                                                            
 //   sq       : pointer to the seeq_t structure.
@@ -170,8 +169,8 @@ seeqStringMatch
  int          options
 )
 // SYNOPSIS:                                                              
-//   Finds a pattern in the string 'data'. The matching pattern is the one specified
-//   in the call to seeqNew().
+//   Finds a pattern in the string 'data'. The matching pattern and distance are the ones
+//   specified in the call to seeqNew().
 //                                                                        
 // PARAMETERS:                                                            
 //   data    : string to match.
@@ -331,14 +330,13 @@ seeqMatchIter
  seeq_t * sq
 )
 // SYNOPSIS:                                                              
-//   Returns the file line of the last match.
+//   Iteratively returns the matches found in the last search.
 //                                                                        
 // PARAMETERS:                                                            
-//   sq: a seeq_t struct created with 'seeqOpen()' and matched with 'seeqStringMatch()'
-//       or 'seeqMatch()'.
+//   sq: a seeq_t struct created with 'seeqNew()'.
 //
 // RETURN:                                                                
-//   Returns the file line of the last match.
+//   A pointer to the match_t structure or NULL when sq is empty.
 //
 // SIDE EFFECTS:
 //   None.
@@ -356,7 +354,7 @@ seeqGetString
 //   Returns a pointer to the last matched line.
 //                                                                        
 // PARAMETERS:                                                            
-//   sq: a seeq_t struct created with 'seeqOpen()' and passed to a Match function.
+//   sq: a seeq_t struct created with 'seeqNew()'.
 //
 // RETURN:                                                                
 //   Returns a pointer to the last matched line. The contents of the pointer will be

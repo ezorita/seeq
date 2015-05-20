@@ -42,6 +42,10 @@
 #define NBASES             5 // Should never be set larger than 32.
 #define TRIE_CHILDREN      3
 
+#define MASK_MATCH    0x03
+#define MASK_NONDNA   0x0C
+#define MASK_INPUT    0x10
+
 #define min(a,b) (((a) < (b)) ? (a) : (b))
 #define type_msb(a) (((size_t)1)<<(sizeof(a)*8-1))
 #define set_mintomatch(a) (((uint32_t)(a)) << 16)
