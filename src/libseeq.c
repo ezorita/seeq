@@ -186,8 +186,6 @@ seeqStringMatch
 //               minimum matching distance. In case of many best matches, the first is stored
 //               in 'sq'.
 //             * SQ_ALL: finds and stores in 'sq' all the matching positions of the line.
-//             * SQ_COUNT: searches the whole line and returns the match count. The match
-//               positions are not stored in 'sq'.
 //
 //             NON-DNA TEXT OPTIONS:
 //             * SQ_FAIL: stops searching the current line if an illegal character is
@@ -201,7 +199,7 @@ seeqStringMatch
 //             * SQ_STREAM: Search until '\0' is found, newline characters will be ignored.
 //             
 // RETURN:                                                                
-//   Returns the number of matches discovered, 0 if none was found or -1 in case of error and
+//   Returns the number of matches stored in 'sq', 0 if none was found or -1 in case of error and
 //   seeqerr is set appropriately. 
 //
 // SIDE EFFECTS:
@@ -212,9 +210,8 @@ seeqStringMatch
 
    // Count replaces all other options.
    int match_opt = options & MASK_MATCH;
-   int opt_count = match_opt == SQ_COUNT;
    int opt_best  = match_opt == SQ_BEST;
-   int all_match = match_opt == SQ_ALL || opt_best || opt_count;
+   int all_match = match_opt == SQ_ALL || opt_best;
 
    int nondna_opt = options & MASK_NONDNA;
    int opt_ignore = nondna_opt == SQ_IGNORE;
@@ -222,17 +219,24 @@ seeqStringMatch
    if (nondna_opt == SQ_CONVERT) translate = translate_convert;
 
    int stream_opt = options & MASK_INPUT;
-   
+
+   // Allocate match stacks.
+   mstack_t ** mstack = malloc((size_t)(sq->tau+1)*sizeof(mstack_t*));
+   for (int i = 0; i <= sq->tau; i++)
+      if((mstack[i] = stackNew(INITIAL_MATCH_STACK_SIZE)) == NULL) return -1;
 
    // Set structure to non-matched.
    sq->hits = 0;
 
    // Reset search variables
+   size_t overlap = 0;
+   size_t last_end = 0;
+   int last_d = sq->tau + 1;
+   int best_d = sq->tau + 1;
    int streak_dist = sq->tau+1;
    int match = 0;
    uint32_t current_node = DFA_ROOT_STATE;
    size_t slen = strlen(data);
-   long count = 0;
    int end = 0;
    
    // DFA state.
@@ -260,40 +264,49 @@ seeqStringMatch
          end = 1;
       }
 
-      // Update streak.
-      if (streak_dist >= current_dist) {
-         match = 0;
-      } else if (!match && streak_dist < current_dist) {
-         match = 1;
-         // Reset DFA.
-         current_node = DFA_ROOT_STATE;
-         count++;
-         if (!opt_count && !(opt_best && sq->hits && streak_dist >= (int)sq->match[0].dist)) {
-            size_t j = 0;
-            uint32_t rnode = 1;
-            int d = sq->tau + 1;
-            // Find match start with RDFA.
-            do {
-               int c = (int)translate[(int)data[i-++j]];
-               if (c < NBASES) {
-                  uint32_t next = ((dfa_t *) sq->rdfa)->states[rnode].next[c];
-                  if (next == DFA_COMPUTE)
-                     if (dfa_step(rnode, c, sq->wlen, sq->tau, (dfa_t **) &(sq->rdfa), sq->rkeys, &next)) return -1;
-                  rnode = next;
-                  d = get_match(((dfa_t *) sq->rdfa)->states[rnode].match);
-               } else continue;
-            } while (d > streak_dist && j < i);
+      // Accept matches again.
+      if (streak_dist >= current_dist) match = 0;
 
-            // Save match.
-            if (opt_best) {
-               sq->match[0] = (match_t) {i-j, i,(size_t)streak_dist};
-               sq->hits = 1;
-            }
-            else if (match_add(sq, i - j, i, (size_t)streak_dist)) return -1;
+      // Match accept condition:
+      // If there is overlap with the previous, accept only if new_dist < last_dist.
+      // 
+      if (streak_dist <= sq->tau && streak_dist <= current_dist && !match && (i >= overlap || streak_dist < last_d) && (!opt_best || streak_dist < best_d)) {
+         if (streak_dist < current_dist) match = 1;
+         size_t j = 0;
+         uint32_t rnode = 1;
+         int d = sq->tau + 1;
+         // Find match start with RDFA.
+         do {
+            int c = (int)translate[(int)data[i-++j]];
+            if (c < NBASES) {
+               uint32_t next = ((dfa_t *) sq->rdfa)->states[rnode].next[c];
+               if (next == DFA_COMPUTE)
+                  if (dfa_step(rnode, c, sq->wlen, sq->tau, (dfa_t **) &(sq->rdfa), sq->rkeys, &next)) return -1;
+               rnode = next;
+               d = get_match(((dfa_t *) sq->rdfa)->states[rnode].match);
+            } else continue;
+         } while (d > streak_dist && j < i);
+         size_t match_start = i-j;
+         size_t match_end   = i;
+         if (match_start < last_end && streak_dist == last_d) {
+            match = 0;
+            continue;
          }
-         // Go back one position in the text (the DFA has been reset).
-         i--;
-
+         match_t hit = (match_t) {match_start, match_end, (size_t) streak_dist};
+         // Save non-overlapping matches.
+         if (opt_best) {
+            // Save match.
+            sq->hits = 1;
+            sq->match[0] = hit;
+            best_d = streak_dist;
+         } else {
+            if (stackAddMatch(mstack + streak_dist,hit)) return -1;
+         }
+         // Memory variables.
+         last_end = match_end;
+         last_d   = streak_dist;
+         overlap  = i + (size_t)(sq->wlen - sq->tau);
+         // Break if done.
          if (!all_match) end = 1;
       }
 
@@ -301,19 +314,92 @@ seeqStringMatch
       if (end) break;
 
       // Track distance.
-      streak_dist   = current_dist;
+      streak_dist = current_dist;
    }
+   // Merge matches.
+   if(recursive_merge(0, slen, 0, sq, mstack)) return -1;
+   // Return.
+   return (long)sq->hits;
+}
 
-   return count;
+
+int
+recursive_merge
+(
+ size_t      start,
+ size_t      end,
+ int         tau,
+ seeq_t    * sq,
+ mstack_t ** stackp
+)
+{
+   if (tau > sq->tau) return 0;
+   mstack_t   * stack = stackp[tau];
+   size_t next_start;
+   size_t next_end   = end;
+   
+   if (stack->pos > 0) {
+      // Remove upper overlaps.
+      match_t match = stack->match[stack->pos-1];
+      while (match.end > end && stack->pos > 0) match = stack->match[--stack->pos-1];
+
+      while (stack->pos > 0) {
+         match = stack->match[stack->pos-1];
+         if (start > match.start) break;
+         // Move match limits.
+         next_start =  match.end;
+         if (recursive_merge(next_start, next_end, tau+1, sq, stackp)) return -1;
+         next_end = match.start;
+         // We can safely insert without overlap.
+         stack->pos--;
+         if (seeqAddMatch(sq, match)) return -1;
+      }
+   }
+   next_start = start;
+   if (recursive_merge(next_start, next_end, tau+1, sq, stackp)) return -1;
+   return 0;
+}
+
+mstack_t *
+stackNew
+(
+ size_t size
+ )
+{
+   if (size < 1) size = 1;
+   mstack_t * stack = malloc(sizeof(mstack_t) + size * sizeof(match_t));
+   if (stack == NULL) return NULL;
+   stack->size = size;
+   stack->pos = 0;
+   return stack;
 }
 
 int
-match_add
+stackAddMatch
 (
- seeq_t * sq,
- size_t   start,
- size_t   end,
- size_t   dist
+ mstack_t ** stackp,
+ match_t    match
+)
+{
+   mstack_t * stack = *stackp;
+   // Realloc stack
+   if (stack->pos >= stack->size) {
+      size_t newsize = stack->size * 2;
+      *stackp = stack = realloc(stack, sizeof(mstack_t) + newsize * sizeof(match_t));
+      if (stack == NULL) return -1;
+      stack->size = newsize;
+   }
+
+   stack->match[stack->pos++] = match;
+   return 0;
+}
+
+
+int
+seeqAddMatch
+(
+ seeq_t  * sq,
+ match_t   match
 )
 {
    if (sq->hits >= sq->stacksize) {
@@ -323,7 +409,7 @@ match_add
       sq->stacksize = newsize;
    }
 
-   sq->match[sq->hits++] = (match_t){start, end, dist};
+   sq->match[sq->hits++] = match;
    return 0;
 }
 
@@ -614,13 +700,14 @@ dfa_step
    // Set error to 0.
    seeqerr = 0;
 
+   uint32_t state = dfa_state;
    dfa_t * dfa   = *dfap;
    int     value = 1 << base;
 
 
    // Return next vertex if already computed.
-   if (dfa->states[dfa_state].next[base] != DFA_COMPUTE) {
-      *dfa_next = dfa->states[dfa_state].next[base];
+   if (dfa->states[state].next[base] != DFA_COMPUTE) {
+      *dfa_next = dfa->states[state].next[base];
       return 0;
    }
    
@@ -630,8 +717,8 @@ dfa_step
    if (path == NULL) return -1;
 
    // Restore alignment if not running in cached mode.
-   if (dfa_state != 0) {
-      path_decode((uint8_t *)dfa->states[dfa_state].align, path, (size_t)plen);
+   if (state != 0) {
+      path_decode((uint8_t *)dfa->states[state].align, path, (size_t)plen);
       path_to_align(path, align, (size_t)plen);
    }
  
@@ -665,16 +752,16 @@ dfa_step
       // If exists, just link with the existing state.
       *dfa_next = dfalink;
       // Update edge in dfa.
-      if (dfa_state != 0) dfa->states[dfa_state].next[base] = dfalink;   
-   } else if (dfa_state == 0) {
+      if (state != 0) dfa->states[state].next[base] = dfalink;   
+   } else if (state == 0) {
       *dfa_next = 0;
       dfa->states[0].match = match;
    } else if (exists == 0) {
-      int retval = dfa_newstate(dfap, path, base, dfa_state);
+      int retval = dfa_newstate(dfap, path, base, state);
       dfa = *dfap;
       if (retval == 0) {
          // Update edge in dfa.
-         *dfa_next = dfa->states[dfa_state].next[base];
+         *dfa_next = dfa->states[state].next[base];
          dfa->states[*dfa_next].match = match;
       }
       else  if (retval == 1) {
@@ -735,6 +822,7 @@ dfa_newvertex
 
    // Initialize DFA vertex.
    dfa->states[dfa->pos].align = NULL;
+   dfa->states[dfa->pos].match = DFA_COMPUTE;
    for (int j = 0; j < NBASES; j++) dfa->states[dfa->pos].next[j] = DFA_COMPUTE;
 
    // Increase counter.
@@ -803,8 +891,15 @@ dfa_newstate
    // Connect dfa vertices.
    (*dfap)->states[dfa_state].next[edge] = (uint32_t)vertexid;
 
+   if (trie_insert(*dfap, path, vertexid)) {
+      // Delete DFA state.
+      (*dfap)->pos--;
+      free(code);
+      return -1;
+   }
+
    // Insert new state in the trie.
-   return trie_insert(*dfap, path, vertexid);
+   return 0;
 }
 
 void
@@ -1063,12 +1158,12 @@ path_encode
  uint8_t * data,
  size_t nelements
 )
+// Convert ternary alphabet to binary. (5 ternary symbols per byte)
 {
    static const uint8_t power[5] = {81,27,9,3,1};
    // Set memory.
    memset(data, 0, nelements/5 + (nelements%5 > 0));
-   // Convert ternary alphabet to binary. (5 ternary symbols per byte)
-   for (size_t i = 0; i < nelements; i++) data[i/5] += path[i] * power[i%5];
+   for (size_t i = 0; i < nelements; i++) data[i/5] += path[i]%3 * power[i%5];
 }
 
 void
@@ -1078,11 +1173,11 @@ path_decode
  uint8_t * path,
  size_t nelements
 )
+// Convert binary to ternary alphabet. (One byte yields 5 ternary symbols)
 {
    static const uint8_t power[5] = {81,27,9,3,1};
    // Allocate path.
    uint8_t tmp = 0;
-   // Convert binary to ternary alphabet. (One byte yields 5 ternary symbols)
    for (size_t i = 0; i < nelements; i++) {
       if (i%5 == 0) tmp = data[i/5];
       path[i] = tmp / power[i%5];
@@ -1098,10 +1193,10 @@ path_compare
  const uint8_t * data,
  size_t nelements
 )
+// Direct comparion of ternary symbols with its binary representation.
 {
    static const uint8_t power[5] = {81,27,9,3,1};
    uint8_t tmp = data[0];
-   // Direct comparion of ternary symbols with its binary representation.
    for (size_t i = 0; i < nelements; i++) {
       if (i % 5 == 0) tmp = data[i/5];
       if (tmp / power[i%5] != path[i]) return 0;

@@ -33,20 +33,22 @@
 #define COLOR_TERMINAL 1
 
 // Match options.
-#define MASK_MATCH    0x03
 #define SQ_FIRST      0x00
 #define SQ_BEST       0x01
 #define SQ_ALL        0x02
 #define SQ_COUNT      0x03
 
-#define MASK_NONDNA   0x0C
 #define SQ_FAIL       0x00
 #define SQ_CONVERT    0x04
 #define SQ_IGNORE     0x08
 
-#define MASK_INPUT    0x10
 #define SQ_LINES      0x00
 #define SQ_STREAM     0x10
+
+#define MASK_MATCH    0x03
+#define MASK_NONDNA   0x0C
+#define MASK_INPUT    0x10
+
 
 // Init options
 #define INITIAL_MATCH_STACK_SIZE 64
@@ -55,8 +57,9 @@
 
 extern int seeqerr;
 
-typedef struct seeq_t     seeq_t;
-typedef struct match_t    match_t;
+typedef struct seeq_t   seeq_t;
+typedef struct match_t  match_t;
+typedef struct mstack_t  mstack_t;
 
 struct match_t {
    size_t   start;
@@ -77,13 +80,26 @@ struct seeq_t {
    void    * rdfa;
 };
 
+struct mstack_t {
+   size_t  size;
+   size_t  pos;
+   match_t match[];
+};
+
+
 seeq_t     * seeqNew         (const char *, int, size_t);
 void         seeqFree        (seeq_t *);
 match_t    * seeqMatchIter   (seeq_t *);
 char       * seeqGetString   (seeq_t *);
 long         seeqStringMatch (const char *, seeq_t *, int);
 const char * seeqPrintError  (void);
-int          match_add       (seeq_t *, size_t, size_t, size_t);
+int          seeqAddMatch    (seeq_t *, match_t);
+mstack_t   * stackNew        (size_t);
+int          stackAddMatch   (mstack_t **, match_t);
+
+// misc functions.
+int recursive_merge (size_t, size_t, int, seeq_t *, mstack_t **);
+
 
 #define RESET       "\033[0m"
 #define BOLDRED     "\033[1m\033[31m"      /* Bold Red */

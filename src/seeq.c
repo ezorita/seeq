@@ -121,8 +121,8 @@ seeq
          }
       } else {
          while ((retval = seeqFileMatch(sqfile, sq, match_options, SQ_MATCH)) > 0) {
-            for (size_t i = 0; i < sq->hits; i++) {
-               match_t * match = sq->match + i;
+            match_t * match;
+            while((match = seeqMatchIter(sq)) != NULL) {
                if (args.compact) fprintf(stdout, "%ld:%ld-%ld:%ld",sqfile->line, match->start, match->end-1, match->dist);
                else {
                   if (args.showline) fprintf(stdout, "%ld ", sqfile->line);
@@ -173,7 +173,7 @@ seeq
       size_t mem_rdfa  = *data * ((8*4) + strlen(expression)/5 + (strlen(expression)%5 > 0));
       size_t mem_rtrie = *(size_t *)(*(data + 3)) * 16;
       double mb = 1024.0*1024.0;
-      fprintf(stderr, "memory: %.2f MB (DFA: %.2f MB, F-trie: %.2f MB)\n", (mem_dfa + mem_trie + mem_rdfa + mem_rtrie)/mb, (mem_dfa+mem_rdfa)/mb, (mem_trie+mem_rtrie)/mb);
+      fprintf(stderr, "memory: %.2f MB (DFA: %.2f MB, trie: %.2f MB)\n", (mem_dfa + mem_trie + mem_rdfa + mem_rtrie)/mb, (mem_dfa+mem_rdfa)/mb, (mem_trie+mem_rtrie)/mb);
       fprintf(stderr, "done in %.3fs\n", (clock()-clk)*1.0/CLOCKS_PER_SEC);
    }
    
@@ -298,7 +298,7 @@ seeqFileMatch
    seeqerr = 0;
 
    // Replace match options.
-   if (file_opt == SQ_COUNTMATCH) match_opt = (match_opt & ~MASK_MATCH) | SQ_COUNT;
+   if (file_opt == SQ_COUNTMATCH) match_opt = (match_opt & ~MASK_MATCH) | SQ_ALL;
    else if (file_opt == SQ_COUNTLINES) match_opt = (match_opt & ~MASK_MATCH) | SQ_FIRST;
 
    if (sqfile->fdi == NULL) {
