@@ -4,8 +4,6 @@
 ** File authors:
 **  Eduard Valera Zorita (eduardvalera@gmail.com)
 **
-** Last modified: March 9, 2015
-**
 ** License: 
 **  This program is free software: you can redistribute it and/or modify
 **  it under the terms of the GNU General Public License as published by
@@ -110,6 +108,7 @@ seeqNew
       return NULL;
    }
 
+   // Create seeq object.
    seeq_t * sq = malloc(sizeof(seeq_t));
    if (sq == NULL) {
       free(keys); free(rkeys); free(dfa); free(rdfa);
@@ -124,6 +123,7 @@ seeqNew
    sq->dfa    = (void *) dfa;
    sq->rdfa   = (void *) rdfa;
    sq->string = NULL;
+
    // Initialize match_t stack.
    sq->hits = 0;
    sq->stacksize = INITIAL_MATCH_STACK_SIZE;
@@ -152,9 +152,11 @@ seeqFree
 {
    // Free string if allocated.
    if (sq->string != NULL) free(sq->string);
+   // Free keys and match stack.
    free(sq->match);
    free(sq->keys);
    free(sq->rkeys);
+   // Free DFAs.
    dfa_free(sq->dfa);
    dfa_free(sq->rdfa);
    free(sq);
@@ -717,6 +719,13 @@ dfa_step
    if (path == NULL) return -1;
 
    // Restore alignment if not running in cached mode.
+   // TODO:
+   // Avoid the cache miss of the alignment. The alignment could be stored
+   // in the same dfa vertex structure, but then dynamic size would be needed.
+   // This could be implemented converting the stack of vertices into a char*
+   // and computing the memory offset of each vertex depending on the pattern
+   // length and the size of the compressed alignment
+   // (that is: dfa_t is ceil(pattern length/5.0) bytes bigger)
    if (state != 0) {
       path_decode((uint8_t *)dfa->states[state].align, path, (size_t)plen);
       path_to_align(path, align, (size_t)plen);
@@ -728,6 +737,13 @@ dfa_step
    int last_active = 1;
 
    // Update row.
+   // TODO:
+   // This could be done much faster using a precomputed table of state transitions.
+   // Depending on what is the current i-th differential transition, the updated i-th
+   // differential transition, the current i+1-th differential transition and whether,
+   // the i+1-th position is in match or mismatch.
+   // This is a graph with 5 states (current transition and updated transition), each
+   // with 6 state transition that emits the i+1-th updated transition.
    for (int i = 1; i < plen+1; i++) {
       nextold   = align[i];
       align[i]  = min(tau + 1, min(old + ((value & exp[i-1]) == 0), min(prev, align[i]) + 1));
