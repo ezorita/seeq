@@ -49,7 +49,7 @@
 
 
 // Init options
-#define INITIAL_MATCH_STACK_SIZE 64
+#define INITIAL_MATCH_STACK_SIZE 16
 
 #include <stdio.h>
 

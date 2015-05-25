@@ -295,23 +295,32 @@ seeqStringMatch
          } while (d > streak_dist && j < i);
          size_t match_start = i-j;
          size_t match_end   = i;
-         if (match_start < last_end && streak_dist == last_d) {
-            match = 0;
-            continue;
+         size_t match_dist  = streak_dist;
+         if (match_start < last_end) {
+            // Check whether we can delete some nucleotides at the start to avoid
+            // the overlap.
+            size_t gap = last_end - match_start;
+            if (last_end - match_start <= (size_t) (d - sq->tau)) {
+               match_start += gap;
+               match_dist  += gap;
+            } else {
+               match = 0;
+               continue;
+            }
          }
-         match_t hit = (match_t) {match_start, match_end, (size_t) streak_dist};
+         match_t hit = (match_t) {match_start, match_end, (size_t) match_dist};
          // Save non-overlapping matches.
          if (opt_best) {
             // Save match.
             sq->hits = 1;
             sq->match[0] = hit;
-            best_d = streak_dist;
+            best_d = match_dist;
          } else {
-            if (stackAddMatch(mstack + streak_dist,hit)) return -1;
+            if (stackAddMatch(mstack + match_dist,hit)) return -1;
          }
          // Memory variables.
          last_end = match_end;
-         last_d   = streak_dist;
+         last_d   = match_dist;
          overlap  = i + (size_t)(sq->wlen - sq->tau);
          // Break if done.
          if (!all_match) end = 1;
@@ -623,7 +632,7 @@ dfa_new
    }
 
    // Initialize state 0 (cache) and state 1 (root).
-   dfa->states[0].match = dfa->states[1].match = (uint32_t) tau+1;
+   dfa->states[0].match = dfa->states[1].match = set_mintomatch(wlen-tau) | ((uint32_t) tau+1);
    for (int i = 0; i < NBASES; i++) {
       dfa->states[0].next[i] = DFA_COMPUTE;
       dfa->states[1].next[i] = DFA_COMPUTE;
@@ -1150,7 +1159,6 @@ trie_newnode
    return (uint32_t)newid;
 }
 
-
 void
 path_to_align
 (
@@ -1161,17 +1169,6 @@ path_to_align
 {
    align[0] = 0;
    for (size_t i = 0; i < nelements; i++) align[i+1] = align[i] + path[i] - 1;
-}
-
-void
-align_to_path
-(
- const int * align,
- uint8_t * path,
- size_t nelements
-)
-{
-   for (size_t i = 0; i < nelements; i++) path[i] = (uint8_t) (align[i+1] - align[i]);
 }
 
 void

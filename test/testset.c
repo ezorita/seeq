@@ -608,7 +608,65 @@ test_dfa_step
    g_assert_cmpint(state, ==, 2);
    g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
    g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 2);
+
    dfa_free(dfa);
+
+   // Try the same with memory limit to 100 bytes.
+   // The first 2 dfa states and the trie node will fit, but nothing else.
+   pattern = "AAAA";
+   text = "ATTAAAT";
+   tau = 1;
+   plen = parse(pattern, exp);
+   g_assert_cmpint(plen, ==, 4);
+
+   dfa = dfa_new(plen, tau, 1, 1, 80);
+   g_assert(dfa != NULL);
+
+   state = DFA_ROOT_STATE;
+   // text[0] A
+   g_assert(0 == dfa_step(state, translate_ignore[(int)text[0]], plen, tau, &dfa, exp, &state));
+   g_assert_cmpint(state, ==, 0);
+   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
+   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 2);
+
+   // text[1] T
+   g_assert(0 == dfa_step(state, translate_ignore[(int)text[1]], plen, tau, &dfa, exp, &state));
+   g_assert_cmpint(state, ==, 0);
+   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
+   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 2);
+
+   // text[2] T
+   g_assert(0 == dfa_step(state, translate_ignore[(int)text[2]], plen, tau, &dfa, exp, &state));
+   g_assert_cmpint(state, ==, 1);
+   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
+   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 3);
+
+   // text[3] A
+   g_assert(0 == dfa_step(state, translate_ignore[(int)text[3]], plen, tau, &dfa, exp, &state));
+   g_assert_cmpint(state, ==, 0);
+   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
+   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 2);
+
+   // text[4] A
+   g_assert(0 == dfa_step(state, translate_ignore[(int)text[4]], plen, tau, &dfa, exp, &state));
+   g_assert_cmpint(state, ==, 0);
+   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
+   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 1);
+
+   // text[5] A
+   g_assert(0 == dfa_step(state, translate_ignore[(int)text[5]], plen, tau, &dfa, exp, &state));
+   g_assert_cmpint(state, ==, 0);
+   g_assert_cmpint(get_match(dfa->states[state].match), ==, 1);
+   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 0);
+
+   // text[6] T
+   g_assert(0 == dfa_step(state, translate_ignore[(int)text[6]], plen, tau, &dfa, exp, &state));
+   g_assert_cmpint(state, ==, 0);
+   g_assert_cmpint(get_match(dfa->states[state].match), ==, 1);
+   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 0);
+
+   dfa_free(dfa);
+   
 
    // Alloc exhaustive test.
    /*
@@ -909,6 +967,65 @@ test_seeqFileMatch
    g_assert_cmpint(sq->match[0].end, ==, 32);
    g_assert_cmpint(sq->match[0].dist, ==, 1);
 
+   seeqFree(sq);
+
+   // Overlapping matches.
+   sq = seeqNew("GAAG", 0, 0);
+   g_assert_cmpint(seeqStringMatch("GAAGAAG", sq, SQ_ALL), == , 1);
+   g_assert_cmpint(sq->hits, ==, 1);
+   g_assert_cmpint(sq->match[0].start, ==, 0);
+   g_assert_cmpint(sq->match[0].end, ==, 4);
+   g_assert_cmpint(sq->match[0].dist, ==, 0);
+
+   seeqFree(sq);
+
+   // Overlapping matches.
+   sq = seeqNew("GAAG", 1, 0);
+   g_assert_cmpint(seeqStringMatch("GAAGAAG", sq, SQ_ALL), == , 2);
+   g_assert_cmpint(sq->hits, ==, 2);
+   g_assert_cmpint(sq->match[1].start, ==, 0);
+   g_assert_cmpint(sq->match[1].end, ==, 4);
+   g_assert_cmpint(sq->match[1].dist, ==, 0);
+
+   g_assert_cmpint(sq->match[0].start, ==, 4);
+   g_assert_cmpint(sq->match[0].end, ==, 7);
+   g_assert_cmpint(sq->match[0].dist, ==, 1);
+
+   seeqFree(sq);
+
+   // Overlapping matches.
+   sq = seeqNew("GAAG", 1, 0);
+   g_assert_cmpint(seeqStringMatch("GAAGACG", sq, SQ_ALL), == , 1);
+   g_assert_cmpint(sq->hits, ==, 1);
+   g_assert_cmpint(sq->match[0].start, ==, 0);
+   g_assert_cmpint(sq->match[0].end, ==, 4);
+   g_assert_cmpint(sq->match[0].dist, ==, 0);
+
+   seeqFree(sq);
+
+   // Overlapping matches.
+   sq = seeqNew("GAAG", 2, 0);
+   g_assert_cmpint(seeqStringMatch("GAAGACG", sq, SQ_ALL), == , 2);
+   g_assert_cmpint(sq->hits, ==, 2);
+   g_assert_cmpint(sq->match[1].start, ==, 0);
+   g_assert_cmpint(sq->match[1].end, ==, 4);
+   g_assert_cmpint(sq->match[1].dist, ==, 0);
+
+   g_assert_cmpint(sq->match[0].start, ==, 4);
+   g_assert_cmpint(sq->match[0].end, ==, 7);
+   g_assert_cmpint(sq->match[0].dist, ==, 2);
+
+   seeqFree(sq);
+
+   // Realloc match stack.
+   sq = seeqNew("A", 0, 0);
+   g_assert_cmpint(seeqStringMatch("AAAAAAAAAAAAAAAAAAAA", sq, SQ_ALL), == , 20);
+   for (int i = 0; i < 20; i++) {
+      match = seeqMatchIter(sq);
+      g_assert_cmpint(match->start, ==, i);
+      g_assert_cmpint(match->end, ==, i+1);
+      g_assert_cmpint(match->dist, ==, 0);
+   }
    seeqFree(sq);
 }
 

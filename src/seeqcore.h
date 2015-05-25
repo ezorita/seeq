@@ -129,7 +129,6 @@ int         trie_search   (dfa_t *, uint8_t *, uint32_t*);
 int         trie_insert   (dfa_t *, uint8_t *, uint32_t);
 uint32_t    trie_newnode  (trie_t **);
 void        path_to_align (const unsigned char *, int *, size_t);
-void        align_to_path (const int *, uint8_t *, size_t);
 void        path_encode   (const uint8_t *, uint8_t *, size_t);
 void        path_decode   (const uint8_t *, uint8_t *, size_t);
 int         path_compare  (const uint8_t *, const uint8_t *, size_t);
