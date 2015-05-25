@@ -24,10 +24,6 @@ void SIGSEGV_handler(int sig) {
    exit(1);
 }
 
-typedef struct {
-} fixture;
-
-
 // --  ERROR MESSAGE HANDLING FUNCTIONS  -- //
 
 char ERROR_BUFFER[1024];
@@ -56,6 +52,14 @@ mute_stderr
    fflush(stderr);
    int fd = open("/dev/null", O_WRONLY);
    dup2(fd, STDERR_FILENO);
+}
+
+void
+unmute_stderr
+(void)
+{
+   dup2(BACKUP_FILE_DESCRIPTOR, STDERR_FILENO);
+   BACKUP_FILE_DESCRIPTOR = dup(STDERR_FILENO);
 }
 
 void
@@ -111,31 +115,6 @@ unredirect_sderr
    setvbuf(stderr, NULL, _IONBF, 0);
 }
 
-
-// --  SET UP AND TEAR DOWN TEST CASES  -- //
-/*
-void
-setup(
-   fixture *f,
-   gconstpointer test_data
-)
-// SYNOPSIS:                                                             
-//   Construct a very simple trie for testing purposes.                  
-{
-   return;
-}
-
-void
-teardown(
-   fixture *f,
-   gconstpointer test_data
-)
-{
-   return;
-}
-*/
-
-
 // --  TEST FUNCTIONS -- //
 
 void
@@ -150,9 +129,9 @@ test_trie_new
       g_assert_cmpint(trie->pos, ==, 1);
       g_assert_cmpint(trie->size, ==, i*100);
       g_assert_cmpint(trie->height, ==, j*100);
-      g_assert_cmpint(trie->nodes[0].parent, ==, 0);
       for (int k = 0; k < TRIE_CHILDREN; k++)
          g_assert_cmpint(trie->nodes[0].child[k], ==, 0);
+      g_assert_cmpint(trie->nodes[0].flags, ==, 0);
       free(trie);
    }
    }
@@ -161,10 +140,10 @@ test_trie_new
    g_assert(trie != NULL);
    g_assert_cmpint(trie->pos, ==, 1);
    g_assert_cmpint(trie->size, ==, 1);
-   g_assert_cmpint(trie->height, ==, 0);
-   g_assert_cmpint(trie->nodes[0].parent, ==, 0);
+   g_assert_cmpint(trie->height, ==, 1);
    for (int k = 0; k < TRIE_CHILDREN; k++)
       g_assert_cmpint(trie->nodes[0].child[k], ==, 0);
+   g_assert_cmpint(trie->nodes[0].flags, ==, 0);
    free(trie);
 
    // Alloc test.
@@ -172,6 +151,7 @@ test_trie_new
    set_alloc_failure_rate_to(1.1);
    trie_t *ret = trie_new(1, 10);
    reset_alloc();
+   unmute_stderr();
    g_assert(ret == NULL);
 
    return;
@@ -183,263 +163,237 @@ void
 test_trie_insert
 (void)
 {
+   int trie_nodes = 1;
+   int trie_height = 10;
+   dfa_t * dfa = dfa_new(trie_height,0,100,trie_nodes,0);
+   g_assert(dfa != NULL);
+   
+   // Test paths.
+   uint8_t test_path[9][10] = {
+      {2,1,1,1,1,1,1,1,1,1},
+      {0,0,0,0,0,0,0,0,0,0},
+      {0,0,0,1,0,0,0,0,0,0},
+      {1,1,1,1,1,1,1,1,1,1},
+      {1,0,1,0,1,0,1,0,1,0},
+      {2,0,1,0,1,0,1,0,1,0},
+      {2,1,1,1,1,1,1,1,1,0},
+      {1,1,1,1,1,1,1,1,1,0},
+      {1,0,0,0,0,1,2,0,3,0}};
 
-   trie_t *trie = trie_new(1,10);
-   g_assert(trie != NULL);
-   uint id;
+   // Insert path references.
+   for (int i = 0; i < 8; i++) {
+      uint8_t * code = malloc(trie_height/5 + (trie_height%5 > 0));
+      path_encode(test_path[i], code, trie_height);
+      dfa->states[i+1].align = code;
+   }
 
+   // Trie contains path 2,1,1,1,1,1...
+   g_assert_cmpint(dfa->trie->pos, ==, 1);
+   g_assert_cmpint(dfa->trie->nodes[0].child[0], ==, 0);
+   g_assert_cmpint(dfa->trie->nodes[0].child[1], ==, 0);
+   g_assert_cmpint(dfa->trie->nodes[0].child[2], ==, 1);
+   g_assert_cmpint(dfa->trie->nodes[0].flags, ==, 0b0100);
+
+   int rval;
    // Insert leftmost branch in the trie.
-   id = trie_insert(&trie, "\0\0\0\0\0\0\0\0\0\0", 12, 1205);
-   g_assert_cmpint(id, ==, 1);
-   g_assert_cmpint(trie->pos, ==, 2);
-   g_assert_cmpint(trie->size, ==, 2);
+   rval = trie_insert(dfa, test_path[1], 2); // UPDATE DFA NODES
+   g_assert_cmpint(rval, ==, 0);
+   g_assert_cmpint(dfa->trie->pos, ==, 1);
+   g_assert_cmpint(dfa->trie->size, ==, 1);
+   g_assert_cmpint(dfa->trie->nodes[0].child[0], ==, 2);
+   g_assert_cmpint(dfa->trie->nodes[0].child[1], ==, 0);
+   g_assert_cmpint(dfa->trie->nodes[0].child[2], ==, 1);
+   g_assert_cmpint(dfa->trie->nodes[0].flags, ==, 0b0101);
    // This will create nodes up to level 3.
-   // [0] --0--> [1] --0--> [2] --0--> [3] --0--> (4)
-   //                                   '----1--> (5)
-   id = trie_insert(&trie, "\0\0\0\1\0\0\0\0\0\0", 51, 1205);
-   g_assert_cmpint(id, ==, 5);
-   g_assert_cmpint(trie->pos, ==. 6);
-   g_assert_cmpint(trie->size, ==, 8);
-   // The encoded path is [0,0,0,0,0,0] -> 0x0000
-   node_t node = trie->nodes[5];
-   char * data = (char *)node.child[0];
-   g_assert_cmpint(data[0], ==, 0);
-   g_assert_cmpint(data[1], ==, 0);
-   g_assert_cmpint(node.child[1], ==, 1205);
-   g_assert_cmpint(node.child[2] & 0xFFFF, ==, 51);
-   g_assert_cmpint(node.parent, ==, 3);
+   // [0] --0--> [1] --0--> [2] --0--> [3] --0--> ()
+   //  '                                '----1--> ()
+   //  '----2--> ()
+   rval = trie_insert(dfa, test_path[2], 3);
+   g_assert_cmpint(rval, ==, 0);
+   g_assert_cmpint(dfa->trie->pos, ==, 4);
+   g_assert_cmpint(dfa->trie->size, ==, 4);
+   g_assert_cmpint(dfa->trie->nodes[0].child[0], ==, 1);
+   g_assert_cmpint(dfa->trie->nodes[0].child[1], ==, 0);
+   g_assert_cmpint(dfa->trie->nodes[0].child[2], ==, 1);
+   g_assert_cmpint(dfa->trie->nodes[0].flags, ==, 0b0100);
 
+   g_assert_cmpint(dfa->trie->nodes[1].child[0], ==, 2);
+   g_assert_cmpint(dfa->trie->nodes[1].child[1], ==, 0);
+   g_assert_cmpint(dfa->trie->nodes[1].child[2], ==, 0);
+   g_assert_cmpint(dfa->trie->nodes[1].flags, ==, 0b0000);
+
+   g_assert_cmpint(dfa->trie->nodes[2].child[0], ==, 3);
+   g_assert_cmpint(dfa->trie->nodes[2].child[1], ==, 0);
+   g_assert_cmpint(dfa->trie->nodes[2].child[2], ==, 0);
+   g_assert_cmpint(dfa->trie->nodes[2].flags, ==, 0b0000);
+
+   g_assert_cmpint(dfa->trie->nodes[3].child[0], ==, 2);
+   g_assert_cmpint(dfa->trie->nodes[3].child[1], ==, 3);
+   g_assert_cmpint(dfa->trie->nodes[3].child[2], ==, 0);
+   g_assert_cmpint(dfa->trie->nodes[3].flags, ==, 0b0011);
    // Insert center branch in the trie.
-   id = trie_insert(&trie, "\1\1\1\1\1\1\1\1\1\1", 2, 834139423);
-   g_assert_cmpint(id, ==, 6);
-   g_assert_cmpint(trie->pos, ==, 7);
-   g_assert_cmpint(trie->size, ==, 8);
-   for (int i = 1 ; i < 10 ; i++) {
-      node_t node = trie->nodes[i];
-      g_assert_cmpint(node.parent, ==, i-1);
-      g_assert_cmpint(node.child[0], ==, i+1);
-      for (int k = 1; k < TRIE_CHILDREN; k++) {
-         g_assert_cmpint(node.child[k], ==, 0);
-      }
-   }
-   for (int i = 11 ; i < 20 ; i++) {
-      node_t node = trie->nodes[i];
-      g_assert_cmpint(node.parent, ==, (i == 11 ? 0 : i-1));
-      g_assert_cmpint(node.child[1], ==, i+1);
-      for (int k = 0; k < TRIE_CHILDREN; k++) {
-         if (k != 1) g_assert_cmpint(node.child[k], ==, 0);
-      }
-   }
-   node = trie->nodes[0];
-   g_assert_cmpint(node.child[0], ==, 1);
-   g_assert_cmpint(node.child[1], ==, 11);
-   node = trie->nodes[10];
-   g_assert_cmpint(node.child[0], ==, 4897892);
-   g_assert_cmpint(node.child[1], ==, 1205);
-   node = trie->nodes[20];
-   g_assert_cmpint(node.child[0], ==, 22923985);
-   g_assert_cmpint(node.child[1], ==, 834139423);
-
+   // [0] --0--> [1] --0--> [2] --0--> [3] --0--> ()
+   //  '----1--> ()                     '----1--> ()
+   //  '----2--> ()
+   rval = trie_insert(dfa, test_path[3], 4);
+   g_assert_cmpint(rval, ==, 0);
+   g_assert_cmpint(dfa->trie->pos, ==, 4);
+   g_assert_cmpint(dfa->trie->size, ==, 4);
+   g_assert_cmpint(dfa->trie->nodes[0].child[0], ==, 1);
+   g_assert_cmpint(dfa->trie->nodes[0].child[1], ==, 4);
+   g_assert_cmpint(dfa->trie->nodes[0].child[2], ==, 1);
+   g_assert_cmpint(dfa->trie->nodes[0].flags, ==, 0b0110);
    // Insert middle branch in the trie.
-   id = trie_insert(&trie, "\1\0\1\0\1\0\1\0\1\0", 9309871, 394823344);
-   g_assert_cmpint(id, ==, 29);
-   g_assert_cmpint(trie->pos, ==, 30);
-   g_assert_cmpint(trie->size, ==, 32);
-   for (int i = 1 ; i < 10 ; i++) {
-      node_t node = trie->nodes[i];
-      g_assert_cmpint(node.parent, ==, i-1);
-      g_assert_cmpint(node.child[0], ==, i+1);
-      for (int k = 1; k < TRIE_CHILDREN; k++) {
-         g_assert_cmpint(node.child[k], ==, 0);
-      }
-   }
-   for (int i = 12 ; i < 20 ; i++) {
-      node_t node = trie->nodes[i];
-      g_assert_cmpint(node.parent, ==, i-1);
-      g_assert_cmpint(node.child[1], ==, i+1);
-      for (int k = 0; k < TRIE_CHILDREN; k++) {
-         if (k != 1) g_assert_cmpint(node.child[k], ==, 0);
-      }
-   }
+   rval = trie_insert(dfa, test_path[4], 5);
+   g_assert_cmpint(rval, ==, 0);
+   g_assert_cmpint(dfa->trie->pos, ==, 5);
+   g_assert_cmpint(dfa->trie->size, ==, 8);
+   g_assert_cmpint(dfa->trie->nodes[0].child[0], ==, 1);
+   g_assert_cmpint(dfa->trie->nodes[0].child[1], ==, 4);
+   g_assert_cmpint(dfa->trie->nodes[0].child[2], ==, 1);
+   g_assert_cmpint(dfa->trie->nodes[0].flags, ==, 0b0100);
 
-   for (int i = 21 ; i < 29 ; i++) {
-      node_t node = trie->nodes[i];
-      for (int k = 0; k < TRIE_CHILDREN; k++) {
-         if (k != i%2) g_assert_cmpint(node.child[k], ==, 0);
-         else g_assert_cmpint(node.child[k], ==, i+1);
-      }
-      g_assert_cmpint(node.parent, ==, (i==21 ? 11 : i-1));
-   }
+   g_assert_cmpint(dfa->trie->nodes[4].child[0], ==, 5);
+   g_assert_cmpint(dfa->trie->nodes[4].child[1], ==, 4);
+   g_assert_cmpint(dfa->trie->nodes[4].child[2], ==, 0);
+   g_assert_cmpint(dfa->trie->nodes[4].flags, ==, 0b0011);
 
-   node = trie->nodes[0];
-   g_assert_cmpint(node.child[0], ==, 1);
-   g_assert_cmpint(node.child[1], ==, 11);
-   node = trie->nodes[10];
-   g_assert_cmpint(node.child[0], ==, 4897892);
-   g_assert_cmpint(node.child[1], ==, 1205);
-   node = trie->nodes[11];
-   g_assert_cmpint(node.child[0], ==, 21);
-   g_assert_cmpint(node.child[1], ==, 12);
-   node = trie->nodes[20];
-   g_assert_cmpint(node.child[0], ==, 22923985);
-   g_assert_cmpint(node.child[1], ==, 834139423);
-   node = trie->nodes[29];
-   g_assert_cmpint(node.child[0], ==, 9309871);
-   g_assert_cmpint(node.child[1], ==, 394823344);
+   // Move initial path.
+   rval = trie_insert(dfa, test_path[5], 6);
+   g_assert_cmpint(rval, ==, 0);
+   g_assert_cmpint(dfa->trie->pos, ==, 6);
+   g_assert_cmpint(dfa->trie->size, ==, 8);
+   g_assert_cmpint(dfa->trie->nodes[0].child[0], ==, 1);
+   g_assert_cmpint(dfa->trie->nodes[0].child[1], ==, 4);
+   g_assert_cmpint(dfa->trie->nodes[0].child[2], ==, 5);
+   g_assert_cmpint(dfa->trie->nodes[0].flags, ==, 0b0000);
+
+   g_assert_cmpint(dfa->trie->nodes[5].child[0], ==, 6);
+   g_assert_cmpint(dfa->trie->nodes[5].child[1], ==, 1);
+   g_assert_cmpint(dfa->trie->nodes[5].child[2], ==, 0);
+   g_assert_cmpint(dfa->trie->nodes[5].flags, ==, 0b0011);
 
    // Bad insertion.
-   uint pos = trie->pos;
-   id = trie_insert(&trie, "\1\0\0\0\0\1\2\0\3\0", 3948234, 845722);
-   g_assert_cmpint(id, ==, (uint)-1);
-   g_assert_cmpint(trie->pos, ==, pos);
-
-   free(trie);
-
-   // Smallest tree (leaf)
-   trie_t * lowtrie = trie_new(1,0);
-   g_assert(lowtrie != NULL);
-
-   // Insert a path longer than trie height.
-   id = trie_insert(&lowtrie, "\0\0\0", 123, 456);
-   g_assert_cmpint(id, ==, 0);
-   g_assert_cmpint(lowtrie->pos, ==, 1);
-   g_assert_cmpint(lowtrie->nodes[0].child[0], ==, 123);
-   g_assert_cmpint(lowtrie->nodes[0].child[1], ==, 456);
-
-   free(lowtrie);
-
-   // Small tree.
-   lowtrie = trie_new(1,1);
-   g_assert(lowtrie != NULL);
-
-   // Insert a path longer than trie height.
-   id = trie_insert(&lowtrie, "\0\0\0", 123, 456);
-   g_assert_cmpint(id, ==, 1);
-   g_assert_cmpint(lowtrie->pos, ==, 2);
-   g_assert_cmpint(lowtrie->nodes[0].child[0], ==, 1);
-   g_assert_cmpint(lowtrie->nodes[1].parent, ==, 0);
-   g_assert_cmpint(lowtrie->nodes[1].child[0], ==, 123);
-   g_assert_cmpint(lowtrie->nodes[1].child[1], ==, 456);
-
-   id = trie_insert(&lowtrie, "\1\0\0", 789, 100);
-   g_assert_cmpint(id, ==, 2);
-   g_assert_cmpint(lowtrie->pos, ==, 3);
-   g_assert_cmpint(lowtrie->nodes[0].child[0], ==, 1);
-   g_assert_cmpint(lowtrie->nodes[0].child[1], ==, 2);
-   g_assert_cmpint(lowtrie->nodes[1].parent, ==, 0);
-   g_assert_cmpint(lowtrie->nodes[2].parent, ==, 0);
-   g_assert_cmpint(lowtrie->nodes[1].child[0], ==, 123);
-   g_assert_cmpint(lowtrie->nodes[1].child[1], ==, 456);
-   g_assert_cmpint(lowtrie->nodes[2].child[0], ==, 789);
-   g_assert_cmpint(lowtrie->nodes[2].child[1], ==, 100);
-
-   free(lowtrie);
+   uint pos = dfa->trie->pos;
+   rval = trie_insert(dfa, test_path[8], 9);
+   g_assert_cmpint(rval, ==, -1);
+   g_assert_cmpint(dfa->trie->pos, ==, pos);
 
    // Alloc test.
    mute_stderr();
-   lowtrie = trie_new(1,2);
-   g_assert(lowtrie != NULL);
-   id = trie_insert(&lowtrie, "\0\0", 20, 20);
-   g_assert_cmpint(id, ==, 2);
-
    set_alloc_failure_rate_to(1.0);
-   int ret1 = trie_insert(&lowtrie, "\0\2", 2, 2);
-   int ret2 = trie_insert(&lowtrie, "\1\2", 2, 2);
+   uint8_t new_path[10] = {1,2};
+   int ret1 = trie_insert(dfa, new_path, 10);
+   new_path[0] = 0;
+   int ret2 = trie_insert(dfa, test_path[6], 7);
    reset_alloc();
-
-   g_assert_cmpint(ret1, ==, 3);
+   unmute_stderr();
+   g_assert_cmpint(ret1, ==, 0);
+   // Realloc fails.
    g_assert_cmpint(ret2, ==, -1);
 
-   free(lowtrie);
+   dfa_free(dfa);
 
+   // Try height 0.
+   trie_height = 1;
+   trie_nodes = 1;
+   dfa_t * lowdfa = dfa_new(trie_height,0,100,trie_nodes,0);
+   g_assert(lowdfa != NULL);
+   g_assert_cmpint(lowdfa->trie->height, ==, 1);
+
+   // Test paths.
+   uint8_t test_path2[3][3] = {
+      {2,1,1},
+      {0,0,0},
+      {0,1,2}};
+
+   // Insert path references.
+   for (int i = 0; i < 3; i++) {
+      uint8_t * code = malloc(trie_height/5 + (trie_height%5 > 0));
+      path_encode(test_path2[i], code, trie_height);
+      lowdfa->states[i+1].align = code;
+   }
+
+
+   // Insert a path longer than trie height.
+   rval = trie_insert(lowdfa, test_path2[1], 2);
+   g_assert_cmpint(rval, ==, 0);
+   g_assert_cmpint(lowdfa->trie->pos, ==, 1);
+   g_assert_cmpint(lowdfa->trie->nodes[0].child[0], ==, 2);
+   g_assert_cmpint(lowdfa->trie->nodes[0].child[2], ==, 1);
+   g_assert_cmpint(lowdfa->trie->nodes[0].flags, ==, 0b0101);
+   // This will replace the path '\0' (height is 1).
+   rval = trie_insert(lowdfa, test_path2[2], 3);
+   g_assert_cmpint(rval, ==, 0);
+   g_assert_cmpint(lowdfa->trie->pos, ==, 1);
+   g_assert_cmpint(lowdfa->trie->nodes[0].child[0], ==, 3);
+   g_assert_cmpint(lowdfa->trie->nodes[0].child[2], ==, 1);
+   g_assert_cmpint(lowdfa->trie->nodes[0].flags, ==, 0b0101);
+
+   dfa_free(lowdfa);
 
    return;
-
 }
 
 
 void
-test_trie_search_getrow
+test_trie_search
 (void)
 {
+   int trie_nodes = 100;
+   int trie_height = 10;
+   dfa_t * dfa = dfa_new(trie_height,0,100,trie_nodes,0);
+   g_assert(dfa != NULL);
+
+   uint8_t test_path[7][10] = {
+      {0,0,0,0,0,0,0,0,0,0},
+      {0,0,0,1,0,0,0,0,0,0},
+      {1,1,1,1,1,1,1,1,1,1},
+      {1,0,1,0,1,0,1,0,1,0},
+      {2,0,1,0,1,0,1,0,1,0},
+      {2,1,1,1,1,1,1,1,1,0},
+      {1,1,1,1,1,1,1,1,1,0}};
+
+   uint8_t search_path[11][10] = {
+      {0,0,0,0,0,0,0,0,0,1},
+      {0,0,2,1,0,0,0,2,0,1},
+      {2,0,2,0,0,0,0,0,0,0},
+      {1,1,1,0,2,0,0,0,0,0},
+      {2,1,2,0,1,0,0,0,2,2},
+      {0,0,0,1,0,0,0,0,0,1},
+      {1,1,1,0,0,2,0,0,0,1},
+      {1,2,0,1,2,0,1,2,0,1},
+      {1,0,1,0,1,0,1,0,1,1},
+      {0,0,0,0,0,0,0,0,0,2},
+      {3,0,0,1,1,2,0,0,1,2}};
 
    trie_t *trie = trie_new(1,10);
    g_assert(trie != NULL);
 
-   char path[10] = {0};
-   // Insert random paths and search them.
-   for (int i = 0 ; i < 10000 ; i++) {
-      for (int j = 0 ; j < 10 ; j++) {
-         path[j] = (lrand48() % TRIE_CHILDREN);
-      }
-      size_t value = (size_t) lrand48();
-      size_t dfastate = (size_t) lrand48();
-      size_t retval, dfaval;
-      size_t id = trie_insert(&trie, path, value, dfastate);
-      int * row = trie_getrow(trie, id);
+   // Insert path references.
+   for (int i = 0; i < 7; i++) {
+      uint8_t * code = malloc(trie_height/5 + (trie_height%5 > 0));
+      path_encode(test_path[i], code, trie_height);
+      dfa->states[i+2].align = code;
+      g_assert(trie_insert(dfa, test_path[i], i+2) == 0);
+   }
 
-      g_assert(trie_search(trie, path, &retval, &dfaval));
-      g_assert_cmpint(value, ==, retval);
-      g_assert_cmpint(dfastate, ==, dfaval);
-      g_assert_cmpint(row[trie->height], ==, value);
-      for (int i = (int)(trie->height - 1); i >= 0; i--) {
-         value += (path[i] == 0) - (path[i] == 2);
-         g_assert_cmpint(row[i], ==, value);
-      }
-      free(row);
+   // Search paths.
+   uint32_t dfastate;
+   for (int i = 0; i < 7; i++) {
+      g_assert_cmpint(trie_search(dfa, test_path[i], &dfastate), ==, 1);
+      g_assert_cmpint(dfastate, ==, i+2);
+   }
+
+   for (int i = 0; i < 10; i++) {
+      g_assert_cmpint(trie_search(dfa, search_path[i], &dfastate), ==, 0);
    }
 
    // Wrong path.
-   path[3] = 6;
-   size_t retval, dfaval;
-   g_assert_cmpint(trie_search(trie,path, &retval, &dfaval), ==, -1);
+   g_assert_cmpint(trie_search(dfa,search_path[10], NULL), ==, -1);
    g_assert_cmpint(seeqerr, ==, 6);
 
-   // Getrow starting from a wrong leaf.
-   g_assert(trie_getrow(trie, 15) == NULL);
-   g_assert_cmpint(seeqerr, ==, 7);
-   g_assert(trie_getrow(trie, 4) == NULL);
-   g_assert_cmpint(seeqerr, ==, 7);
-
-   free(trie);
-
-   return;
-
-}
-
-void
-test_trie_reset
-(void)
-{
-
-   trie_t *trie = trie_new(1,10);
-   g_assert(trie != NULL);
-
-   // Insert leftmost branch in the trie.
-   trie_insert(&trie, "\0\0\0\0\0\0\0\0\0\0", 36636, 192438);
-   g_assert_cmpint(trie->pos, ==, 11);
-   g_assert_cmpint(trie->size, ==, 16);
-   for (int i = 0 ; i < 10 ; i++) {
-      node_t node = trie->nodes[i];
-      g_assert_cmpint(node.child[0], ==, i+1);
-   }
-   node_t node = trie->nodes[0];
-   g_assert_cmpint(node.child[0], ==, 1);
-   g_assert_cmpint(node.child[1], ==, 0);
-   node = trie->nodes[10];
-   g_assert_cmpint(node.child[0], ==, 36636);
-   g_assert_cmpint(node.child[1], ==, 192438);
-
-   trie_reset(trie);
-   g_assert(trie != NULL);
-   g_assert_cmpint(trie->pos, ==, 0);
-   g_assert_cmpint(trie->size, ==, 16);
-   node = trie->nodes[0];
-   for (int k = 0; k < TRIE_CHILDREN; k++) {
-      g_assert_cmpint(node.child[k], ==, 0);
-   }
-
-   free(trie);
+   dfa_free(dfa);
 
    return;
 
@@ -449,59 +403,61 @@ void
 test_dfa_new
 (void)
 {
-   dfa_t * dfa = dfa_new(10, 3, 1, 1);
+   dfa_t * dfa = dfa_new(10, 3, 1, 1, 0);
    g_assert(dfa != NULL);
    g_assert(dfa->trie != NULL);
-   g_assert_cmpint(dfa->size, ==, 1);
-   g_assert_cmpint(dfa->pos, ==, 1);
-   g_assert_cmpint(dfa->trie->size, ==, 16);
-   int * nwrow = trie_getrow(dfa->trie, dfa->states[0].node_id);
-   for (int i = 0; i <= 10; i++) {
-      g_assert_cmpint(nwrow[i], ==, (i < 4 ? i : 4));
-   }
+   g_assert_cmpint(dfa->size, ==, 2);
+   g_assert_cmpint(dfa->pos, ==, 2);
+   g_assert_cmpint(dfa->trie->pos, ==, 1);
+   g_assert_cmpint(dfa->trie->size, ==, 1);
+   uint32_t dfa_root;
+   uint8_t path[10] = {2,2,2,2,1,1,1,1,1,1};
+   g_assert_cmpint(trie_search(dfa, path, &dfa_root), ==, 1);
+   g_assert_cmpint(dfa_root, ==, DFA_ROOT_STATE);
+   dfa_free(dfa);
 
-   free(dfa);
-
-   dfa = dfa_new(10, 3, 0, 0);
+   dfa = dfa_new(10, 3, 0, 0, 0);
    g_assert(dfa != NULL);
    g_assert(dfa->trie != NULL);
-   g_assert_cmpint(dfa->size, ==, 1);
-   g_assert_cmpint(dfa->pos, ==, 1);
-   g_assert_cmpint(dfa->trie->size, ==, 16);
-
-   free(dfa);
+   g_assert_cmpint(dfa->size, ==, 2);
+   g_assert_cmpint(dfa->pos, ==, 2);
+   g_assert_cmpint(dfa->trie->pos, ==, 1);
+   g_assert_cmpint(dfa->trie->size, ==, 1);
+   dfa_free(dfa);
 
    for (int i = 0; i < 1000; i++) {
-      dfa = dfa_new(10, 3, i, i);
+      dfa = dfa_new(10, 3, i, i, 0);
       g_assert(dfa != NULL);
       g_assert(dfa->trie != NULL);
-      g_assert_cmpint(dfa->size, ==, (i < 1 ? 1 : i));
-      g_assert_cmpint(dfa->pos, ==, 1);
-      free(dfa);
+      g_assert_cmpint(dfa->size, ==, (i < 2 ? 2 : i));
+      g_assert_cmpint(dfa->pos, ==, 2);
+      g_assert_cmpint(dfa->trie->pos, ==, 1);
+      g_assert_cmpint(dfa->trie->size, ==, (i < 1 ? 1 : i));
+      dfa_free(dfa);
    }
 
 
-   dfa = dfa_new(10, -1, 10, 10);
+   dfa = dfa_new(10, -1, 10, 10, 0);
    g_assert(dfa == NULL);
 
-   dfa = dfa_new(-1, 3, 10, 10);
+   dfa = dfa_new(0, 3, 10, 10, 0);
    g_assert(dfa == NULL);
 
    // Alloc test.
    mute_stderr();
    set_alloc_failure_rate_to(1.1);
-   dfa = dfa_new(10, 3, 1, 1);
+   dfa = dfa_new(10, 3, 1, 1, 0);
    reset_alloc();
+   unmute_stderr();
    g_assert(dfa == NULL);
 
    // Exhaustive alloc test
    set_alloc_failure_rate_to(0.1);
    for (int i = 0; i < 10000; i++) {
-      dfa = dfa_new(10, 3, 1, 1);
+      dfa = dfa_new(10, 3, 1, 1, 0);
       if (dfa != NULL) dfa_free(dfa);
    }
    reset_alloc();
-
 }
 
 
@@ -509,18 +465,18 @@ void
 test_dfa_newvertex
 (void)
 {
-   dfa_t * dfa = dfa_new(10, 3, 1, 1);
+   dfa_t * dfa = dfa_new(10, 3, 1, 1, 0);
    g_assert(dfa != NULL);
-   g_assert_cmpint(dfa->size, ==, 1);
-   g_assert_cmpint(dfa->pos, ==, 1);
+   g_assert_cmpint(dfa->size, ==, 2);
+   g_assert_cmpint(dfa->pos, ==, 2);
 
-   for (int i = 1; i < 1024; i++) {
-      dfa_newvertex(&dfa, i);
-      g_assert_cmpint(dfa->pos, ==, i+1);
-      g_assert_cmpint(dfa->states[i].node_id, ==, i);
+   for (int i = 1; i < 1023; i++) {
+      uint32_t new = dfa_newvertex(&dfa);
+      g_assert_cmpint(dfa->pos, ==, i+2);
+      g_assert(dfa->states[new].align == NULL);
+      g_assert_cmpint(dfa->states[new].match, ==, DFA_COMPUTE);
       for (int j = 0; j < NBASES; j++) {
-         g_assert_cmpint(dfa->states[i].next[j].state, ==, 0);
-         g_assert_cmpint(dfa->states[i].next[j].match, ==, DFA_COMPUTE);
+         g_assert_cmpint(dfa->states[new].next[j], ==, DFA_COMPUTE);
       }
    }
    g_assert_cmpint(dfa->size, ==, 1024);
@@ -528,8 +484,9 @@ test_dfa_newvertex
    // Alloc test.
    mute_stderr();
    set_alloc_failure_rate_to(1.1);
-   int ret = dfa_newvertex(&dfa, 1024);
+   int ret = dfa_newvertex(&dfa);
    reset_alloc();
+   unmute_stderr();
    g_assert_cmpint(ret, ==, -1);
 
 }
@@ -539,35 +496,44 @@ void
 test_dfa_newstate
 (void)
 {
-   dfa_t * dfa = dfa_new(5, 2, 1, 1);
+   dfa_t * dfa = dfa_new(5, 2, 1, 1, 0);
    g_assert(dfa != NULL);
    g_assert(dfa->trie != NULL);
-   g_assert_cmpint(dfa->size, ==, 1);
-   g_assert_cmpint(dfa->pos, ==, 1);
-   g_assert_cmpint(dfa->trie->size, ==, 8);
-   int * nwrow = trie_getrow(dfa->trie, dfa->states[0].node_id);
-   for (int i = 0; i <= 5; i++) {
-      g_assert_cmpint(nwrow[i], ==, (i < 3 ? i : 3));
-   }
+   g_assert_cmpint(dfa->size, ==, 2);
+   g_assert_cmpint(dfa->pos, ==, 2);
+   g_assert_cmpint(dfa->trie->size, ==, 1);
+   g_assert_cmpint(dfa->trie->pos, ==, 1);
+   uint8_t path[5] = {2,2,2,1,1};
+   g_assert_cmpint(path_compare(path, dfa->states[1].align, 5), ==, 1);
 
    // Insert states.
-   char * code = "\1\2\2\2\1";
-   g_assert(dfa_newstate(&dfa, code, 3, 0, 0) == 0);
-   g_assert_cmpint(dfa->states[0].next[0].state, ==, 1);
-   g_assert_cmpint(dfa->trie->size, ==, 16);
-   g_assert_cmpint(dfa->trie->nodes[dfa->states[1].node_id].child[0], ==, 3);
-   g_assert_cmpint(dfa->trie->nodes[dfa->states[1].node_id].child[1], ==, 1);
+   uint8_t new_path[5] = {1,2,2,2,1};
+   g_assert(dfa_newstate(&dfa, new_path, 3, 1) == 0);
+   g_assert_cmpint(dfa->states[1].next[3], ==, 2);
+   g_assert_cmpint(dfa->size, ==, 4);
+   g_assert_cmpint(dfa->pos, ==, 3);
+   g_assert_cmpint(dfa->trie->pos, ==, 1);
+   g_assert_cmpint(dfa->trie->size, ==, 1);
+   g_assert_cmpint(dfa->trie->nodes[0].child[1], ==, 2);
+   g_assert_cmpint(dfa->trie->nodes[0].child[2], ==, 1);
+   g_assert_cmpint(dfa->trie->nodes[0].flags, ==, 0b0110);
+   g_assert_cmpint(path_compare(new_path, dfa->states[2].align, 5), ==, 1);
 
    // Wrong code.
-   code = "\1\2\2\3\1";
-   g_assert(dfa_newstate(&dfa, code, 3, 0, 0) == -1);
+   new_path[3] = 3;
+   size_t pos = dfa->pos;
+   g_assert(dfa_newstate(&dfa, new_path, 0, 1) == -1);
+   g_assert_cmpint(dfa->pos, ==, pos);
 
    // Alloc error when extending dfa.
    mute_stderr();
-   code = "\1\2\1\2\2"; 
+   new_path[2] = 1; new_path[3] = 2; new_path[4] = 2;
    set_alloc_failure_rate_to(1.1);
-   int ret = dfa_newstate(&dfa, code, 3, 0, 0);
+   pos = dfa->pos;
+   int ret = dfa_newstate(&dfa, new_path, 0, 1);
+   g_assert_cmpint(dfa->pos, ==, pos);
    reset_alloc();
+   unmute_stderr();
    g_assert_cmpint(ret, ==, -1);
 }
 
@@ -583,54 +549,65 @@ test_dfa_step
    uint     plen = parse(pattern, exp);
    g_assert_cmpint(plen, ==, 4);
 
-   dfa_t  * dfa = dfa_new(plen, tau, 1, 1);
+   dfa_t  * dfa = dfa_new(plen, tau, 1, 1, 0);
    g_assert(dfa != NULL);
 
-   edge_t transition;   
-   // text[0]
-   g_assert(0 == dfa_step(0, translate_halt[(int)text[0]], plen, tau, &dfa, exp, &transition));
-   g_assert_cmpint(transition.state, ==, 1);
-   g_assert_cmpint(transition.match, ==, 2);
-   // text[1]
-   g_assert(0 == dfa_step(transition.state, translate_halt[(int)text[1]], plen, tau, &dfa, exp, &transition));
-   g_assert_cmpint(transition.state, ==, 2);
-   g_assert_cmpint(transition.match, ==, 2);
-   // text[2]
-   g_assert(0 == dfa_step(transition.state, translate_halt[(int)text[2]], plen, tau, &dfa, exp, &transition));
-   g_assert_cmpint(transition.state, ==, 3);
-   g_assert_cmpint(transition.match, ==, 2);
-   // text[3]
-   g_assert(0 == dfa_step(transition.state, translate_halt[(int)text[3]], plen, tau, &dfa, exp, &transition));
-   g_assert_cmpint(transition.state, ==, 3);
-   g_assert_cmpint(transition.match, ==, 2);
-   // text[4]
-   g_assert(0 == dfa_step(transition.state, translate_halt[(int)text[4]], plen, tau, &dfa, exp, &transition));
-   g_assert_cmpint(transition.state, ==, 4);
-   g_assert_cmpint(transition.match, ==, 2);
-   // text[5]
-   g_assert(0 == dfa_step(transition.state, translate_halt[(int)text[5]], plen, tau, &dfa, exp, &transition));
-   g_assert_cmpint(transition.state, ==, 3);
-   g_assert_cmpint(transition.match, ==, 2);
-   // text[6]
-   g_assert(0 == dfa_step(transition.state, translate_halt[(int)text[6]], plen, tau, &dfa, exp, &transition));
-   g_assert_cmpint(transition.state, ==, 5);
-   g_assert_cmpint(transition.match, ==, 2);
-   // text[7]
-   g_assert(0 == dfa_step(transition.state, translate_halt[(int)text[7]], plen, tau, &dfa, exp, &transition));
-   g_assert_cmpint(transition.state, ==, 6);
-   g_assert_cmpint(transition.match, ==, 1);
-   // text[8]
-   g_assert(0 == dfa_step(transition.state, translate_halt[(int)text[8]], plen, tau, &dfa, exp, &transition));
-   g_assert_cmpint(transition.state, ==, 7);
-   g_assert_cmpint(transition.match, ==, 0);
-   // text[9]
-   g_assert(0 == dfa_step(transition.state, translate_halt[(int)text[9]], plen, tau, &dfa, exp, &transition));
-   g_assert_cmpint(transition.state, ==, 8);
-   g_assert_cmpint(transition.match, ==, 1);
+   uint32_t state = DFA_ROOT_STATE;
+   // text[0] A
+   g_assert(0 == dfa_step(state, translate_ignore[(int)text[0]], plen, tau, &dfa, exp, &state));
+   g_assert_cmpint(state, ==, 2);
+   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
+   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 2);
+   // text[1] T
+   g_assert(0 == dfa_step(state, translate_ignore[(int)text[1]], plen, tau, &dfa, exp, &state));
+   g_assert_cmpint(state, ==, 3);
+   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
+   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 1);
+   // text[2] C
+   g_assert(0 == dfa_step(state, translate_ignore[(int)text[2]], plen, tau, &dfa, exp, &state));
+   g_assert_cmpint(state, ==, 4);
+   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
+   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 2);
+   // text[3] C
+   g_assert(0 == dfa_step(state, translate_ignore[(int)text[3]], plen, tau, &dfa, exp, &state));
+   g_assert_cmpint(state, ==, 4);
+   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
+   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 2);
+   // text[4] T
+   g_assert(0 == dfa_step(state, translate_ignore[(int)text[4]], plen, tau, &dfa, exp, &state));
+   g_assert_cmpint(state, ==, 5);
+   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
+   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 1);
+   // text[5] C
+   g_assert(0 == dfa_step(state, translate_ignore[(int)text[5]], plen, tau, &dfa, exp, &state));
+   g_assert_cmpint(state, ==, 4);
+   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
+   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 2);
+   // text[6] A
+   g_assert(0 == dfa_step(state, translate_ignore[(int)text[6]], plen, tau, &dfa, exp, &state));
+   g_assert_cmpint(state, ==, 6);
+   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
+   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 1);
+   // text[7] T
+   g_assert(0 == dfa_step(state, translate_ignore[(int)text[7]], plen, tau, &dfa, exp, &state));
+   g_assert_cmpint(state, ==, 7);
+   g_assert_cmpint(get_match(dfa->states[state].match), ==, 1);
+   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 0);
+   // text[8] G
+   g_assert(0 == dfa_step(state, translate_ignore[(int)text[8]], plen, tau, &dfa, exp, &state));
+   g_assert_cmpint(state, ==, 8);
+   g_assert_cmpint(get_match(dfa->states[state].match), ==, 0);
+   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 0);
+   // text[9] A
+   g_assert(0 == dfa_step(state, translate_ignore[(int)text[9]], plen, tau, &dfa, exp, &state));
+   g_assert_cmpint(state, ==, 9);
+   g_assert_cmpint(get_match(dfa->states[state].match), ==, 1);
+   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 0);
    // recover existing step.
-   g_assert(0 == dfa_step(0, translate_halt[(int)text[0]], plen, tau, &dfa, exp, &transition));
-   g_assert_cmpint(transition.state, ==, 1);
-   g_assert_cmpint(transition.match, ==, 2);
+   g_assert(0 == dfa_step(1, translate_ignore[(int)text[0]], plen, tau, &dfa, exp, &state));
+   g_assert_cmpint(state, ==, 2);
+   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
+   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 2);
    dfa_free(dfa);
 
    // Alloc exhaustive test.
@@ -707,16 +684,16 @@ test_parse
 }
 
 void
-test_seeqNewOpen
+test_seeqNew
 (void)
 {
    // Open file and check struct contents.
-   seeq_t * sq = seeqNew("ACTGA", 2);
+   seeq_t * sq = seeqNew("ACTGA", 2, 0);
    g_assert(sq != NULL);
-   seeqfile_t * sqfile = seeqOpen("testdata.txt");
-   g_assert(sqfile != NULL);
 
    // seeq_t
+   g_assert_cmpint(sq->hits, ==, 0);
+   g_assert_cmpint(sq->stacksize, ==, INITIAL_MATCH_STACK_SIZE);
    g_assert_cmpint(sq->tau, ==, 2);
    g_assert_cmpint(sq->wlen, ==, 5);
    g_assert_cmpint(sq->keys[0], ==, 1);
@@ -726,17 +703,15 @@ test_seeqNewOpen
    g_assert_cmpint(sq->keys[4], ==, 1);
    g_assert(sq->dfa  != NULL);
    g_assert(sq->rdfa != NULL);
-   // seeqfile_t
-   g_assert_cmpint(sqfile->line, ==, 0);
-   g_assert(sqfile->fdi  != NULL);
-   g_assert_cmpint(seeqClose(sqfile), ==, 0);
+   g_assert(sq->match != NULL);
+   g_assert(sq->string == NULL);
    seeqFree(sq);
    
    // Open stdin.
-   sq = seeqNew("ACG[AT]", 1);
+   sq = seeqNew("ACG[AT]", 1, 0);
    g_assert(sq != NULL);
-   sqfile = seeqOpen(NULL);
-   g_assert(sqfile != NULL);
+   g_assert_cmpint(sq->hits, ==, 0);
+   g_assert_cmpint(sq->stacksize, ==, INITIAL_MATCH_STACK_SIZE);
    g_assert_cmpint(sq->tau, ==, 1);
    g_assert_cmpint(sq->wlen, ==, 4);
    g_assert_cmpint(sq->keys[0], ==, 1);
@@ -745,164 +720,195 @@ test_seeqNewOpen
    g_assert_cmpint(sq->keys[3], ==, 9);
    g_assert(sq->dfa  != NULL);
    g_assert(sq->rdfa != NULL);
-   // seeqfile_t
-   g_assert_cmpint(sqfile->line, ==, 0);
-   g_assert(sqfile->fdi == stdin);
-   g_assert_cmpint(seeqClose(sqfile), ==, 0);
+   g_assert(sq->match != NULL);
+   g_assert(sq->string == NULL);
    seeqFree(sq);
 
    // Check tau error.
-   sq = seeqNew("ACG[AT]", -1);
+   sq = seeqNew("ACG[AT]", -1, 0);
    g_assert(sq == NULL);
    g_assert_cmpint(seeqerr, ==, 1);
 
-   sq = seeqNew("ACG[AT]", 4);
+   sq = seeqNew("ACG[AT]", 4, 0);
    g_assert(sq == NULL);
    g_assert_cmpint(seeqerr, ==, 9);
 
 
    // Incorrect pattern.
-   sq = seeqNew("ACT[A[AG]", 1);
+   sq = seeqNew("ACT[A[AG]", 1, 0);
    g_assert(sq == NULL);
    g_assert_cmpint(seeqerr, ==, 2);
-   sq = seeqNew("ACT[AG]T]A", 1);
+   sq = seeqNew("ACT[AG]T]A", 1, 0);
    g_assert(sq == NULL);
    g_assert_cmpint(seeqerr, ==, 3);
-   sq = seeqNew("ACHT[AG]", 1);
+   sq = seeqNew("ACHT[AG]", 1, 0);
    g_assert(sq == NULL);
    g_assert_cmpint(seeqerr, ==, 4);
-   sq = seeqNew("ACT[AG]A[TG", 1);
+   sq = seeqNew("ACT[AG]A[TG", 1, 0);
    g_assert(sq == NULL);
    g_assert_cmpint(seeqerr, ==, 5);
-
-   // No such file.
-   sqfile = seeqOpen("fakefile.txt");
-   g_assert(sqfile == NULL);
 }
 
 void
 test_seeqFileMatch
 (void)
 {
-   char * match;
    seeqfile_t * sqfile = seeqOpen("testdata.txt");
    g_assert(sqfile != NULL);
-   seeq_t * sq = seeqNew("ATCG", 1);
+   seeq_t * sq = seeqNew("ATCG", 1, 0);
    g_assert(sq != NULL);
-   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_MATCH | SQ_FIRST), ==, 1);
-   g_assert_cmpint(seeqGetStart(sq), ==, 2);
-   g_assert_cmpint(seeqGetEnd(sq), ==, 5);
-   g_assert_cmpint(seeqGetLine(sq), ==, 1);
-   g_assert_cmpint(seeqGetDistance(sq), ==, 1);
-   match = seeqGetString(sq);
-   g_assert_cmpstr(match, ==, "GTATGTACCACAGATGTCGATCGAC");
-   free(match);
-   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_MATCH | SQ_FIRST), ==, 1);
-   g_assert_cmpint(seeqGetStart(sq), ==, 3);
-   g_assert_cmpint(seeqGetEnd(sq), ==, 7);
-   g_assert_cmpint(seeqGetLine(sq), ==, 2);
-   g_assert_cmpint(seeqGetDistance(sq), ==, 1);
-   match = seeqGetString(sq);
-   g_assert_cmpstr(match, ==, "TCTATCATCCGTACTCTGATCTCAT");
-   free(match);
-   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_MATCH | SQ_FIRST), ==, 0);
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_FIRST, SQ_MATCH), ==, 1);
+   g_assert_cmpint(sq->hits, ==, 1);
+   match_t * match = seeqMatchIter(sq);
+   g_assert(match != NULL);
+   g_assert(seeqMatchIter(sq) == NULL);
+   g_assert_cmpint(match->start, ==, 2);
+   g_assert_cmpint(match->end, ==, 5);
+   g_assert_cmpint(match->dist, ==, 1);
+   g_assert_cmpint(sqfile->line, ==, 1);
+   g_assert_cmpstr(seeqGetString(sq), ==, "GTATGTACCACAGATGTCGATCGAC");
+
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_FIRST, SQ_MATCH), ==, 1);
+   g_assert_cmpint(sq->hits, ==, 1);
+   match = seeqMatchIter(sq);
+   g_assert_cmpint(match->start, ==, 3);
+   g_assert_cmpint(match->end, ==, 6);
+   g_assert_cmpint(match->dist, ==, 1);
+   g_assert_cmpint(sqfile->line, ==, 2);
+   g_assert_cmpstr(seeqGetString(sq), ==, "TCTATCATCCGTACTCTGATCTCAT");
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_FIRST, SQ_MATCH), ==, 0);
    seeqClose(sqfile);
    seeqFree(sq);
 
    sqfile = seeqOpen("testdata.txt");
    g_assert(sqfile != NULL);
-   sq = seeqNew("TGTC", 1);
+   sq = seeqNew("TGTC", 1, 0);
    g_assert(sq != NULL);
-   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_MATCH | SQ_BEST), ==, 1);
-   g_assert_cmpint(seeqGetStart(sq), ==, 14);
-   g_assert_cmpint(seeqGetEnd(sq), ==, 18);
-   g_assert_cmpint(seeqGetLine(sq), ==, 1);
-   g_assert_cmpint(seeqGetDistance(sq), ==, 0);
-   match = seeqGetString(sq);
-   g_assert_cmpstr(match, ==, "GTATGTACCACAGATGTCGATCGAC");
-   free(match);
-   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_MATCH | SQ_BEST), ==, 1);
-   g_assert_cmpint(seeqGetStart(sq), ==, 2);
-   g_assert_cmpint(seeqGetEnd(sq), ==, 6);
-   g_assert_cmpint(seeqGetLine(sq), ==, 2);
-   g_assert_cmpint(seeqGetDistance(sq), ==, 1);
-   match = seeqGetString(sq);
-   g_assert_cmpstr(match, ==, "TCTATCATCCGTACTCTGATCTCAT");
-   free(match);
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_BEST, SQ_MATCH), ==, 1);
+   g_assert_cmpint(sq->hits, ==, 1);
+   match = seeqMatchIter(sq);
+   g_assert_cmpint(match->start, ==, 14);
+   g_assert_cmpint(match->end, ==, 18);
+   g_assert_cmpint(match->dist, ==, 0);
+   g_assert_cmpint(sqfile->line, ==, 1);
+   g_assert_cmpstr(seeqGetString(sq), ==, "GTATGTACCACAGATGTCGATCGAC");
+
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_BEST, SQ_MATCH), ==, 1);
+   g_assert_cmpint(sq->hits, ==, 1);
+   match = seeqMatchIter(sq);
+   g_assert_cmpint(match->start, ==, 2);
+   g_assert_cmpint(match->end, ==, 6);
+   g_assert_cmpint(match->dist, ==, 1);
+   g_assert_cmpint(sqfile->line, ==, 2);
+   g_assert_cmpstr(seeqGetString(sq), ==, "TCTATCATCCGTACTCTGATCTCAT");
    seeqClose(sqfile);
    seeqFree(sq);
 
    sqfile = seeqOpen("testdata.txt");
    g_assert(sqfile != NULL);
-   sq = seeqNew("CACAGAT", 1);
+   sq = seeqNew("CACAGAT", 1, 0);
    g_assert(sq != NULL);
-   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_NOMATCH), ==, 1);
-   g_assert_cmpint(seeqGetStart(sq), ==, 0);
-   g_assert_cmpint(seeqGetEnd(sq), ==, 25);
-   g_assert_cmpint(seeqGetLine(sq), ==, 2);
-   g_assert_cmpint(seeqGetDistance(sq), ==, -1);
-   match = seeqGetString(sq);
-   g_assert_cmpstr(match, ==, "TCTATCATCCGTACTCTGATCTCAT");
-   free(match);
-   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_ANY), ==, 0);
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, 0, SQ_NOMATCH), ==, 1);
+   g_assert_cmpint(sq->hits, ==, 0);
+   g_assert_cmpint(sqfile->line, ==, 2);
+   g_assert_cmpstr(seeqGetString(sq), ==, "TCTATCATCCGTACTCTGATCTCAT");
+
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, 0, SQ_NOMATCH), ==, 1);
+   g_assert_cmpint(sq->hits, ==, 0);
+   g_assert_cmpint(sqfile->line, ==, 3);
+   g_assert_cmpstr(seeqGetString(sq), ==, "RCACAGATCACAGATCACAGRATCAC");
+
    seeqClose(sqfile);
    
    sqfile = seeqOpen("testdata.txt");
    g_assert(sqfile != NULL);
    g_assert(sq != NULL);
-   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_ANY | SQ_BEST), ==, 1);
-   g_assert_cmpint(seeqGetStart(sq), ==, 8);
-   g_assert_cmpint(seeqGetEnd(sq), ==, 15);
-   g_assert_cmpint(seeqGetLine(sq), ==, 1);
-   g_assert_cmpint(seeqGetDistance(sq), ==, 0);
-   match = seeqGetString(sq);
-   g_assert_cmpstr(match, ==, "GTATGTACCACAGATGTCGATCGAC");
-   free(match);
-   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_ANY | SQ_BEST), ==, 1);
-   g_assert_cmpint(seeqGetStart(sq), ==, 0);
-   g_assert_cmpint(seeqGetEnd(sq), ==, 25);
-   g_assert_cmpint(seeqGetLine(sq), ==, 2);
-   g_assert_cmpint(seeqGetDistance(sq), ==, -1);
-   match = seeqGetString(sq);
-   g_assert_cmpstr(match, ==, "TCTATCATCCGTACTCTGATCTCAT");
-   free(match);
-   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_ANY), ==, 0);
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_BEST, SQ_ANY), ==, 1);
+   g_assert_cmpint(sq->hits, ==, 1);
+   match = seeqMatchIter(sq);
+   g_assert_cmpint(match->start, ==, 8);
+   g_assert_cmpint(match->end, ==, 15);
+   g_assert_cmpint(match->dist, ==, 0);
+   g_assert_cmpint(sqfile->line, ==, 1);
+   g_assert_cmpstr(seeqGetString(sq), ==, "GTATGTACCACAGATGTCGATCGAC");
+
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_BEST, SQ_ANY), ==, 1);
+   g_assert_cmpint(sq->hits, ==, 0);
+   g_assert_cmpstr(seeqGetString(sq), ==, "TCTATCATCCGTACTCTGATCTCAT");
+
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, 0, SQ_MATCH), ==, 0);
    seeqClose(sqfile);
    seeqFree(sq);
 
    sqfile = seeqOpen("testdata.txt");
    g_assert(sqfile != NULL);
-   sq = seeqNew("ATC", 0);
+   sq = seeqNew("ATC", 0, 0);
    g_assert(sq != NULL);
-   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_COUNTLINES), ==, 2);
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, 0, SQ_COUNTLINES), ==, 2);
    seeqClose(sqfile);
 
    sqfile = seeqOpen("testdata.txt");
    g_assert(sqfile != NULL);
    g_assert(sq != NULL);
-   g_assert_cmpint(seeqFileMatch(sqfile, sq, SQ_COUNTMATCH), ==, 4);
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, 0, SQ_COUNTMATCH), ==, 4);
    seeqClose(sqfile);
 
    // Force error
    sqfile = seeqOpen(NULL);
    g_assert(sqfile != NULL);
    sqfile->fdi = NULL;
-   g_assert_cmpint(seeqFileMatch(sqfile, sq, 0), ==, -1);
+   g_assert_cmpint(seeqFileMatch(sqfile, sq, 0, 0), ==, -1);
    g_assert_cmpint(seeqerr, ==, 10);
    seeqClose(sqfile);
 
    // String first match.
-   sq = seeqNew("GATC", 1);
-   g_assert_cmpint(seeqStringMatch("TGACTGATGACGTAGTCTACGATCGATCAGTCA", sq, SQ_MATCH | SQ_FIRST), == , 1);
-   g_assert_cmpint(seeqGetStart(sq), ==, 1);
-   g_assert_cmpint(seeqGetEnd(sq), ==, 4);
-   g_assert_cmpint(seeqGetDistance(sq), ==, 1);
+   sq = seeqNew("GATC", 1, 0);
+   g_assert_cmpint(seeqStringMatch("TGACTGATGACGTAGTCTACGATCGATCAGTCA", sq, SQ_FIRST), == , 1);
+   g_assert_cmpint(sq->hits, ==, 1);
+   match = seeqMatchIter(sq);
+   g_assert_cmpint(match->start, ==, 1);
+   g_assert_cmpint(match->end, ==, 4);
+   g_assert_cmpint(match->dist, ==, 1);
 
    // String best match.
-   g_assert_cmpint(seeqStringMatch("TGACTGATGACGTAGTCTACGATCGATCAGTCA", sq, SQ_MATCH | SQ_BEST), == , 1);
-   g_assert_cmpint(seeqGetStart(sq), ==, 20);
-   g_assert_cmpint(seeqGetEnd(sq), ==, 24);
-   g_assert_cmpint(seeqGetDistance(sq), ==, 0);
+   g_assert_cmpint(seeqStringMatch("TGACTGATGACGTAGTCTACGATCGATCAGTCA", sq, SQ_BEST), == , 1);
+   g_assert_cmpint(sq->hits, ==, 1);
+   match = seeqMatchIter(sq);
+   g_assert_cmpint(match->start, ==, 20);
+   g_assert_cmpint(match->end, ==, 24);
+   g_assert_cmpint(match->dist, ==, 0);
+
+   // String all matches.
+   g_assert_cmpint(seeqStringMatch("TGACTGATGACGTAGTCTACGATCGATCAGTCA", sq, SQ_ALL), == , 7);
+   g_assert_cmpint(sq->hits, ==, 7);
+   g_assert_cmpint(sq->match[6].start, ==, 1);
+   g_assert_cmpint(sq->match[6].end, ==, 4);
+   g_assert_cmpint(sq->match[6].dist, ==, 1);
+
+   g_assert_cmpint(sq->match[5].start, ==, 5);
+   g_assert_cmpint(sq->match[5].end, ==, 8);
+   g_assert_cmpint(sq->match[5].dist, ==, 1);
+
+   g_assert_cmpint(sq->match[4].start, ==, 8);
+   g_assert_cmpint(sq->match[4].end, ==, 11);
+   g_assert_cmpint(sq->match[4].dist, ==, 1);
+
+   g_assert_cmpint(sq->match[3].start, ==, 14);
+   g_assert_cmpint(sq->match[3].end, ==, 17);
+   g_assert_cmpint(sq->match[3].dist, ==, 1);
+
+   g_assert_cmpint(sq->match[2].start, ==, 20);
+   g_assert_cmpint(sq->match[2].end, ==, 24);
+   g_assert_cmpint(sq->match[2].dist, ==, 0);
+
+   g_assert_cmpint(sq->match[1].start, ==, 24);
+   g_assert_cmpint(sq->match[1].end, ==, 28);
+   g_assert_cmpint(sq->match[1].dist, ==, 0);
+
+   g_assert_cmpint(sq->match[0].start, ==, 29);
+   g_assert_cmpint(sq->match[0].end, ==, 32);
+   g_assert_cmpint(sq->match[0].dist, ==, 1);
+
    seeqFree(sq);
 }
 
@@ -944,7 +950,9 @@ test_seeq
       .prefix    = 0,
       .invert    = 0,
       .best      = 0,
-      .skip      = 1
+      .non_dna   = 0,
+      .all       = 0,
+      .memory    = 0
    };
 
    // Test 1: tau=0, default output.
@@ -995,14 +1003,14 @@ test_seeq
    // Test 5: tau=0, inverse.
    args.count = 0;
    args.invert = 1;
-   answer = "TCTATCATCCGTACTCTGATCTCAT\n";
+   answer = "TCTATCATCCGTACTCTGATCTCAT\nRCACAGATCACAGATCACAGRATCAC\n";
    seeq(pattern, input, args);
    g_assert_cmpstr(OUTPUT_BUFFER+offset, ==, answer);
    offset = strlen(OUTPUT_BUFFER);
 
    // Test 6: tau=0, inverse+lines.
    args.showline = 1;
-   answer = "2 TCTATCATCCGTACTCTGATCTCAT\n";
+   answer = "2 TCTATCATCCGTACTCTGATCTCAT\n3 RCACAGATCACAGATCACAGRATCAC\n";
    seeq(pattern, input, args);
    g_assert_cmpstr(OUTPUT_BUFFER+offset, ==, answer);
    offset = strlen(OUTPUT_BUFFER);
@@ -1017,14 +1025,15 @@ test_seeq
    offset = strlen(OUTPUT_BUFFER);
   
    // Test 7.1: skip off.
-   args.skip = 0;
+   args.non_dna = 1;
    answer = "CACAGAT\nCCGT\nCACAGAT\n";
    seeq(pattern, input, args);
    g_assert_cmpstr(OUTPUT_BUFFER+offset, ==, answer);
    offset = strlen(OUTPUT_BUFFER);
 
    // Test 7.2 (best on/off).
-   args.skip = args.best = args.dist = 1;
+   args.non_dna = 0;
+   args.best = args.dist = 1;
    answer = "CTCAT\n";
    seeq("CTCAT", input, args);
    g_assert_cmpstr(OUTPUT_BUFFER+offset, ==, answer);
@@ -1049,6 +1058,32 @@ test_seeq
    args.prefix = 0;
    args.endline = 1;
    answer = "GTCGATCGAC\nACTCTGATCTCAT\n";
+   seeq(pattern, input, args);
+   g_assert_cmpstr(OUTPUT_BUFFER+offset, ==, answer);
+   offset = strlen(OUTPUT_BUFFER);
+
+   // Test 11: tau=0, non_dna ignore.
+   args.dist = 0;
+   args.endline = 0;
+   args.showline = 1;
+   args.non_dna = 2;
+   args.matchonly = 1;
+   answer = "1 CACAGAT\n3 CACAGAT\n";
+   seeq(pattern, input, args);
+   g_assert_cmpstr(OUTPUT_BUFFER+offset, ==, answer);
+   offset = strlen(OUTPUT_BUFFER);
+
+   // Test 10: tau=0, non_dna convert to N.
+   args.all = 1;
+   args.non_dna = 1;
+   answer = "1 CACAGAT\n3 CACAGAT\n3 CACAGAT\n";
+   seeq(pattern, input, args);
+   g_assert_cmpstr(OUTPUT_BUFFER+offset, ==, answer);
+   offset = strlen(OUTPUT_BUFFER);
+
+   // Test 12: tau=0, non_dna ignore, all.
+   args.non_dna = 2;
+   answer = "1 CACAGAT\n3 CACAGAT\n3 CACAGAT\n3 CACAGRAT\n";
    seeq(pattern, input, args);
    g_assert_cmpstr(OUTPUT_BUFFER+offset, ==, answer);
    offset = strlen(OUTPUT_BUFFER);
@@ -1106,14 +1141,13 @@ main(
    g_test_init(&argc, &argv, NULL);
    g_test_add_func("/libseeq/core/trie_new", test_trie_new);
    g_test_add_func("/libseeq/core/trie_insert", test_trie_insert);
-   g_test_add_func("/libseeq/core/trie_search_getrow", test_trie_search_getrow);
-   g_test_add_func("/libseeq/core/trie_reset", test_trie_reset);
+   g_test_add_func("/libseeq/core/trie_search", test_trie_search);
    g_test_add_func("/libseeq/core/dfa_new", test_dfa_new);
    g_test_add_func("/libseeq/core/dfa_newvertex", test_dfa_newvertex);
    g_test_add_func("/libseeq/core/dfa_newstate", test_dfa_newstate);
    g_test_add_func("/libseeq/core/dfa_step", test_dfa_step);
    g_test_add_func("/libseeq/core/parse", test_parse);
-   g_test_add_func("/libseeq/lib/seeqNew-Open", test_seeqNewOpen);
+   g_test_add_func("/libseeq/lib/seeqNew", test_seeqNew);
    g_test_add_func("/libseeq/lib/seeqFileMatch", test_seeqFileMatch);
    g_test_add_func("/libseeq/lib/seeqClose", test_seeqClose);
    g_test_add_func("/seeq", test_seeq);

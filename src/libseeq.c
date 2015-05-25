@@ -128,6 +128,10 @@ seeqNew
    sq->hits = 0;
    sq->stacksize = INITIAL_MATCH_STACK_SIZE;
    sq->match  = malloc(sq->stacksize * sizeof(match_t));
+   if (sq->match == NULL) {
+      free(keys); free(rkeys); free(dfa); free(rdfa); free(sq);
+      return NULL;
+   }
 
    return sq;
 }
@@ -224,6 +228,7 @@ seeqStringMatch
 
    // Allocate match stacks.
    mstack_t ** mstack = malloc((size_t)(sq->tau+1)*sizeof(mstack_t*));
+   if (mstack == NULL) return -1;
    for (int i = 0; i <= sq->tau; i++)
       if((mstack[i] = stackNew(INITIAL_MATCH_STACK_SIZE)) == NULL) return -1;
 
@@ -246,7 +251,7 @@ seeqStringMatch
       // Update DFA.
       int cin = (int)translate[(int)data[i]];
       int current_dist = sq->tau+1;
-      size_t min_to_match = slen;
+      size_t min_to_match = 0;
       if (cin < NBASES) {
          uint32_t next = ((dfa_t *) sq->dfa)->states[current_node].next[cin];
          if (next == DFA_COMPUTE)
@@ -640,7 +645,7 @@ dfa_new
    // Allocate memory for path and its encoded version.
    uint8_t * code = malloc((size_t)wlen/5 + (wlen%5 > 0));
    uint8_t * path = malloc((size_t)wlen);
-   if (path == NULL || code == NULL) {
+   if (path == NULL || code == NULL || dfa->align_cache == NULL) {
       free(path); free(code); free(dfa); free(trie);
       return NULL;
    }
@@ -894,6 +899,7 @@ dfa_newstate
    // Encode path.
    size_t th = (*dfap)->trie->height;
    uint8_t * code = malloc(th/5 + (th%5 > 0));
+   if (code == NULL) return -1;
    path_encode(path, code, th);
 
    // Create new vertex in dfa graph.
@@ -1078,6 +1084,7 @@ trie_insert
          uint32_t tmpdfa = dfa->trie->nodes[id].child[(int)path[i]];
          // Get the other node's full path.
          uint8_t * tmppath = malloc(dfa->trie->height);
+         if (tmppath == NULL) return -1;
          path_decode(dfa->states[tmpdfa].align, tmppath, dfa->trie->height);
          // Unflag leaf.
          dfa->trie->nodes[auxid].flags &= ~(((uint32_t)1)<<path[i]);
