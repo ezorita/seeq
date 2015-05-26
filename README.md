@@ -91,7 +91,7 @@ Seeq runs on Linux and Mac. It has not been tested on Windows.
 
 List of arguments:
 
-  > seeq -[c | i | mnpsfeb] -[lhvz] PATTERN [INPUT_FILE]
+  > seeq [-d #] -[b | a] -[c | i | mnlpkfer] [-x #] -[hvz] [-y #] PATTERN [INPUT_FILE]
 
   **PATTERN**
   
@@ -112,72 +112,101 @@ List of arguments:
      FASTQ files. Note, however, that tags and quality scores will not be
      present in the output.
 
-  **-v or --version**
+  **MATCHING OPTIONS:**
 
-     Prints the software version and exits.
-  
-  **-z or --verbose**
-
-     Verbose. Prints verbose information to the standard error channel.
-
-  **-d or --distance** *distance*
+  **-d** or --distance #
 
      Defines the maximum Levenshtein distance for pattern matching.
      Default is 0.
 
-  **-c or --count**
-
-     Returns only the count of matching lines. When specified, all other
-     options are ignored.
-
-  **-i or --invert**
+  **-i** or --invert
 
      Returns the non-matching lines. When specified, all other options,
      except 'lines' and 'count', are ignored.
 
-  **-m or --match-only**
+  **-b** or --best
 
-     Returns only the matched part of the matched lines.
+     Forces seeq to find the best matching position of each line. The
+     best matching position is the one with lower Levenshtein distance.
+     If many positions in the line match the pattern with the lowest
+     distance, the first one is reported.
 
-  **-n or --no-printline**
+  **-a** or --all
+     
+     Returns all the matching positions of each line. This option also
+     implies -m. Combine -a with -l and -p to know the precise line and
+     position of the reported match.
+
+  **-x** or --non-dna #
+
+     Defines the behavior of seeq when a non-dna character is found in
+     the text. Default is 0:
+     0 - Skip line.
+     1 - Convert character to 'N' (mismatch).
+     2 - Ignore character.
+
+  **FORMAT OPTIONS:**
+
+  **-c** or --count
+
+     Returns only the count of matching lines. When specified, all other
+     options are ignored.
+
+  **-m** or --match-only
+
+     Print the matching text instead of the whole line.
+
+  **-n** or --no-printline
 
      Does not print the matched line. If this option is set, additional
      format options must be specified.
 
-  **-l or --lines**
+  **-l** or --lines
 
-     Prints the matched line number.
+     Shows the line number of the match.
 
-  **-p or --positions**
+  **-p** or --positions
 
-     Prints the position of the match in the matched line with the format
-     [start index]-[end index].
+     Shows the position of the match in the text.
 
-  **-s or --print-dist**
+  **-k** or --print-dist
 
-     Prints the levenshtein distance between the match and the pattern.
+     Shows the Levenshtein distance of the match.
 
-  **-e or --end**
+  **-f** or --compact
+
+     Uses compact output format. Each match will produce an output as
+     folllows:
+     
+     [line number]:[start]-[end]:[distance]
+
+     When specified, other format options [mnlpseb] are ignored.
+
+  **-e** or --end
 
      Prints only the last part of the matched lines, starting after (not including)
      the matched part.
 
-  **-b or --prefix**
+  **-r** or --prefix
 
      Prints only the beginning of the matched lines, ending before (not including)
      the matched part.
 
-  **-f or --compact**
+  **OTHER OPTIONS:**
 
-     Uses compact output format. Each matched line will produce an output as
-     folllows:
-     
-     [line number]:[start index]-[end index]:[distance]
+  **-v** or --version
 
-     When specified, other format options [mnlpseb] are ignored.
+     Prints the software version and exits.
 
+  **-y** or --memory
 
-  **-h or --help**
+     Sets the DFA memory limit (in MB). Default is 0 (unlimited).
+  
+  **-z** or --verbose
+
+     Verbose. Prints verbose information to the standard error channel.
+
+  **-h** or --help
 
      Prints usage information.
 
