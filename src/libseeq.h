@@ -27,7 +27,7 @@
 #ifndef _SEEQLIB_H_
 #define _SEEQLIB_H_
 
-#define LIBSEEQ_VERSION "libseeq-1.0"
+#define LIBSEEQ_VERSION "libseeq-1.1"
 #define COLOR_TERMINAL 1
 
 // Match options.

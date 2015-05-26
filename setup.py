@@ -8,7 +8,7 @@ module1 = Extension('seeq',
                     extra_compile_args = ['-std=c99'])
 
 setup (name = 'seeq',
-       version = '1.0',
+       version = '1.1',
        description = 'Seeq library for Python',
        author = 'Eduard V. Zorita',
        author_email = 'eduardvalera@gmail.com',

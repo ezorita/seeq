@@ -295,7 +295,7 @@ seeqStringMatch
          } while (d > streak_dist && j < i);
          size_t match_start = i-j;
          size_t match_end   = i;
-         size_t match_dist  = streak_dist;
+         int match_dist  = streak_dist;
          if (match_start < last_end) {
             // Check whether we can delete some nucleotides at the start to avoid
             // the overlap.
