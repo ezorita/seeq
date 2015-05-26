@@ -137,7 +137,7 @@ List of arguments:
      implies -m. Combine -a with -l and -p to know the precise line and
      position of the reported match.
 
-  **-x** or --non-dna #
+  **-x** or --non-dna [0,1,2]
 
      Defines the behavior of seeq when a non-dna character is found in
      the text. Default is 0:
