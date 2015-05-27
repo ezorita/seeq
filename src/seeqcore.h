@@ -56,9 +56,6 @@ typedef struct trie_t   trie_t;
 typedef struct node_t   node_t;
 
 struct node_t {
-   // Type indica si es leaf o un altre node.
-   // Si es leaf el que hi ha a child es l'estat
-   // de la DFA.
    uint32_t flags;
    uint32_t child[TRIE_CHILDREN];
 };
@@ -71,22 +68,19 @@ struct trie_t {
 };
 
 struct vertex_t {
-   // El vertex de la DFA ja no li cal tenir
-   // un punter al trie, els vectors d'alineament
-   // s'emmagatzemen directament codificats en
-   // mallocs individuals.
-   uint8_t * align;
    uint32_t  match;
    uint32_t  next[NBASES];
+   uint8_t   code[];
 };
 
 struct dfa_t {
    size_t     pos;
    size_t     size;
    size_t     maxmemory;
+   size_t     state_size;
    trie_t   * trie;
    int      * align_cache;
-   vertex_t   states[];
+   uint8_t    states[];
 };
 
 //   [0 ... 255] = 6,
