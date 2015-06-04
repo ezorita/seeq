@@ -165,11 +165,11 @@ seeq
    
    if (verbose) {
       size_t * data = (size_t *) sq->dfa;
-      size_t mem_dfa  = *data * ((8*4) + strlen(expression)/5 + (strlen(expression)%5 > 0));
-      size_t mem_trie = *(size_t *)(*(data + 3)) * 16;
+      size_t mem_dfa  = *data * ((6*4) + strlen(expression)/5 + (strlen(expression)%5 > 0));
+      size_t mem_trie = *(size_t *)(*(data + 4)) * 16;
       data = (size_t *) sq->rdfa;
-      size_t mem_rdfa  = *data * ((8*4) + strlen(expression)/5 + (strlen(expression)%5 > 0));
-      size_t mem_rtrie = *(size_t *)(*(data + 3)) * 16;
+      size_t mem_rdfa  = *data * ((6*4) + strlen(expression)/5 + (strlen(expression)%5 > 0));
+      size_t mem_rtrie = *(size_t *)(*(data + 4)) * 16;
       double mb = 1024.0*1024.0;
       fprintf(stderr, "memory: %.2f MB (DFA: %.2f MB, trie: %.2f MB)\n", (mem_dfa + mem_trie + mem_rdfa + mem_rtrie)/mb, (mem_dfa+mem_rdfa)/mb, (mem_trie+mem_rtrie)/mb);
       fprintf(stderr, "done in %.3fs\n", (clock()-clk)*1.0/CLOCKS_PER_SEC);

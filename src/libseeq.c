@@ -244,6 +244,7 @@ seeqStringMatch
    int match = 0;
    uint32_t current_node = DFA_ROOT_STATE;
    size_t slen = strlen(data);
+   size_t state_size = ((dfa_t *) sq->dfa)->state_size;
    int end = 0;
    
    // DFA state.
@@ -253,12 +254,14 @@ seeqStringMatch
       int current_dist = sq->tau+1;
       size_t min_to_match = 0;
       if (cin < NBASES) {
-         uint32_t next = ((dfa_t *) sq->dfa)->states[current_node].next[cin];
+         vertex_t * vertex = (vertex_t *) (((dfa_t *)sq->dfa)->states + current_node * state_size);
+         uint32_t next = vertex->next[cin];
          if (next == DFA_COMPUTE)
             if (dfa_step(current_node, cin, sq->wlen, sq->tau, (dfa_t **) &(sq->dfa), sq->keys, &next)) return -1;
          current_node = next;
-         current_dist = get_match(((dfa_t *) sq->dfa)->states[current_node].match);
-         min_to_match = (size_t) get_mintomatch(((dfa_t *) sq->dfa)->states[current_node].match);
+         vertex = (vertex_t *) (((dfa_t *)sq->dfa)->states + current_node * state_size);
+         current_dist = get_match(vertex->match);
+         min_to_match = (size_t) get_mintomatch(vertex->match);
       }
       else if (cin == 6 && stream_opt) continue;
       else if (cin == 7 && opt_ignore) continue;
@@ -279,17 +282,19 @@ seeqStringMatch
       // 
       if (streak_dist <= sq->tau && streak_dist <= current_dist && !match && (i >= overlap || streak_dist < last_d) && (!opt_best || streak_dist < best_d)) {
          size_t j = 0;
-         uint32_t rnode = 1;
+         uint32_t rnode = DFA_ROOT_STATE;
          int d = sq->tau + 1;
          // Find match start with RDFA.
          do {
             int c = (int)translate[(int)data[i-++j]];
             if (c < NBASES) {
-               uint32_t next = ((dfa_t *) sq->rdfa)->states[rnode].next[c];
+               vertex_t * vertex = (vertex_t *) (((dfa_t *)sq->rdfa)->states + rnode * state_size);
+               uint32_t next = vertex->next[c];
                if (next == DFA_COMPUTE)
                   if (dfa_step(rnode, c, sq->wlen, sq->tau, (dfa_t **) &(sq->rdfa), sq->rkeys, &next)) return -1;
                rnode = next;
-               d = get_match(((dfa_t *) sq->rdfa)->states[rnode].match);
+               vertex = (vertex_t *) (((dfa_t *)sq->rdfa)->states + rnode * state_size);
+               d = get_match(vertex->match);
             } else continue;
          } while (d > streak_dist && j < i);
          size_t match_start = i-j;
@@ -626,22 +631,12 @@ dfa_new
    if (vertices < 2) vertices = 2;
    if (wlen < 1 || tau < 0) return NULL;
 
+   size_t align_size = (size_t)wlen/5 + (wlen%5 > 0);
+   size_t state_size = align_size + sizeof(vertex_t);
+
    // Allocate DFA.
-   dfa_t * dfa = malloc(sizeof(dfa_t) + vertices * sizeof(vertex_t));
+   dfa_t * dfa = malloc(sizeof(dfa_t) + vertices * state_size);
    if (dfa == NULL) {
-      return NULL;
-   }
-
-   // Initialize state 0 (cache) and state 1 (root).
-   dfa->states[0].match = dfa->states[1].match = set_mintomatch(wlen-tau) | ((uint32_t) tau+1);
-   for (int i = 0; i < NBASES; i++) {
-      dfa->states[0].next[i] = DFA_COMPUTE;
-      dfa->states[1].next[i] = DFA_COMPUTE;
-   }
-
-   trie_t * trie = trie_new(trienodes, (size_t)wlen);
-   if (trie == NULL) {
-      free(dfa);
       return NULL;
    }
 
@@ -649,29 +644,41 @@ dfa_new
    dfa->size = vertices;
    dfa->pos  = 2;
    dfa->maxmemory = maxmemory;
-   dfa->trie = trie;
+   dfa->state_size = state_size;
    dfa->align_cache = calloc((size_t)(wlen + 1),sizeof(int));
+   dfa->trie = trie_new(trienodes, (size_t)wlen);
+
+   if (dfa->trie == NULL) {
+      free(dfa);
+      return NULL;
+   }
+
+   // Initialize state 0 (cache) and state 1 (root).
+   vertex_t * s0 = (vertex_t *) (dfa->states);
+   vertex_t * s1 = (vertex_t *) (dfa->states + state_size);
+   s0->match = s1->match = set_mintomatch(wlen-tau) | ((uint32_t) tau+1);
+   for (int i = 0; i < NBASES; i++) {
+      s0->next[i] = DFA_COMPUTE;
+      s1->next[i] = DFA_COMPUTE;
+   }
 
    // Allocate memory for path and its encoded version.
-   uint8_t * code = malloc((size_t)wlen/5 + (wlen%5 > 0));
    uint8_t * path = malloc((size_t)wlen);
-   if (path == NULL || code == NULL || dfa->align_cache == NULL) {
-      free(path); free(code); free(dfa); free(trie);
+   if (path == NULL || dfa->align_cache == NULL) {
+      free(path); free(dfa->trie); free(dfa);
       return NULL;
    }
 
    // Compute initial alignment.
    for (int i = 0; i <= tau; i++) path[i] = 2;
    for (int i = tau + 1; i < wlen; i++) path[i] = 1;
+
    // Compute differential code of the path.
-   path_encode(path,code,(size_t)wlen);
-   // Store the encoded alignment in the DFA.
-   dfa->states[0].align = NULL;
-   dfa->states[1].align = code;
+   path_encode(path,s1->code,(size_t)wlen);
 
    // Insert initial state into trie.
    if (trie_insert(dfa, path, 1)) {
-      free(path); free(code); free(dfa); free(trie);
+      free(path); free(dfa->trie); free(dfa);
       return NULL;
    }
    free(path);
@@ -718,19 +725,21 @@ dfa_step
    seeqerr = 0;
 
    uint32_t state = dfa_state;
-   dfa_t * dfa   = *dfap;
-   int     value = 1 << base;
+   dfa_t    * dfa = *dfap;
+   int      value = 1 << base;
 
+   // Vertex reference.
+   vertex_t * vertex = (vertex_t *) (dfa->states + state * dfa->state_size);
 
    // Return next vertex if already computed.
-   if (dfa->states[state].next[base] != DFA_COMPUTE) {
-      *dfa_next = dfa->states[state].next[base];
+   if (vertex->next[base] != DFA_COMPUTE) {
+      *dfa_next = vertex->next[base];
       return 0;
    }
    
    // Get the current alignment from the DFA state.
-   int     * align = dfa->align_cache;
-   uint8_t * path  = malloc((size_t)plen * sizeof(char));
+   int      * align  = dfa->align_cache;
+   uint8_t  * path   = malloc((size_t)plen * sizeof(char));
    if (path == NULL) return -1;
 
    // Restore alignment if not running in cached mode.
@@ -742,7 +751,7 @@ dfa_step
    // length and the size of the compressed alignment
    // (that is: dfa_t is ceil(pattern length/5.0) bytes bigger)
    if (state != 0) {
-      path_decode((uint8_t *)dfa->states[state].align, path, (size_t)plen);
+      path_decode(vertex->code, path, (size_t)plen);
       path_to_align(path, align, (size_t)plen);
    }
  
@@ -783,22 +792,26 @@ dfa_step
       // If exists, just link with the existing state.
       *dfa_next = dfalink;
       // Update edge in dfa.
-      if (state != 0) dfa->states[state].next[base] = dfalink;   
+      if (state != 0) vertex->next[base] = dfalink;   
    } else if (state == 0) {
       *dfa_next = 0;
-      dfa->states[0].match = match;
+      vertex_t * s0 = (vertex_t *) dfa->states;
+      s0->match = match;
    } else if (exists == 0) {
       int retval = dfa_newstate(dfap, path, base, state);
       dfa = *dfap;
+      vertex = (vertex_t *) (dfa->states + state * dfa->state_size);
       if (retval == 0) {
          // Update edge in dfa.
-         *dfa_next = dfa->states[state].next[base];
-         dfa->states[*dfa_next].match = match;
+         *dfa_next = vertex->next[base];
+         vertex_t * new_vertex = (vertex_t *) (dfa->states + vertex->next[base] * dfa->state_size);
+         new_vertex->match = match;
       }
       else  if (retval == 1) {
          // Set to cache mode if max memory is reached.
          *dfa_next = 0;
-         dfa->states[0].match = match;
+         vertex_t * s0 = (vertex_t *) dfa->states;
+         s0->match = match;
       }
       else {
          free(path);
@@ -846,15 +859,15 @@ dfa_newvertex
    if (dfa->pos >= dfa->size) {
       size_t newsize = dfa->size * 2;
       if (newsize > ABS_MAX_POS) newsize = ABS_MAX_POS;
-      *dfap = dfa = realloc(dfa, sizeof(dfa_t) + newsize * sizeof(vertex_t));
+      *dfap = dfa = realloc(dfa, sizeof(dfa_t) + newsize * dfa->state_size);
       if (dfa == NULL) return U32T_ERROR;
       dfa->size = newsize;
    }
 
    // Initialize DFA vertex.
-   dfa->states[dfa->pos].align = NULL;
-   dfa->states[dfa->pos].match = DFA_COMPUTE;
-   for (int j = 0; j < NBASES; j++) dfa->states[dfa->pos].next[j] = DFA_COMPUTE;
+   vertex_t * new_vertex = (vertex_t *)(dfa->states + dfa->pos * dfa->state_size);
+   new_vertex->match = DFA_COMPUTE;
+   for (int j = 0; j < NBASES; j++) new_vertex->next[j] = DFA_COMPUTE;
 
    // Increase counter.
    return (uint32_t)(dfa->pos++);
@@ -895,38 +908,32 @@ dfa_newstate
    memory += (*dfap)->pos * ((*dfap)->trie->height/5 + ((*dfap)->trie->height%5 > 0)); // Cached alignments.
    memory += (*dfap)->trie->pos * sizeof(node_t); // Trie memory.
    if ((*dfap)->maxmemory > 0 && memory > (*dfap)->maxmemory) {
-      // TODO
-      // Realloc structures to their current size?
       (*dfap)->trie = realloc((*dfap)->trie, sizeof(trie_t) + (*dfap)->trie->pos * sizeof(node_t));
       if ((*dfap)->trie == NULL) return -1;
       (*dfap)->trie->size = (*dfap)->trie->pos;
-      *dfap = realloc(*dfap, sizeof(dfa_t) + (*dfap)->pos * sizeof(vertex_t));
+      *dfap = realloc(*dfap, sizeof(dfa_t) + (*dfap)->pos * (*dfap)->state_size);
       if (*dfap == NULL) return -1;
       (*dfap)->size = (*dfap)->pos;
       return 1;
    }
-
-   // Encode path.
-   size_t th = (*dfap)->trie->height;
-   uint8_t * code = malloc(th/5 + (th%5 > 0));
-   if (code == NULL) return -1;
-   path_encode(path, code, th);
+   // Absolute memory limit.
+   if ((*dfap)->pos == ABS_MAX_POS) return 1;
 
    // Create new vertex in dfa graph.
-   if ((*dfap)->pos == ABS_MAX_POS) {
-      free(code);
-      return 1;
-   }
    uint32_t vertexid = dfa_newvertex(dfap);
    if (vertexid == U32T_ERROR) return -1;
-   (*dfap)->states[vertexid].align = code;
+   vertex_t * old_vertex = (vertex_t *) ((*dfap)->states + dfa_state * (*dfap)->state_size);
+   vertex_t * new_vertex = (vertex_t *) ((*dfap)->states + vertexid * (*dfap)->state_size);
+
+   // Encode path.
+   path_encode(path, new_vertex->code, (*dfap)->trie->height);
+
    // Connect dfa vertices.
-   (*dfap)->states[dfa_state].next[edge] = (uint32_t)vertexid;
+   old_vertex->next[edge] = (uint32_t) vertexid;
 
    if (trie_insert(*dfap, path, vertexid)) {
       // Delete DFA state.
       (*dfap)->pos--;
-      free(code);
       return -1;
    }
 
@@ -941,14 +948,7 @@ dfa_free
 )
 {
    if (dfa->align_cache != NULL) free(dfa->align_cache);
-   if (dfa->trie != NULL) {
-      free(dfa->trie);
-   }
-   for (size_t i = 1; i < dfa->pos; i++) {
-      uint8_t * pointer = dfa->states[i].align;
-      if (pointer != NULL) free(pointer);
-   }
-
+   if (dfa->trie != NULL)        free(dfa->trie);
    free(dfa);
 }
 
@@ -1034,8 +1034,8 @@ trie_search
       // Check if current node is a leaf.
       if (trie->nodes[id].flags & (((uint32_t)1)<<path[i])) {
          // Compare paths.
-         uint8_t * code = dfa->states[trie->nodes[id].child[(int)path[i]]].align;
-         if (path_compare((uint8_t *)path, code , trie->height) == 0) return 0;
+         vertex_t * vertex = (vertex_t *)(dfa->states + trie->nodes[id].child[(int)path[i]] * dfa->state_size);
+         if (path_compare((uint8_t *)path, vertex->code, trie->height) == 0) return 0;
          else break;
       }
       // Update path.
@@ -1095,7 +1095,8 @@ trie_insert
          // Get the other node's full path.
          uint8_t * tmppath = malloc(dfa->trie->height);
          if (tmppath == NULL) return -1;
-         path_decode(dfa->states[tmpdfa].align, tmppath, dfa->trie->height);
+         vertex_t * vertex = (vertex_t *) (dfa->states + tmpdfa * dfa->state_size);
+         path_decode(vertex->code, tmppath, dfa->trie->height);
          // Unflag leaf.
          dfa->trie->nodes[auxid].flags &= ~(((uint32_t)1)<<path[i]);
          // Move down the node.
