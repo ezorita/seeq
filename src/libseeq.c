@@ -904,8 +904,7 @@ dfa_newstate
    seeqerr = 0;
 
    // Check memory usage.
-   size_t memory = (*dfap)->pos * sizeof(vertex_t); // DFA memory.
-   memory += (*dfap)->pos * ((*dfap)->trie->height/5 + ((*dfap)->trie->height%5 > 0)); // Cached alignments.
+   size_t memory = (*dfap)->pos * (*dfap)->state_size; // DFA memory.
    memory += (*dfap)->trie->pos * sizeof(node_t); // Trie memory.
    if ((*dfap)->maxmemory > 0 && memory > (*dfap)->maxmemory) {
       (*dfap)->trie = realloc((*dfap)->trie, sizeof(trie_t) + (*dfap)->trie->pos * sizeof(node_t));

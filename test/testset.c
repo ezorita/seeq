@@ -182,9 +182,8 @@ test_trie_insert
 
    // Insert path references.
    for (int i = 0; i < 8; i++) {
-      uint8_t * code = malloc(trie_height/5 + (trie_height%5 > 0));
-      path_encode(test_path[i], code, trie_height);
-      dfa->states[i+1].align = code;
+      vertex_t * vertex = (vertex_t *) (dfa->states + (i+1) * dfa->state_size);
+      path_encode(test_path[i], vertex->code, trie_height);
    }
 
    // Trie contains path 2,1,1,1,1,1...
@@ -309,9 +308,8 @@ test_trie_insert
 
    // Insert path references.
    for (int i = 0; i < 3; i++) {
-      uint8_t * code = malloc(trie_height/5 + (trie_height%5 > 0));
-      path_encode(test_path2[i], code, trie_height);
-      lowdfa->states[i+1].align = code;
+      vertex_t * vertex = (vertex_t *) (lowdfa->states + (i+1) * lowdfa->state_size);
+      path_encode(test_path2[i], vertex->code, trie_height);
    }
 
 
@@ -372,9 +370,8 @@ test_trie_search
 
    // Insert path references.
    for (int i = 0; i < 7; i++) {
-      uint8_t * code = malloc(trie_height/5 + (trie_height%5 > 0));
-      path_encode(test_path[i], code, trie_height);
-      dfa->states[i+2].align = code;
+      vertex_t * vertex = (vertex_t *) (dfa->states + (i+2) * dfa->state_size);
+      path_encode(test_path[i], vertex->code, trie_height);
       g_assert(trie_insert(dfa, test_path[i], i+2) == 0);
    }
 
@@ -473,10 +470,10 @@ test_dfa_newvertex
    for (int i = 1; i < 1023; i++) {
       uint32_t new = dfa_newvertex(&dfa);
       g_assert_cmpint(dfa->pos, ==, i+2);
-      g_assert(dfa->states[new].align == NULL);
-      g_assert_cmpint(dfa->states[new].match, ==, DFA_COMPUTE);
+      vertex_t * vertex = (vertex_t *) (dfa->states + new * dfa->state_size);
+      g_assert_cmpint(vertex->match, ==, DFA_COMPUTE);
       for (int j = 0; j < NBASES; j++) {
-         g_assert_cmpint(dfa->states[new].next[j], ==, DFA_COMPUTE);
+         g_assert_cmpint(vertex->next[j], ==, DFA_COMPUTE);
       }
    }
    g_assert_cmpint(dfa->size, ==, 1024);
@@ -503,13 +500,16 @@ test_dfa_newstate
    g_assert_cmpint(dfa->pos, ==, 2);
    g_assert_cmpint(dfa->trie->size, ==, 1);
    g_assert_cmpint(dfa->trie->pos, ==, 1);
+
    uint8_t path[5] = {2,2,2,1,1};
-   g_assert_cmpint(path_compare(path, dfa->states[1].align, 5), ==, 1);
+   vertex_t * vertex = (vertex_t *) (dfa->states + 1 * dfa->state_size);
+   g_assert_cmpint(path_compare(path, vertex->code, 5), ==, 1);
 
    // Insert states.
    uint8_t new_path[5] = {1,2,2,2,1};
    g_assert(dfa_newstate(&dfa, new_path, 3, 1) == 0);
-   g_assert_cmpint(dfa->states[1].next[3], ==, 2);
+   vertex = (vertex_t *) (dfa->states + 1 * dfa->state_size);
+   g_assert_cmpint(vertex->next[3], ==, 2);
    g_assert_cmpint(dfa->size, ==, 4);
    g_assert_cmpint(dfa->pos, ==, 3);
    g_assert_cmpint(dfa->trie->pos, ==, 1);
@@ -517,7 +517,8 @@ test_dfa_newstate
    g_assert_cmpint(dfa->trie->nodes[0].child[1], ==, 2);
    g_assert_cmpint(dfa->trie->nodes[0].child[2], ==, 1);
    g_assert_cmpint(dfa->trie->nodes[0].flags, ==, 0b0110);
-   g_assert_cmpint(path_compare(new_path, dfa->states[2].align, 5), ==, 1);
+   vertex = (vertex_t *) (dfa->states + 2 * dfa->state_size);
+   g_assert_cmpint(path_compare(new_path, vertex->code, 5), ==, 1);
 
    // Wrong code.
    new_path[3] = 3;
@@ -556,62 +557,73 @@ test_dfa_step
    // text[0] A
    g_assert(0 == dfa_step(state, translate_ignore[(int)text[0]], plen, tau, &dfa, exp, &state));
    g_assert_cmpint(state, ==, 2);
-   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
-   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 2);
+   vertex_t * vertex = (vertex_t *) (dfa->states + state * dfa->state_size);
+   g_assert_cmpint(get_match(vertex->match), ==, 2);
+   g_assert_cmpint(get_mintomatch(vertex->match), ==, 2);
    // text[1] T
    g_assert(0 == dfa_step(state, translate_ignore[(int)text[1]], plen, tau, &dfa, exp, &state));
    g_assert_cmpint(state, ==, 3);
-   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
-   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 1);
+   vertex = (vertex_t *) (dfa->states + state * dfa->state_size);
+   g_assert_cmpint(get_match(vertex->match), ==, 2);
+   g_assert_cmpint(get_mintomatch(vertex->match), ==, 1);
    // text[2] C
    g_assert(0 == dfa_step(state, translate_ignore[(int)text[2]], plen, tau, &dfa, exp, &state));
    g_assert_cmpint(state, ==, 4);
-   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
-   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 2);
+   vertex = (vertex_t *) (dfa->states + state * dfa->state_size);
+   g_assert_cmpint(get_match(vertex->match), ==, 2);
+   g_assert_cmpint(get_mintomatch(vertex->match), ==, 2);
    // text[3] C
    g_assert(0 == dfa_step(state, translate_ignore[(int)text[3]], plen, tau, &dfa, exp, &state));
    g_assert_cmpint(state, ==, 4);
-   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
-   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 2);
+   vertex = (vertex_t *) (dfa->states + state * dfa->state_size);
+   g_assert_cmpint(get_match(vertex->match), ==, 2);
+   g_assert_cmpint(get_mintomatch(vertex->match), ==, 2);
    // text[4] T
    g_assert(0 == dfa_step(state, translate_ignore[(int)text[4]], plen, tau, &dfa, exp, &state));
    g_assert_cmpint(state, ==, 5);
-   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
-   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 1);
+   vertex = (vertex_t *) (dfa->states + state * dfa->state_size);
+   g_assert_cmpint(get_match(vertex->match), ==, 2);
+   g_assert_cmpint(get_mintomatch(vertex->match), ==, 1);
    // text[5] C
    g_assert(0 == dfa_step(state, translate_ignore[(int)text[5]], plen, tau, &dfa, exp, &state));
    g_assert_cmpint(state, ==, 4);
-   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
-   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 2);
+   vertex = (vertex_t *) (dfa->states + state * dfa->state_size);
+   g_assert_cmpint(get_match(vertex->match), ==, 2);
+   g_assert_cmpint(get_mintomatch(vertex->match), ==, 2);
    // text[6] A
    g_assert(0 == dfa_step(state, translate_ignore[(int)text[6]], plen, tau, &dfa, exp, &state));
    g_assert_cmpint(state, ==, 6);
-   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
-   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 1);
+   vertex = (vertex_t *) (dfa->states + state * dfa->state_size);
+   g_assert_cmpint(get_match(vertex->match), ==, 2);
+   g_assert_cmpint(get_mintomatch(vertex->match), ==, 1);
    // text[7] T
    g_assert(0 == dfa_step(state, translate_ignore[(int)text[7]], plen, tau, &dfa, exp, &state));
    g_assert_cmpint(state, ==, 7);
-   g_assert_cmpint(get_match(dfa->states[state].match), ==, 1);
-   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 0);
+   vertex = (vertex_t *) (dfa->states + state * dfa->state_size);
+   g_assert_cmpint(get_match(vertex->match), ==, 1);
+   g_assert_cmpint(get_mintomatch(vertex->match), ==, 0);
    // text[8] G
    g_assert(0 == dfa_step(state, translate_ignore[(int)text[8]], plen, tau, &dfa, exp, &state));
    g_assert_cmpint(state, ==, 8);
-   g_assert_cmpint(get_match(dfa->states[state].match), ==, 0);
-   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 0);
+   vertex = (vertex_t *) (dfa->states + state * dfa->state_size);
+   g_assert_cmpint(get_match(vertex->match), ==, 0);
+   g_assert_cmpint(get_mintomatch(vertex->match), ==, 0);
    // text[9] A
    g_assert(0 == dfa_step(state, translate_ignore[(int)text[9]], plen, tau, &dfa, exp, &state));
    g_assert_cmpint(state, ==, 9);
-   g_assert_cmpint(get_match(dfa->states[state].match), ==, 1);
-   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 0);
+   vertex = (vertex_t *) (dfa->states + state * dfa->state_size);
+   g_assert_cmpint(get_match(vertex->match), ==, 1);
+   g_assert_cmpint(get_mintomatch(vertex->match), ==, 0);
    // recover existing step.
    g_assert(0 == dfa_step(1, translate_ignore[(int)text[0]], plen, tau, &dfa, exp, &state));
    g_assert_cmpint(state, ==, 2);
-   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
-   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 2);
+   vertex = (vertex_t *) (dfa->states + state * dfa->state_size);
+   g_assert_cmpint(get_match(vertex->match), ==, 2);
+   g_assert_cmpint(get_mintomatch(vertex->match), ==, 2);
 
    dfa_free(dfa);
 
-   // Try the same with memory limit to 100 bytes.
+   // Try the same with memory limit to 50 bytes (only root node).
    // The first 2 dfa states and the trie node will fit, but nothing else.
    pattern = "AAAA";
    text = "ATTAAAT";
@@ -619,51 +631,58 @@ test_dfa_step
    plen = parse(pattern, exp);
    g_assert_cmpint(plen, ==, 4);
 
-   dfa = dfa_new(plen, tau, 1, 1, 80);
+   dfa = dfa_new(plen, tau, 1, 1, 50);
    g_assert(dfa != NULL);
 
    state = DFA_ROOT_STATE;
    // text[0] A
    g_assert(0 == dfa_step(state, translate_ignore[(int)text[0]], plen, tau, &dfa, exp, &state));
    g_assert_cmpint(state, ==, 0);
-   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
-   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 2);
+   vertex = (vertex_t *) (dfa->states + state * dfa->state_size);
+   g_assert_cmpint(get_match(vertex->match), ==, 2);
+   g_assert_cmpint(get_mintomatch(vertex->match), ==, 2);
 
    // text[1] T
    g_assert(0 == dfa_step(state, translate_ignore[(int)text[1]], plen, tau, &dfa, exp, &state));
    g_assert_cmpint(state, ==, 0);
-   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
-   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 2);
+   vertex = (vertex_t *) (dfa->states + state * dfa->state_size);
+   g_assert_cmpint(get_match(vertex->match), ==, 2);
+   g_assert_cmpint(get_mintomatch(vertex->match), ==, 2);
 
    // text[2] T
    g_assert(0 == dfa_step(state, translate_ignore[(int)text[2]], plen, tau, &dfa, exp, &state));
    g_assert_cmpint(state, ==, 1);
-   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
-   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 3);
+   vertex = (vertex_t *) (dfa->states + state * dfa->state_size);
+   g_assert_cmpint(get_match(vertex->match), ==, 2);
+   g_assert_cmpint(get_mintomatch(vertex->match), ==, 3);
 
    // text[3] A
    g_assert(0 == dfa_step(state, translate_ignore[(int)text[3]], plen, tau, &dfa, exp, &state));
    g_assert_cmpint(state, ==, 0);
-   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
-   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 2);
+   vertex = (vertex_t *) (dfa->states + state * dfa->state_size);
+   g_assert_cmpint(get_match(vertex->match), ==, 2);
+   g_assert_cmpint(get_mintomatch(vertex->match), ==, 2);
 
    // text[4] A
    g_assert(0 == dfa_step(state, translate_ignore[(int)text[4]], plen, tau, &dfa, exp, &state));
    g_assert_cmpint(state, ==, 0);
-   g_assert_cmpint(get_match(dfa->states[state].match), ==, 2);
-   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 1);
+   vertex = (vertex_t *) (dfa->states + state * dfa->state_size);
+   g_assert_cmpint(get_match(vertex->match), ==, 2);
+   g_assert_cmpint(get_mintomatch(vertex->match), ==, 1);
 
    // text[5] A
    g_assert(0 == dfa_step(state, translate_ignore[(int)text[5]], plen, tau, &dfa, exp, &state));
    g_assert_cmpint(state, ==, 0);
-   g_assert_cmpint(get_match(dfa->states[state].match), ==, 1);
-   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 0);
+   vertex = (vertex_t *) (dfa->states + state * dfa->state_size);
+   g_assert_cmpint(get_match(vertex->match), ==, 1);
+   g_assert_cmpint(get_mintomatch(vertex->match), ==, 0);
 
    // text[6] T
    g_assert(0 == dfa_step(state, translate_ignore[(int)text[6]], plen, tau, &dfa, exp, &state));
    g_assert_cmpint(state, ==, 0);
-   g_assert_cmpint(get_match(dfa->states[state].match), ==, 1);
-   g_assert_cmpint(get_mintomatch(dfa->states[state].match), ==, 0);
+   vertex = (vertex_t *) (dfa->states + state * dfa->state_size);
+   g_assert_cmpint(get_match(vertex->match), ==, 1);
+   g_assert_cmpint(get_mintomatch(vertex->match), ==, 0);
 
    dfa_free(dfa);
    
