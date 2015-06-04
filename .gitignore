@@ -13,3 +13,4 @@ lib/*
 build/*
 tmp/*
 results/*
+benchmark/*

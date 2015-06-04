@@ -277,8 +277,7 @@ seeqStringMatch
       // Match accept condition:
       // If there is overlap with the previous, accept only if new_dist < last_dist.
       // 
-      if (streak_dist <= sq->tau && streak_dist <= current_dist && !match && (i >= overlap || streak_dist < last_d) && (!opt_best || streak_dist < best_d)) {
-         if (streak_dist < current_dist) match = 1;
+      if (streak_dist < current_dist && !match && (i >= overlap || streak_dist < last_d) && (!opt_best || streak_dist < best_d)) {
          size_t j = 0;
          uint32_t rnode = 1;
          int d = sq->tau + 1;
@@ -300,10 +299,11 @@ seeqStringMatch
             // Check whether we can delete some nucleotides at the start to avoid
             // the overlap.
             size_t gap = last_end - match_start;
-            if (last_end - match_start <= (size_t) (d - sq->tau)) {
+            if (last_end - match_start <= (size_t) (sq->tau - d)) {
                match_start += gap;
                match_dist  += gap;
             } else {
+               streak_dist = current_dist;
                match = 0;
                continue;
             }
@@ -322,6 +322,7 @@ seeqStringMatch
          last_end = match_end;
          last_d   = match_dist;
          overlap  = i + (size_t)(sq->wlen - sq->tau);
+         match = 1;
          // Break if done.
          if (!all_match) end = 1;
       }
