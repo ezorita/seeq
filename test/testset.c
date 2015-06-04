@@ -1019,6 +1019,7 @@ test_seeqFileMatch
 
    // Realloc match stack.
    sq = seeqNew("A", 0, 0);
+   seeqStringMatch("AAAAAAAAAAAAAAAAAAAA", sq, SQ_ALL);
    g_assert_cmpint(seeqStringMatch("AAAAAAAAAAAAAAAAAAAA", sq, SQ_ALL), == , 20);
    for (int i = 0; i < 20; i++) {
       match = seeqMatchIter(sq);

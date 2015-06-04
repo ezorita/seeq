@@ -263,11 +263,11 @@ seeqStringMatch
       else if (cin == 6 && stream_opt) continue;
       else if (cin == 7 && opt_ignore) continue;
       else if (cin >= 5) {
-         current_dist = sq->tau+1;
+         current_dist = sq->tau;
          end = 1;
       }
       if (slen - i - 1 < (size_t) min_to_match) {
-         current_dist = sq->tau + 1;
+         current_dist = sq->tau;
          end = 1;
       }
 
@@ -277,7 +277,7 @@ seeqStringMatch
       // Match accept condition:
       // If there is overlap with the previous, accept only if new_dist < last_dist.
       // 
-      if (streak_dist < current_dist && !match && (i >= overlap || streak_dist < last_d) && (!opt_best || streak_dist < best_d)) {
+      if (streak_dist <= sq->tau && streak_dist <= current_dist && !match && (i >= overlap || streak_dist < last_d) && (!opt_best || streak_dist < best_d)) {
          size_t j = 0;
          uint32_t rnode = 1;
          int d = sq->tau + 1;
