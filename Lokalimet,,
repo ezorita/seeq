@@ -1,0 +1,43 @@
+ Singapore, or Vietnam, contact your local representative and let them know you oppose TPP.</p> </li> <li> <p>If you live in the European Union, contact your local representative and let them know you oppose TTIP, TISA, and CETA.</p> </li> <li> <p>If you live in Australia, Canada, Chile, Hong Kong, Iceland, Israel, Japan, South Korea, Liechtenstein, New Zealand, Norway, Switzerland, Taiwan, Uruguay, Colombia, Costa Rica, Mexico, Panama, Peru, Turkey, Pakistan, or Paraguay contact your local representative and let them know you oppose TISA.</p> </li> <li> <p>Canadian users should likewise contact their representatives to demand an out from CETA.</p> </li> <li> <p>Support our work representing you in this area by <a href="https://my.fsf.org/join">becoming an FSF member</a> or making a <a href="https://donate.fsf.org">donation</a>.</p> </li> </ul>
+]]>
+</content:encoded>
+<dc:publisher>No publisher</dc:publisher>
+<dc:creator/>
+<dc:rights/>
+<dc:date>2015-06-23T19:31:15Z</dc:date>
+<dc:type>Blog Entry</dc:type>
+</item>
+<item rdf:about="http://www.fsf.org/blogs/licensing/historical-permission-notice-and-disclaimer-added-to-license-list">
+<title>
+Historical Permission Notice and Disclaimer added to license list
+</title>
+<link>
+http://www.fsf.org/blogs/licensing/historical-permission-notice-and-disclaimer-added-to-license-list
+</link>
+<description>
+Deprecated free software license added to license list
+</description>
+<content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/">
+<![CDATA[
+<p>We recently updated our list of <a href="https://www.gnu.org/licenses/license-list.html">various licenses and comments about them</a> to include the <a href="https://www.gnu.org/licenses/license-list.en.html#HPND">Historical Permission Notice and Disclaimer</a>(HPND). The HPND is a simple permissive license, compatible with all versions of the GPL. The HPND is actually more of a template, allowing developers to select a few options, such as whether to include a disclaimer. Variations on this license had actually been approved previously (such as the <a href="https://www.gnu.org/licenses/license-list.en.html#Python1.6a2">old license of Python</a>), but it never had its own entry in the list. While at this point HPND is largely deprecated in favor of more modern lax licenses, you can still find it on some current projects, and kicking around inside some long-running projects that include code created back when it was more prevalent. As such, we wanted to include it on the list explicitly, to help clear up any confusion regarding whether this simple license was free software. </p>
+]]>
+</content:encoded>
+<dc:publisher>No publisher</dc:publisher>
+<dc:creator/>
+<dc:rights/>
+<dc:date>2015-06-08T19:16:24Z</dc:date>
+<dc:type>Blog Entry</dc:type>
+</item>
+<item rdf:about="http://www.fsf.org/blogs/licensing/the-licensing-and-compliance-lab-interviews-francois-marier-creator-of-libravatar">
+<title>
+The Licensing and Compliance Lab interviews François Marier of Libravatar
+</title>
+<link>
+http://www.fsf.org/blogs/licensing/the-licensing-and-compliance-lab-interviews-francois-marier-creator-of-libravatar
+</link>
+<description>
+This is the latest installment of our Licensing and Compliance Lab's series on free software developers who choose GNU licenses for their works.
+</description>
+<content:encoded xmlns:content="http://purl.org/rss/1.0/modules/content/">
+<![CDATA[
+<p>In this edition, we conducted an email-based interview with <a href="https://fmarier.org">François Marier</a>, a free software developer from New Zealand. He is the lead developer of <a href="https://www.libravatar.org">Libravatar</a>. In addition to his passion for decentralization, he contributes to the Debian project and volunteers on the FSF licensing team.</p> <p>Libravatar is a free network service providing profile photos for a number of Web sites, including <a href="https://bugs.debian.org">bugs.debian.org</a> and <a href="https://git.kernel.org">git.kernel.org</a>. Its flexible <a href="https://wiki.libravatar.org/description/">architecture</a> allows end users to host their own images and allows Web sites to use Gravatar as a fallback when necessary. It is licensed under the GNU Affero General Public License version 3, or end user can opt for any later version (<a href="https://www.gnu.org/licenses/agpl-3.0.html">GNU AGPLv3+</a>).</p> <h2>What inspired you to create Libravatar?</h2> <p>As I explained in a <a href="http://mirror.linux.org.au/linux.conf.au/2011/2011-01-26-Wednesday/N515/Freeing_the_Cloud_one_service_at_a_time.
