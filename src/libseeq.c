@@ -340,6 +340,8 @@ seeqStringMatch
    }
    // Merge matches.
    if(recursive_merge(0, slen, 0, sq, mstack)) return -1;
+   // Free mstack.
+   free(mstack);
    // Return.
    return (long)sq->hits;
 }
