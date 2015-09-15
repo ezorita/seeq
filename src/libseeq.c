@@ -122,6 +122,7 @@ seeqNew
    sq->rkeys  = rkeys;
    sq->dfa    = (void *) dfa;
    sq->rdfa   = (void *) rdfa;
+   sq->bufsz  = 0;
    sq->string = NULL;
 
    // Initialize match_t stack.

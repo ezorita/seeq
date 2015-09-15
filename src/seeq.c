@@ -307,10 +307,9 @@ seeqFileMatch
    // Aux vars.
    long count = 0;
    size_t startline = sqfile->line;
-   size_t bufsz = 0;
    ssize_t readsz;
 
-   while ((readsz = getline(&(sq->string), &bufsz, sqfile->fdi)) > 0) {
+   while ((readsz = getline(&(sq->string), &(sq->bufsz), sqfile->fdi)) > 0) {
       sqfile->line++;
       // Remove newline.
       char * data = sq->string;

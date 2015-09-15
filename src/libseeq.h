@@ -69,6 +69,7 @@ struct seeq_t {
    size_t    hits;
    size_t    stacksize;
    match_t * match;
+   size_t    bufsz;
    char    * string;
    int       tau;
    int       wlen;
