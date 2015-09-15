@@ -342,6 +342,7 @@ seeqStringMatch
    // Merge matches.
    if(recursive_merge(0, slen, 0, sq, mstack)) return -1;
    // Free mstack.
+   for (int i = 0; i <= sq->tau; i++) free(mstack[i]);
    free(mstack);
    // Return.
    return (long)sq->hits;
