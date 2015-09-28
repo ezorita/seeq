@@ -281,7 +281,10 @@ seeqStringMatch
       // Match accept condition:
       // If there is overlap with the previous, accept only if new_dist < last_dist.
       // 
-      if (streak_dist <= sq->tau && streak_dist <= current_dist && !match && (i >= overlap || streak_dist < last_d) && (!opt_best || streak_dist < best_d)) {
+      // Note:
+      // set streak_dist <= current_dist to find all non-overlapping matches.
+      // (this may add extra mismatches to a perfect match though)
+      if (streak_dist <= sq->tau && streak_dist < current_dist && !match && (i >= overlap || streak_dist < last_d) && (!opt_best || streak_dist < best_d)) {
          size_t j = 0;
          uint32_t rnode = DFA_ROOT_STATE;
          int d = sq->tau + 1;
