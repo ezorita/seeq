@@ -311,7 +311,7 @@ seeqStringMatch
             sq->match[0] = hit;
             best_d = match_dist;
          } else {
-            if (stackAddMatch(mstack + match_dist,hit)) return -1;
+            if (seeqAddMatch(sq,hit)) return -1;
          }
          // Break if done.
          if (!all_match) end = 1;
