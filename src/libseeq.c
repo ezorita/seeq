@@ -265,11 +265,12 @@ seeqStringMatch
       else if (cin == 6 && stream_opt) continue;
       else if (cin == 7 && opt_ignore) continue;
       else if (cin >= 5) {
-         current_dist = sq->tau;
+         current_dist = sq->tau + 1;
          end = 1;
       }
+
       if (slen - i - 1 < (size_t) min_to_match) {
-         current_dist = sq->tau;
+         current_dist = sq->tau + 1;
          end = 1;
       }
 
@@ -317,6 +318,7 @@ seeqStringMatch
          if (!all_match) end = 1;
       }
 
+
       // Check end value.
       if (end) break;
 
@@ -328,6 +330,12 @@ seeqStringMatch
    // Free mstack.
    //   for (int i = 0; i <= sq->tau; i++) free(mstack[i]);
    //   free(mstack);
+   // Swap matches (to compensate for recursive_merge).
+   for (int i = 0; i < sq->hits/2; i++) {
+      match_t tmp = sq->match[i];
+      sq->match[i] = sq->match[sq->hits-i-1];
+      sq->match[sq->hits-i-1] = tmp;
+   }
    // Return.
    return (long)sq->hits;
 }

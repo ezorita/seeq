@@ -849,7 +849,7 @@ test_seeqFileMatch
    g_assert_cmpint(sq->hits, ==, 1);
    match = seeqMatchIter(sq);
    g_assert_cmpint(match->start, ==, 3);
-   g_assert_cmpint(match->end, ==, 6);
+   g_assert_cmpint(match->end, ==, 7);
    g_assert_cmpint(match->dist, ==, 1);
    g_assert_cmpint(sqfile->line, ==, 2);
    g_assert_cmpstr(seeqGetString(sq), ==, "TCTATCATCCGTACTCTGATCTCAT");
@@ -963,7 +963,7 @@ test_seeqFileMatch
    g_assert_cmpint(sq->match[6].dist, ==, 1);
 
    g_assert_cmpint(sq->match[5].start, ==, 5);
-   g_assert_cmpint(sq->match[5].end, ==, 8);
+   g_assert_cmpint(sq->match[5].end, ==, 9);
    g_assert_cmpint(sq->match[5].dist, ==, 1);
 
    g_assert_cmpint(sq->match[4].start, ==, 8);
@@ -990,11 +990,14 @@ test_seeqFileMatch
 
    // Overlapping matches.
    sq = seeqNew("GAAG", 0, 0);
-   g_assert_cmpint(seeqStringMatch("GAAGAAG", sq, SQ_ALL), == , 1);
-   g_assert_cmpint(sq->hits, ==, 1);
-   g_assert_cmpint(sq->match[0].start, ==, 0);
-   g_assert_cmpint(sq->match[0].end, ==, 4);
+   g_assert_cmpint(seeqStringMatch("GAAGAAG", sq, SQ_ALL), == , 2);
+   g_assert_cmpint(sq->hits, ==, 2);
+   g_assert_cmpint(sq->match[0].start, ==, 3);
+   g_assert_cmpint(sq->match[0].end, ==, 7);
    g_assert_cmpint(sq->match[0].dist, ==, 0);
+   g_assert_cmpint(sq->match[1].start, ==, 0);
+   g_assert_cmpint(sq->match[1].end, ==, 4);
+   g_assert_cmpint(sq->match[1].dist, ==, 0);
 
    seeqFree(sq);
 
@@ -1006,46 +1009,24 @@ test_seeqFileMatch
    g_assert_cmpint(sq->match[1].end, ==, 4);
    g_assert_cmpint(sq->match[1].dist, ==, 0);
 
-   g_assert_cmpint(sq->match[0].start, ==, 4);
+   g_assert_cmpint(sq->match[0].start, ==, 3);
    g_assert_cmpint(sq->match[0].end, ==, 7);
-   g_assert_cmpint(sq->match[0].dist, ==, 1);
-
-   seeqFree(sq);
-
-   // Overlapping matches.
-   sq = seeqNew("GAAG", 1, 0);
-   g_assert_cmpint(seeqStringMatch("GAAGACG", sq, SQ_ALL), == , 1);
-   g_assert_cmpint(sq->hits, ==, 1);
-   g_assert_cmpint(sq->match[0].start, ==, 0);
-   g_assert_cmpint(sq->match[0].end, ==, 4);
    g_assert_cmpint(sq->match[0].dist, ==, 0);
 
    seeqFree(sq);
 
    // Overlapping matches.
-   sq = seeqNew("GAAG", 2, 0);
+   sq = seeqNew("GAAG", 1, 0);
    g_assert_cmpint(seeqStringMatch("GAAGACG", sq, SQ_ALL), == , 2);
    g_assert_cmpint(sq->hits, ==, 2);
+   g_assert_cmpint(sq->match[0].start, ==, 3);
+   g_assert_cmpint(sq->match[0].end, ==, 7);
+   g_assert_cmpint(sq->match[0].dist, ==, 1);
+
    g_assert_cmpint(sq->match[1].start, ==, 0);
    g_assert_cmpint(sq->match[1].end, ==, 4);
    g_assert_cmpint(sq->match[1].dist, ==, 0);
 
-   g_assert_cmpint(sq->match[0].start, ==, 4);
-   g_assert_cmpint(sq->match[0].end, ==, 7);
-   g_assert_cmpint(sq->match[0].dist, ==, 2);
-
-   seeqFree(sq);
-
-   // Realloc match stack.
-   sq = seeqNew("A", 0, 0);
-   seeqStringMatch("AAAAAAAAAAAAAAAAAAAA", sq, SQ_ALL);
-   g_assert_cmpint(seeqStringMatch("AAAAAAAAAAAAAAAAAAAA", sq, SQ_ALL), == , 20);
-   for (int i = 0; i < 20; i++) {
-      match = seeqMatchIter(sq);
-      g_assert_cmpint(match->start, ==, i);
-      g_assert_cmpint(match->end, ==, i+1);
-      g_assert_cmpint(match->dist, ==, 0);
-   }
    seeqFree(sq);
 }
 
