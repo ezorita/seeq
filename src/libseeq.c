@@ -237,10 +237,8 @@ seeqStringMatch
    sq->hits = 0;
 
    // Reset search variables
-   size_t overlap = 0;
-   size_t last_end = 0;
-   int last_d = sq->tau + 1;
    int best_d = sq->tau + 1;
+   // Search variables
    int streak_dist = sq->tau+1;
    int match = 0;
    uint32_t current_node = DFA_ROOT_STATE;
@@ -284,7 +282,8 @@ seeqStringMatch
       // Note:
       // set streak_dist <= current_dist to find all non-overlapping matches.
       // (this may add extra mismatches to a perfect match though)
-      if (streak_dist <= sq->tau && streak_dist < current_dist && !match && (i >= overlap || streak_dist < last_d) && (!opt_best || streak_dist < best_d)) {
+      if (streak_dist <= sq->tau && streak_dist < current_dist && !match && (!opt_best || streak_dist < best_d)) {
+         match = 1;
          size_t j = 0;
          uint32_t rnode = DFA_ROOT_STATE;
          int d = sq->tau + 1;
@@ -304,19 +303,6 @@ seeqStringMatch
          size_t match_start = i-j;
          size_t match_end   = i;
          int match_dist  = streak_dist;
-         if (match_start < last_end) {
-            // Check whether we can delete some nucleotides at the start to avoid
-            // the overlap.
-            size_t gap = last_end - match_start;
-            if (last_end - match_start <= (size_t) (sq->tau - d)) {
-               match_start += gap;
-               match_dist  += gap;
-            } else {
-               streak_dist = current_dist;
-               match = 0;
-               continue;
-            }
-         }
          match_t hit = (match_t) {match_start, match_end, (size_t) match_dist};
          // Save non-overlapping matches.
          if (opt_best) {
@@ -327,11 +313,6 @@ seeqStringMatch
          } else {
             if (stackAddMatch(mstack + match_dist,hit)) return -1;
          }
-         // Memory variables.
-         last_end = match_end;
-         last_d   = match_dist;
-         overlap  = i + (size_t)(sq->wlen - sq->tau);
-         match = 1;
          // Break if done.
          if (!all_match) end = 1;
       }
@@ -343,7 +324,7 @@ seeqStringMatch
       streak_dist = current_dist;
    }
    // Merge matches.
-   if(recursive_merge(0, slen, 0, sq, mstack)) return -1;
+   //if(recursive_merge(0, slen, 0, sq, mstack)) return -1;
    // Free mstack.
    for (int i = 0; i <= sq->tau; i++) free(mstack[i]);
    free(mstack);
