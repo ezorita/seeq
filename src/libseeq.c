@@ -228,10 +228,10 @@ seeqStringMatch
    int stream_opt = options & MASK_INPUT;
 
    // Allocate match stacks.
-   mstack_t ** mstack = malloc((size_t)(sq->tau+1)*sizeof(mstack_t*));
-   if (mstack == NULL) return -1;
-   for (int i = 0; i <= sq->tau; i++)
-      if((mstack[i] = stackNew(INITIAL_MATCH_STACK_SIZE)) == NULL) return -1;
+   //   mstack_t ** mstack = malloc((size_t)(sq->tau+1)*sizeof(mstack_t*));
+   //   if (mstack == NULL) return -1;
+   //   for (int i = 0; i <= sq->tau; i++)
+   //      if((mstack[i] = stackNew(INITIAL_MATCH_STACK_SIZE)) == NULL) return -1;
 
    // Set structure to non-matched.
    sq->hits = 0;
@@ -326,8 +326,8 @@ seeqStringMatch
    // Merge matches.
    //if(recursive_merge(0, slen, 0, sq, mstack)) return -1;
    // Free mstack.
-   for (int i = 0; i <= sq->tau; i++) free(mstack[i]);
-   free(mstack);
+   //   for (int i = 0; i <= sq->tau; i++) free(mstack[i]);
+   //   free(mstack);
    // Return.
    return (long)sq->hits;
 }
