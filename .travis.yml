@@ -11,7 +11,7 @@ branches:
 before_install:
   - sudo pip install cpp-coveralls
 
-script: make && cd test && make test && python python_lib_test.py
+script: make && make lib && python setup.py build && cd test && make test && python python_lib_test.py
 
 after_success:
   - coveralls --verbose --gcov-options '\-lp' -r .. -E '.*testset' -E '.*faultymalloc'
