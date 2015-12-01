@@ -86,15 +86,17 @@ struct mstack_t {
 };
 
 
-seeq_t     * seeqNew         (const char *, int, size_t);
-void         seeqFree        (seeq_t *);
-match_t    * seeqMatchIter   (seeq_t *);
-char       * seeqGetString   (seeq_t *);
-long         seeqStringMatch (const char *, seeq_t *, int);
-const char * seeqPrintError  (void);
-int          seeqAddMatch    (seeq_t *, match_t);
-mstack_t   * stackNew        (size_t);
-int          stackAddMatch   (mstack_t **, match_t);
+seeq_t     * seeqNew           (const char *, int, size_t);
+seeq_t     * seeqNew_keys      (const char *, int, int, size_t);
+seeq_t    ** seeqNewSubPattern (const char *, int, int, int *);
+void         seeqFree          (seeq_t *);
+match_t    * seeqMatchIter     (seeq_t *);
+char       * seeqGetString     (seeq_t *);
+long         seeqStringMatch   (const char *, seeq_t *, int);
+const char * seeqPrintError    (void);
+int          seeqAddMatch      (seeq_t *, match_t);
+mstack_t   * stackNew          (size_t);
+int          stackAddMatch     (mstack_t **, match_t);
 
 // misc functions.
 int recursive_merge (size_t, size_t, int, seeq_t *, mstack_t **);

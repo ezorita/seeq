@@ -1041,6 +1041,66 @@ test_seeqClose
 }
 
 void
+test_seeqNewSubPattern
+(void)
+{
+   char * pattern = "AGTCGTACGTAGTCGTACACATCACTG";
+   int subcnt;
+   
+   // Pattern length = 27, mismatches = 4, sublen = 5.
+   seeq_t ** dfa = seeqNewSubPattern(pattern, 4, 5, &subcnt);
+   g_assert(dfa != NULL);
+
+   // subcnt = 6, dfa lens = {5,5,5,4,4,4}, dfa mismatches = 0.
+   g_assert_cmpint(subcnt, ==, 6);
+   int lens[6] = {5,5,5,4,4,4};
+   for (int i = 0; i < 6; i++) {
+      g_assert_cmpint(dfa[i]->wlen, ==, lens[i]);
+      g_assert_cmpint(dfa[i]->tau, ==, 0);
+   }
+   g_assert(strncmp(dfa[0]->keys,"\x01\x04\x08\x02\x04",5) == 0);
+   g_assert(strncmp(dfa[1]->keys,"\x08\x01\x02\x04\x08",5) == 0);
+   g_assert(strncmp(dfa[2]->keys,"\x01\x04\x08\x02\x04",5) == 0);
+   g_assert(strncmp(dfa[3]->keys,"\x08\x01\x02\x01",4) == 0);
+   g_assert(strncmp(dfa[4]->keys,"\x02\x01\x08\x02",4) == 0);
+   g_assert(strncmp(dfa[5]->keys,"\x01\x02\x08\x04",4) == 0);
+   
+   for (int i = 0; i < subcnt; i++) seeqFree(dfa[i]);
+
+   // Complex pattern.
+   pattern = "AGTCGNACGACTA[ACT]TACTGA[AG]ACGCAN[AT][CG]";
+   // Pattern length:29, mismatches:6, sublen:10.
+   dfa = seeqNewSubPattern(pattern, 6, 10, &subcnt);
+   g_assert(dfa != NULL);
+
+   // subcnt:3, lens:{10,10,9}, mismatches:2.
+   g_assert_cmpint(subcnt, ==, 3);
+   g_assert_cmpint(dfa[0]->wlen, ==, 10);
+   g_assert_cmpint(dfa[0]->tau, ==, 2);
+   g_assert_cmpint(dfa[1]->wlen, ==, 10);
+   g_assert_cmpint(dfa[1]->tau, ==, 2);
+   g_assert_cmpint(dfa[2]->wlen, ==, 9);
+   g_assert_cmpint(dfa[2]->tau, ==, 2);
+   g_assert(strncmp(dfa[0]->keys,"\x01\x04\x08\x02\x04\x1F\x01\x02\x04\x01",10) == 0);
+   g_assert(strncmp(dfa[1]->keys,"\x02\x08\x01\x0B\x08\x01\x02\x08\x04\x01",10) == 0);
+   g_assert(strncmp(dfa[2]->keys,"\x05\x01\x02\x04\x02\x01\x1F\x09\x06",9) == 0);
+
+   for (int i = 0; i < subcnt; i++) seeqFree(dfa[i]);
+
+   // Incorrect patterns.
+   pattern = "ATACGTACTGATCGCTAUACACGCACIGAC";
+   dfa = seeqNewSubPattern(pattern, 6, 10, &subcnt);
+   g_assert(dfa == NULL);
+   pattern = "ATACGTACTG[ATCGCTAUACACGCACNGAC";
+   dfa = seeqNewSubPattern(pattern, 6, 10, &subcnt);
+   g_assert(dfa == NULL);
+   pattern = "ATACGTACTGATCGCTAUACACGCAC]GAC";
+   dfa = seeqNewSubPattern(pattern, 6, 10, &subcnt);
+   g_assert(dfa == NULL);
+
+}
+
+void
 test_seeq
 (void)
 {
@@ -1266,8 +1326,10 @@ main(
    g_test_add_func("/libseeq/core/dfa_step", test_dfa_step);
    g_test_add_func("/libseeq/core/parse", test_parse);
    g_test_add_func("/libseeq/lib/seeqNew", test_seeqNew);
+   g_test_add_func("/libseeq/lib/seeqNewSubPattern", test_seeqNewSubPattern);
    g_test_add_func("/libseeq/lib/seeqFileMatch", test_seeqFileMatch);
    g_test_add_func("/libseeq/lib/seeqClose", test_seeqClose);
-   g_test_add_func("/seeq", test_seeq);
+   g_test_add_func("/seeq/seeq", test_seeq);
+ 
    return g_test_run();
 }

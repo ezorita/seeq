@@ -75,25 +75,65 @@ seeqNew
    char *  keys = malloc(strlen(pattern));
    if (keys == NULL) return NULL;
 
-   char * rkeys = malloc(strlen(pattern));
-   if (rkeys == NULL) {
+   int wlen = parse(pattern, keys);
+   if (wlen == -1) {
       free(keys);
       return NULL;
    }
 
-   int wlen = parse(pattern, keys);
-   if (wlen == -1) {
-      free(keys); free(rkeys);
-      return NULL;
-   }
-   for (int i = 0; i < wlen; i++) rkeys[i] = keys[wlen-i-1];
-
    // Check parameters.
    if (mismatches >= wlen) {
       seeqerr = 9;
-      free(keys); free(rkeys);
+      free(keys);
       return NULL;
    }
+
+   seeq_t * seeq = seeqNew_keys(keys, wlen, mismatches, maxmemory);
+
+   // Free parsed pattern.
+   free(keys);
+
+   return seeq;
+}
+
+seeq_t *
+seeqNew_keys
+(
+ const char * keys_ref,
+ int    wlen,
+ int    mismatches,
+ size_t maxmemory
+)
+// SYNOPSIS:                                                              
+//   Same as 'seeqNew'. This prototype of 'seeqNew' accepts parsed patterns (keys)
+//   instead of strings. The contents of 'keys' will be internally copied, so 
+//   the user should manually free the pointer after calling this function.
+//                                                                        
+// PARAMETERS:                                                            
+//   keys       : pattern keys generated with 'parse()'.
+//   wlen       : pattern length.
+//   mismatches : matching distance (Levenshtein distance).
+//   maxmemory  : DFA memory limit, in bytes.
+//
+// RETURN:                                                                
+//   Returns a pointer to a seeq_t structure or NULL in case of error, and seeqerr is
+//   set appropriately.
+//
+// SIDE EFFECTS:
+//   The returned seeq_t structure must be freed using 'seeqFree'.
+{
+   // Allocate keys and reverse keys.
+   char * keys = malloc((size_t)wlen);
+   if (keys == NULL) return NULL;
+   char * rkeys = malloc((size_t)wlen);
+   if (rkeys == NULL) {
+      free(keys);
+      return NULL;
+   }
+   
+   // Copy keys.
+   memcpy(keys, keys_ref, (size_t)wlen);
+   for (int i = 0; i < wlen; i++) rkeys[i] = keys[wlen-i-1];
 
    // Allocate DFAs.
    dfa_t * dfa = dfa_new(wlen, mismatches, INITIAL_DFA_SIZE, INITIAL_TRIE_SIZE, maxmemory);
@@ -135,6 +175,61 @@ seeqNew
    }
 
    return sq;
+}
+
+seeq_t **
+seeqNewSubPattern
+(
+ const char * pattern,
+ int          mismatches,
+ int          sublen,
+ int        * subcnt
+)
+// SYNOPSIS:                                                              
+//   Divides the pattern in smaller subpatterns (of maximum length 'sublen') and 
+//   allocates a DFA for each of them. The goal is to avoid the exponential memory
+//   growth of long pattern DFAs (i.e. smaller cache miss probability) at the
+//   expense of some extra alignments.
+//                                                                        
+// PARAMETERS:                                                            
+//   pattern    : matching pattern (accepted characters 'A','C','G','T','U','N','[',']').
+//   mismatches : matching distance (Levenshtein distance).
+//   sublen     : maximum subpattern length.
+//   subcnt     : pointer to return the number of subpatterns.
+//
+// RETURN:                                                                
+//   Returns a vector of seeq_t pointers or NULL in case of error, and seeqerr is
+//   set appropriately. The number of vector elements is stored in the subcnt address.
+//
+// SIDE EFFECTS:
+//   The returned seeq_t pointers must be freed using 'seeqFree'.
+{
+   char * keys = malloc(strlen(pattern));
+   if (keys == NULL) return NULL;
+   // Parse pattern.
+   int seqlen = parse(pattern, keys);
+   if (seqlen == -1) {
+      free(keys);
+      return NULL;
+   }
+   // Subsequence count, length and matching distance.
+   *subcnt = (seqlen + sublen - 1)/sublen;
+   int l = seqlen / *subcnt, r = seqlen % *subcnt, d = mismatches / *subcnt;
+   // Create DFA for each subsequence.
+   seeq_t ** dfa = malloc((size_t)*subcnt * sizeof(seeq_t *));
+   if (dfa == NULL) {
+      free(keys);
+      return NULL;
+   }
+   for (int i = 0, j = 0; i < *subcnt; i++) {
+      int len = l + (r-- > 0);
+      // Make DFA for this subpattern.
+      dfa[i] = seeqNew_keys(keys+j, len, d, 0);
+      if (dfa[i] == NULL) return NULL;
+      j += len;
+   }
+   free(keys);
+   return dfa;
 }
 
 void
