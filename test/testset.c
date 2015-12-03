@@ -1059,11 +1059,17 @@ test_seeqNewSubPattern
       g_assert_cmpint(dfa[i]->tau, ==, 0);
    }
    g_assert(strncmp(dfa[0]->keys,"\x01\x04\x08\x02\x04",5) == 0);
+   g_assert(strncmp(dfa[0]->rkeys,"\x04\x02\x08\x04\x01",5) == 0);
    g_assert(strncmp(dfa[1]->keys,"\x08\x01\x02\x04\x08",5) == 0);
+   g_assert(strncmp(dfa[1]->rkeys,"\x08\x04\x02\x01\x08",5) == 0);
    g_assert(strncmp(dfa[2]->keys,"\x01\x04\x08\x02\x04",5) == 0);
+   g_assert(strncmp(dfa[2]->rkeys,"\x04\x02\x08\x04\x01",5) == 0);
    g_assert(strncmp(dfa[3]->keys,"\x08\x01\x02\x01",4) == 0);
+   g_assert(strncmp(dfa[3]->rkeys,"\x01\x02\x01\x08",4) == 0);
    g_assert(strncmp(dfa[4]->keys,"\x02\x01\x08\x02",4) == 0);
+   g_assert(strncmp(dfa[4]->rkeys,"\x02\x08\x01\x02",4) == 0);
    g_assert(strncmp(dfa[5]->keys,"\x01\x02\x08\x04",4) == 0);
+   g_assert(strncmp(dfa[5]->rkeys,"\x04\x08\x02\x01",4) == 0);
    
    for (int i = 0; i < subcnt; i++) seeqFree(dfa[i]);
 
@@ -1082,8 +1088,11 @@ test_seeqNewSubPattern
    g_assert_cmpint(dfa[2]->wlen, ==, 9);
    g_assert_cmpint(dfa[2]->tau, ==, 2);
    g_assert(strncmp(dfa[0]->keys,"\x01\x04\x08\x02\x04\x1F\x01\x02\x04\x01",10) == 0);
+   g_assert(strncmp(dfa[0]->rkeys,"\x01\x04\x02\x01\x1F\x04\x02\x08\x04\x01",10) == 0);
    g_assert(strncmp(dfa[1]->keys,"\x02\x08\x01\x0B\x08\x01\x02\x08\x04\x01",10) == 0);
+   g_assert(strncmp(dfa[1]->rkeys,"\x01\x04\x08\x02\x01\x08\x0B\x01\x08\x02",10) == 0);
    g_assert(strncmp(dfa[2]->keys,"\x05\x01\x02\x04\x02\x01\x1F\x09\x06",9) == 0);
+   g_assert(strncmp(dfa[2]->rkeys,"\x06\x09\x1F\x01\x02\x04\x02\x01\x05",9) == 0);
 
    for (int i = 0; i < subcnt; i++) seeqFree(dfa[i]);
 
