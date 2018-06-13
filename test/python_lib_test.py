@@ -16,8 +16,8 @@ class TestSeeq(unittest.TestCase):
       nomatch = "ATGCTGATGCTGGGGG"
       match = "GGGGCGCTAATAATGGAATGGGG"
 
-      self.assertEqual(matcher.matchPrefix(nomatch, True), "")
-      self.assertEqual(matcher.matchPrefix(nomatch, False), "")
+      self.assertEqual(matcher.matchPrefix(nomatch, True), None)
+      self.assertEqual(matcher.matchPrefix(nomatch, False), None)
       self.assertEqual(matcher.matchPrefix(match, True),
             "GGGGCGCTAATAATGGAAT")
       self.assertEqual(matcher.matchPrefix(match, False), "GGGG")
@@ -28,8 +28,8 @@ class TestSeeq(unittest.TestCase):
       nomatch = "ATGCTGATGCTGGGGG"
       match = "GGGGCGCTAATAATGGAATGGGG"
 
-      self.assertEqual(matcher.matchSuffix(nomatch, True), "")
-      self.assertEqual(matcher.matchSuffix(nomatch, False), "")
+      self.assertEqual(matcher.matchSuffix(nomatch, True), None)
+      self.assertEqual(matcher.matchSuffix(nomatch, False), None)
       self.assertEqual(matcher.matchSuffix(match, True),
             "CGCTAATAATGGAATGGGG")
       self.assertEqual(matcher.matchSuffix(match, False), "GGGG")
