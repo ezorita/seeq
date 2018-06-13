@@ -288,10 +288,13 @@ seeqStringMatch
          size_t j = 0;
          uint32_t rnode = DFA_ROOT_STATE;
          int d = sq->tau + 1;
+	 int last_d, ignores = 0;
          // Find match start with RDFA.
          do {
             int c = (int)translate[(int)data[i-++j]];
+	    last_d = d;
             if (c < NBASES) {
+	       ignores = 0;
                vertex_t * vertex = (vertex_t *) (((dfa_t *)sq->rdfa)->states + rnode * state_size);
                uint32_t next = vertex->next[c];
                if (next == DFA_COMPUTE)
@@ -299,8 +302,13 @@ seeqStringMatch
                rnode = next;
                vertex = (vertex_t *) (((dfa_t *)sq->rdfa)->states + rnode * state_size);
                d = get_match(vertex->match);
-            } else continue;
-         } while (d > streak_dist && j < i);
+            } else {
+	       ignores++;
+	       continue;
+	    }
+	    //         } while (d > streak_dist && j < i);
+	 } while (d <= last_d && j < i);
+	 j = (last_d < d ? j-1 : j) - ignores;
          size_t match_start = i-j;
          size_t match_end   = i;
          int match_dist  = streak_dist;
