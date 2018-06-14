@@ -13,7 +13,7 @@ before_install:
 
 install:
   # clang 3.4
-  - if [ "$CC" == "clang" ]; then sudo apt-get install clang-3.4; fi
+  - if [ "$CC" == "clang" ]; then sudo apt-get install clang-3.4 ggcov; fi
   - if [ "$CC" == "clang" ]; then export CC="/usr/bin/clang"; fi
 
 script: $CC --version && make && make lib && python setup.py build && cd test && make test && python python_lib_test.py
