@@ -15,7 +15,6 @@ install:
   # clang 3.4
   - if [ "$CC" == "clang" ]; then sudo apt-get install clang-3.4; fi
   - if [ "$CC" == "clang" ]; then export CC="clang-3.4"; fi
-  - which $CC
   - which clang
   - /usr/bin/clang --version
 
