@@ -10,6 +10,7 @@ branches:
 
 before_install:
   - sudo pip install -U cpp-coveralls
+  - sudo apt-get install clang-3.4
 
 script: gcov --version && make && make lib && python setup.py build && cd test && make test && python python_lib_test.py
 
