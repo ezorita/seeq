@@ -11,8 +11,9 @@ branches:
 before_install:
   - sudo pip install -U cpp-coveralls
   - sudo apt-get install clang-3.4
+  - sudo ln -s $(which clang-3.4) $(which clang)
 
-script: gcov --version && make && make lib && python setup.py build && cd test && make test && python python_lib_test.py
+script: gcov --version && clang --version && make && make lib && python setup.py build && cd test && make test && python python_lib_test.py
 
 after_success:
   - coveralls --verbose --gcov-options '\-lp' -r .. -E '.*testset' -E '.*faultymalloc'
