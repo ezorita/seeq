@@ -9,9 +9,9 @@ branches:
     - master
 
 before_install:
-  - sudo pip install cpp-coveralls
+  - sudo pip install -U cpp-coveralls
 
 script: make && make lib && python setup.py build && cd test && make test && python python_lib_test.py
 
 after_success:
-  - coveralls --verbose --gcov-options '\-lp' -r .. -E '.*testset' -E '.*faultymalloc'
+  - gcov --version; coveralls --verbose --gcov-options '\-lp' -r .. -E '.*testset' -E '.*faultymalloc'
