@@ -10,13 +10,14 @@ branches:
 
 before_install:
   - sudo pip install -U cpp-coveralls
-  - sudo apt-get install clang-3.4
 
 install:
   # clang 3.4
   - if [ "$CC" == "clang" ]; then sudo apt-get install clang-3.4; fi
   - if [ "$CC" == "clang" ]; then export CC="clang-3.4"; fi
-
+  - which $CC
+  - which clang
+  - /usr/bin/clang --version
 
 script: $CC --version && make && make lib && python setup.py build && cd test && make test && python python_lib_test.py
 
