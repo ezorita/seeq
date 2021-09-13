@@ -44,6 +44,7 @@ struct seeqarg_t {
    int verbose;
    int endline;
    int prefix;
+   int split;
    int invert;
    int best;
    int non_dna;

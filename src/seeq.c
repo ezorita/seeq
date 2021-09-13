@@ -136,6 +136,10 @@ seeq
                      fprintf(stdout, "%s", sq->string);
                   } else if (args.endline) {
                      fprintf(stdout, "%s", sq->string + match->end);
+                  } else if (args.split) {
+                     fprintf(stdout, "%.*s\t", (unsigned int) match->start, sq->string);
+                     fprintf(stdout, "%.*s\t", (unsigned int) (match->end - match->start), sq->string + match->start);
+                     fprintf(stdout, "%.*s", (unsigned int) (strlen(sq->string) - match->end), sq->string + match->end);
                   } else if (args.printline) {
                      if (COLOR_TERMINAL && isatty(fileno(stdout))) {
                         // Prefix.
