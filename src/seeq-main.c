@@ -211,6 +211,18 @@ main
             say_help();
             return EXIT_FAILURE;
          }
+         if (endline_flag != -1) {
+            say_version();
+            fprintf(stderr, "error: 'prefix' and 'end' options are mutually exclusive.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         if (split_flag != -1) {
+            say_version();
+            fprintf(stderr, "error: 'prefix' and 'split' options are mutually exclusive.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
          break;
 
       case 'a':
@@ -268,6 +280,18 @@ main
             say_help();
             return EXIT_FAILURE;
          }
+         if (prefix_flag != -1) {
+            say_version();
+            fprintf(stderr, "error: 'prefix' and 'end' options are mutually exclusive.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         if (split_flag != -1) {
+            say_version();
+            fprintf(stderr, "error: 'end' and 'split' options are mutually exclusive.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
          break;
 
       case 's':
@@ -277,6 +301,18 @@ main
          else {
             say_version();
             fprintf(stderr, "error: split option set more than once.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         if (prefix_flag != -1) {
+            say_version();
+            fprintf(stderr, "error: 'prefix' and 'split' options are mutually exclusive.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         if (endline_flag != -1) {
+            say_version();
+            fprintf(stderr, "error: 'end' and 'split' options are mutually exclusive.\n");
             say_help();
             return EXIT_FAILURE;
          }
