@@ -51,6 +51,7 @@ static const char *USAGE = "Usage:"
 "    -f --compact         prints output in compact format (line:pos:dist)\n"
 "    -e --end             print only the end of the line, starting after the match\n"
 "    -r --prefix          print only the prefix, ending before the match\n"
+"    -s --split           print prefix match and suffix separated by tabs\n"
 "\n   OTHER OPTIONS:\n"
 "    -v --version         print version\n"
 "    -y --memory          set DFA memory limit (in MB)\n"
@@ -98,6 +99,7 @@ main
    int verbose_flag   = -1;
    int endline_flag   = -1;
    int prefix_flag    = -1;
+   int split_flag     = -1;
    int best_flag      = -1;
    int nondna_flag    = -1;
    int memory_flag    = -1;
@@ -128,16 +130,17 @@ main
          {"verbose",       no_argument, 0, 'z'},
          {"version",       no_argument, 0, 'v'},
          {"help",          no_argument, 0, 'h'},
-         {"end",           no_argument, 0, 'e'},         
-         {"prefix",        no_argument, 0, 'r'},                  
-         {"best",          no_argument, 0, 'b'},                  
-         {"all",           no_argument, 0, 'a'},                  
-         {"memory",  required_argument, 0, 'y'},                  
+         {"end",           no_argument, 0, 'e'},
+         {"prefix",        no_argument, 0, 'r'},
+         {"split",         no_argument, 0, 's'},
+         {"best",          no_argument, 0, 'b'},
+         {"all",           no_argument, 0, 'a'},
+         {"memory",  required_argument, 0, 'y'},
          {"distance",required_argument, 0, 'd'},
          {0, 0, 0, 0}
       };
 
-      c = getopt_long(argc, argv, "apmnilczfvkherby:d:x:",
+      c = getopt_long(argc, argv, "apmnilczfvkhersby:d:x:",
             long_options, &option_index);
  
       /* Detect the end of the options. */
@@ -208,6 +211,18 @@ main
             say_help();
             return EXIT_FAILURE;
          }
+         if (endline_flag != -1) {
+            say_version();
+            fprintf(stderr, "error: 'prefix' and 'end' options are mutually exclusive.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         if (split_flag != -1) {
+            say_version();
+            fprintf(stderr, "error: 'prefix' and 'split' options are mutually exclusive.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
          break;
 
       case 'a':
@@ -262,6 +277,42 @@ main
          else {
             say_version();
             fprintf(stderr, "error: line-end option set more than once.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         if (prefix_flag != -1) {
+            say_version();
+            fprintf(stderr, "error: 'prefix' and 'end' options are mutually exclusive.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         if (split_flag != -1) {
+            say_version();
+            fprintf(stderr, "error: 'end' and 'split' options are mutually exclusive.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         break;
+
+      case 's':
+         if (split_flag < 0) {
+            split_flag = 1;
+         }
+         else {
+            say_version();
+            fprintf(stderr, "error: split option set more than once.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         if (prefix_flag != -1) {
+            say_version();
+            fprintf(stderr, "error: 'prefix' and 'split' options are mutually exclusive.\n");
+            say_help();
+            return EXIT_FAILURE;
+         }
+         if (endline_flag != -1) {
+            say_version();
+            fprintf(stderr, "error: 'end' and 'split' options are mutually exclusive.\n");
             say_help();
             return EXIT_FAILURE;
          }
@@ -403,6 +454,7 @@ main
    if (verbose_flag == -1) verbose_flag = 0;
    if (endline_flag == -1) endline_flag = 0;
    if (prefix_flag == -1) prefix_flag = 0;
+   if (split_flag == -1) split_flag = 0;
    if (best_flag == -1) best_flag = 0;
    if (nondna_flag == -1) nondna_flag = 0;
    if (memory_flag == -1) memory_flag = 0;
@@ -432,6 +484,7 @@ main
    args.verbose   = verbose_flag;
    args.endline   = endline_flag * maskinv;
    args.prefix    = prefix_flag * maskinv;
+   args.split     = split_flag * maskinv;
    args.invert    = invert_flag * maskcnt;
    args.best      = best_flag * maskinv;
    args.non_dna    = nondna_flag;
