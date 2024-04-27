@@ -16,7 +16,7 @@ LIBSRCS= $(addprefix $(SRC_DIR)/,$(LIBSRC_FILES))
 LIBHDRS= $(addprefix $(SRC_DIR)/,$(LIBHDR_FILES))
 INCLUDES= $(addprefix -I, $(INC_DIR))
 
-CFLAGS_DEV= -std=c99 -Wall -g -Wunused-parameter -Wredundant-decls  -Wreturn-type  -Wswitch-default -Wunused-value -Wimplicit  -Wimplicit-function-declaration  -Wimplicit-int -Wimport  -Wunused  -Wunused-function  -Wunused-label -Wno-int-to-pointer-cast -Wbad-function-cast  -Wmissing-declarations -Wmissing-prototypes  -Wnested-externs  -Wold-style-definition -Wstrict-prototypes -Wpointer-sign -Wextra -Wredundant-decls -Wunused -Wunused-function -Wunused-parameter -Wunused-value  -Wunused-variable -Wformat  -Wformat-nonliteral -Wparentheses -Wsequence-point -Wuninitialized -Wundef -Wbad-function-cast -Weverything -Wno-padded
+CFLAGS_DEV= -std=c99 -Wall -g -Wunused-parameter -Wredundant-decls  -Wreturn-type  -Wswitch-default -Wunused-value -Wimplicit  -Wimplicit-function-declaration  -Wimplicit-int -Wimport  -Wunused  -Wunused-function  -Wunused-label -Wno-int-to-pointer-cast -Wbad-function-cast  -Wmissing-declarations -Wmissing-prototypes  -Wnested-externs  -Wold-style-definition -Wstrict-prototypes -Wpointer-sign -Wextra -Wredundant-decls -Wunused -Wunused-function -Wunused-parameter -Wunused-value  -Wunused-variable -Wformat  -Wformat-nonliteral -Wparentheses -Wsequence-point -Wuninitialized -Wundef -Wbad-function-cast -Wno-padded
 CFLAGS= -std=c99 -Wall -O3
 LDLIBS=
 #CC= clang
@@ -31,7 +31,7 @@ lib: lib/libseeq.so
 
 lib/libseeq.so: $(LIBSRCS) $(LIBHDRS)
 	mkdir -p lib
-	$(CC) -shared -fPIC $(CFLAGS) $(INCLUDES) $(LIBSRCS) -o $@
+	$(CC) -shared -fPIC $(CFLAGS) $(INCLUDES) $(LIBSRCS) $(shell python3-config --includes) $(shell python3-config --libs) -o $@
 	cp src/libseeq.h lib/libseeq.h
 
 seeq: $(OBJECTS) $(SOURCES) $(LIBSRCS) $(HEADERS) $(LIBHDRS)

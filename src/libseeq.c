@@ -455,7 +455,7 @@ seeqMatchIter
 //   A pointer to the match_t structure or NULL when sq is empty.
 //
 // SIDE EFFECTS:
-//   None.
+//   Decrements `sq->hits` on every call.
 {
    if (sq->hits == 0) return NULL;
    return sq->match + --sq->hits;

@@ -69,7 +69,6 @@ typedef struct {
 } SeeqIter;
 
 
-
 /** SeeqIter class **/
 
 static void
@@ -80,7 +79,7 @@ SeeqIter_dealloc
 {
    Py_XDECREF(self->sqObj);
    Py_XDECREF(self->strObj);
-   self->ob_type->tp_free((PyObject*)self);
+   PyObject_Del(self);
 }
 
 static SeeqIter *
@@ -95,7 +94,7 @@ SeeqIter_new
       PyErr_SetString(SeeqException, "NULL reference to DFA pointer");
       return NULL;
    }
-   if (!PyString_Check(strObj)) return NULL;
+   if (!PyUnicode_Check(strObj)) return NULL;
 
    SeeqIter * self;
    // TYPE* PyObject_New(TYPE, PyTypeObject *type)
@@ -106,7 +105,7 @@ SeeqIter_new
       return NULL;
    }
 
-   const char * string = PyString_AsString(strObj);
+   const char * string = PyUnicode_AsUTF8(strObj);
    if (string == NULL) return NULL;
 
    seeq_t * sq = sqObj->sq;
@@ -161,7 +160,7 @@ SeeqIter_iternext
          if (new_string == NULL) return PyErr_NoMemory();
          memcpy(new_string, self->string + start, toklen);
          new_string[toklen] = 0;
-         PyObject * new_strObj = PyString_FromString(new_string);
+         PyObject * new_strObj = PyUnicode_FromString(new_string);
          free(new_string);
          if (new_strObj == NULL) return NULL;
          return new_strObj;
@@ -174,7 +173,7 @@ SeeqIter_iternext
             if (new_string == NULL) return PyErr_NoMemory();
             memcpy(new_string, self->string + last, toklen);
             new_string[toklen] = 0;
-            PyObject * new_strObj = PyString_FromString(new_string);
+            PyObject * new_strObj = PyUnicode_FromString(new_string);
             free(new_string);
             if (new_strObj == NULL) return NULL;
             return new_strObj;
@@ -197,7 +196,7 @@ SeeqIter_iternext
             if (new_string == NULL) return PyErr_NoMemory();
             memcpy(new_string, self->string + self->last, toklen);
             new_string[toklen] = 0;
-            PyObject * new_strObj = PyString_FromString(new_string);
+            PyObject * new_strObj = PyUnicode_FromString(new_string);
             free(new_string);
             if (new_strObj == NULL) return NULL;
             else return new_strObj;
@@ -222,8 +221,7 @@ static PyMethodDef SeeqIter_methods[] = {
 };
 
 static PyTypeObject SeeqIterType = {
-    PyObject_HEAD_INIT(NULL)
-    0,                         /*ob_size*/
+    PyObject_HEAD_INIT(&PyType_Type)
     "seeq.SeeqIter",           /*tp_name*/
     sizeof(SeeqIter),         /*tp_basicsize*/
     0,                         /*tp_itemsize*/
@@ -260,7 +258,7 @@ static PyTypeObject SeeqIterType = {
     0,                         /* tp_dictoffset */
     0,                         /* tp_init */
     0,                         /* tp_alloc */
-    0,                         /* tp_new */
+    PyType_GenericNew,         /* tp_new */
 };
 
 
@@ -274,7 +272,7 @@ SeeqMatch_dealloc
 {
    Py_XDECREF(self->matches);
    Py_XDECREF(self->stringObj);
-   self->ob_type->tp_free((PyObject*)self);
+   PyObject_Del(self);
 }
 
 static SeeqMatch *
@@ -379,8 +377,8 @@ SeeqMatch_tokenize
          free(tokens);
          return NULL;
       }
-      int mstart = PyInt_AsLong(PyTuple_GetItem(tuple, 0));
-      int mend   = PyInt_AsLong(PyTuple_GetItem(tuple, 1));
+      long mstart = PyLong_AsLong(PyTuple_GetItem(tuple, 0));
+      long mend   = PyLong_AsLong(PyTuple_GetItem(tuple, 1));
 
       // Prefix.
       if (mstart - tstart > 0) {
@@ -467,8 +465,8 @@ SeeqMatch_split
          free(tokens);
          return NULL;
       }
-      int mstart = PyInt_AsLong(PyTuple_GetItem(tuple, 0));
-      int mend   = PyInt_AsLong(PyTuple_GetItem(tuple, 1));
+      long mstart = PyLong_AsLong(PyTuple_GetItem(tuple, 0));
+      long mend   = PyLong_AsLong(PyTuple_GetItem(tuple, 1));
 
       // Prefix.
       if (mstart - tstart > 0) {
@@ -545,8 +543,8 @@ SeeqMatch_matches
          free(tokens);
          return NULL;
       }
-      int mstart = PyInt_AsLong(PyTuple_GetItem(tuple, 0));
-      int mend   = PyInt_AsLong(PyTuple_GetItem(tuple, 1));
+      long mstart = PyLong_AsLong(PyTuple_GetItem(tuple, 0));
+      long mend   = PyLong_AsLong(PyTuple_GetItem(tuple, 1));
 
       // Match.
       if (mend - mstart > 0) {
@@ -603,8 +601,7 @@ static PyMethodDef SeeqMatch_methods[] = {
 };
 
 static PyTypeObject SeeqMatchType = {
-    PyObject_HEAD_INIT(NULL)
-    0,                         /*ob_size*/
+    PyObject_HEAD_INIT(&PyType_Type)
     "seeq.SeeqMatch",          /*tp_name*/
     sizeof(SeeqMatch),         /*tp_basicsize*/
     0,                         /*tp_itemsize*/
@@ -641,7 +638,7 @@ static PyTypeObject SeeqMatchType = {
     0,                         /* tp_dictoffset */
     0,                         /* tp_init */
     0,                         /* tp_alloc */
-    0,                         /* tp_new */
+    PyType_GenericNew,         /* tp_new */
 };
 
 /** SeeqObject Class **/
@@ -655,7 +652,7 @@ SeeqObject_dealloc
    Py_XDECREF(self->mismatches);
    Py_XDECREF(self->pattern);
    seeqFree(self->sq);
-   self->ob_type->tp_free((PyObject*)self);
+   PyObject_Del(self);
 }
 
 
@@ -760,7 +757,7 @@ SeeqObject_matchSuffix
       } else {
          suffix = dup + self->sq->match[0].end;
       }
-      PyObject * retObj = PyString_FromString(suffix);
+      PyObject * retObj = PyUnicode_FromString(suffix);
       free(dup);
       return retObj;
    }
@@ -809,7 +806,7 @@ SeeqObject_matchPrefix
       } else {
          prefix[self->sq->match[0].start] = 0;
       }
-      PyObject * retObj = PyString_FromString(prefix);
+      PyObject * retObj = PyUnicode_FromString(prefix);
       free(prefix);
       return retObj;
    }
@@ -831,10 +828,10 @@ SeeqObject_seeqmatch
 
    if (!PyArg_ParseTuple(args,"O:match", &stringObj))
       return NULL;
-   if (!PyString_Check(stringObj))
+   if (!PyUnicode_Check(stringObj))
       return NULL;
 
-   string = PyString_AsString(stringObj);
+   string = PyUnicode_AsUTF8(stringObj);
 
    int rval = seeqStringMatch(string, self->sq, MATCH_OPTIONS | self->options);
 
@@ -925,7 +922,7 @@ SeeqObject_matchIter
 
    if (!PyArg_ParseTuple(args,"O:matchIter", &stringObj))
       return NULL;
-   if (!PyString_Check(stringObj))
+   if (!PyUnicode_Check(stringObj))
       return NULL;
 
    // Return a seeq Iterator with match_iter = 1.
@@ -945,7 +942,7 @@ SeeqObject_splitIter
 
    if (!PyArg_ParseTuple(args,"O:splitIter", &stringObj))
       return NULL;
-   if (!PyString_Check(stringObj))
+   if (!PyUnicode_Check(stringObj))
       return NULL;
 
    // Return a seeq Iterator with match_iter = 0.
@@ -993,8 +990,7 @@ included in the string if the second argument is set to 'False'.\nReturns: Strin
 };
 
 static PyTypeObject SeeqObjectType = {
-   PyObject_HEAD_INIT(NULL)
-    0,                         /*ob_size*/
+   PyObject_HEAD_INIT(&PyType_Type)
     "seeq.SeeqObject",         /*tp_name*/
     sizeof(SeeqObject),        /*tp_basicsize*/
     0,                         /*tp_itemsize*/
@@ -1031,7 +1027,7 @@ static PyTypeObject SeeqObjectType = {
     0,                         /* tp_dictoffset */
     0,                         /* tp_init */
     0,                         /* tp_alloc */
-    0,                         /* tp_new */
+    PyType_GenericNew,         /* tp_new */
 };
 
 
@@ -1083,20 +1079,36 @@ Memory is an optional argument that indicates the memory limit of the DFA in MB 
 };
 
 PyMODINIT_FUNC
-initseeq
+PyInit_seeq
 (void)
 {
    SeeqObjectType.tp_new = PyType_GenericNew;
    if (PyType_Ready(&SeeqObjectType) < 0)
-      return;
+      return NULL;
    SeeqMatchType.tp_new = PyType_GenericNew;
    if (PyType_Ready(&SeeqMatchType) < 0)
-      return; 
+      return NULL; 
    SeeqIterType.tp_new = PyType_GenericNew;
    if (PyType_Ready(&SeeqIterType) < 0)
-      return; 
+      return NULL; 
 
-   PyObject * m = Py_InitModule3("seeq", SeeqMethods, "seeq library for Python.");
+   // PyObject * m = Py_InitModule3("seeq", SeeqMethods, "seeq library for Python.");
+
+   static struct PyModuleDef moduledef = {
+      PyModuleDef_HEAD_INIT,
+      "seeq",                      /* m_name */
+      "seeq library for Python 3.",  /* m_doc */
+      -1,                          /* m_size */
+      SeeqMethods,                 /* m_methods */
+      NULL,                        /* m_reload */
+      NULL,                        /* m_traverse */
+      NULL,                        /* m_clear */
+      NULL,                        /* m_free */
+   };
+
+   PyObject * m = PyModule_Create2(&moduledef, PYTHON_API_VERSION);
+   if (m == NULL)
+      return NULL;
 
    // Add Seeq Exception objects.
    SeeqException = PyErr_NewException("seeq.exception", NULL, NULL);
@@ -1106,5 +1118,7 @@ initseeq
    LibSeeqException = PyErr_NewException("libseeq.exception", NULL, NULL);
    Py_INCREF(LibSeeqException);
    PyModule_AddObject(m, "clibexception", LibSeeqException);
+
+   return m;
 
 }
