@@ -74,13 +74,13 @@ seeq
    const int verbose = args.verbose;
    const int tau = args.dist;
 
-   if (verbose) fprintf(stderr, "opening input file... ");
-   seeq_t * sq =  seeqNew(expression, tau, args.memory);
+   seeq_t * sq = seeqNew(expression, tau, args.memory);
    if (sq == NULL) {
       fprintf(stderr, "error in 'seeqNew()'; %s\n:", seeqPrintError());
       return EXIT_FAILURE;
    }
 
+   if (verbose) fprintf(stderr, "opening input file... ");
    seeqfile_t * sqfile = seeqOpen(input);
    if (sqfile == NULL) {
       fprintf(stderr, "error in 'seeqOpen()': %s\n", seeqPrintError());
@@ -88,6 +88,8 @@ seeq
       return EXIT_FAILURE;
    }
 
+   // Check format.
+   const int format_is_fasta = sqfile->flags & 0x1;
 
    clock_t clk = 0;
    if (verbose) {
@@ -110,11 +112,19 @@ seeq
       }
       else if (args.best) match_options |= SQ_BEST;
 
+      // Check conditions for printing the fasta header
+      // (makes for ill-formated fasta file in every case).
+      const int print_fasta_header = format_is_fasta &&
+        !args.split &&
+        !args.showline &&
+        !args.showpos &&
+        !args.showdist;
 
       long retval = 0;
       if (args.invert) {
          while ((retval = seeqFileMatch(sqfile, sq, match_options, SQ_NOMATCH)) > 0) {
             if (args.showline) fprintf(stdout, "%ld ", sqfile->line);
+            if (print_fasta_header) fprintf(stdout, "%s\n", sqfile->info);
             fprintf(stdout, "%s\n", sq->string);
          }
       } else {
@@ -126,6 +136,9 @@ seeq
                   if (args.showline) fprintf(stdout, "%ld ", sqfile->line);
                   if (args.showpos)  fprintf(stdout, "%ld-%ld ", match->start, match->end-1);
                   if (args.showdist) fprintf(stdout, "%ld ", match->dist);
+                  // For all the options below we need to show the header
+                  // if fasta format.
+                  if (print_fasta_header) fprintf(stdout, "%s\n", sqfile->info);
                   if (args.matchonly) {
                      char tmp = sq->string[match->end];
                      sq->string[match->end] = 0;
@@ -136,6 +149,10 @@ seeq
                      fprintf(stdout, "%s", sq->string);
                   } else if (args.endline) {
                      fprintf(stdout, "%s", sq->string + match->end);
+                  } else if (args.split) {
+                     fprintf(stdout, "%.*s\t", (unsigned int) match->start, sq->string);
+                     fprintf(stdout, "%.*s\t", (unsigned int) (match->end - match->start), sq->string + match->start);
+                     fprintf(stdout, "%.*s", (unsigned int) (strlen(sq->string) - match->end), sq->string + match->end);
                   } else if (args.printline) {
                      if (COLOR_TERMINAL && isatty(fileno(stdout))) {
                         // Prefix.
@@ -175,8 +192,8 @@ seeq
       fprintf(stderr, "done in %.3fs\n", (clock()-clk)*1.0/CLOCKS_PER_SEC);
    }
    
-   seeqClose(sqfile);
    seeqFree(sq);
+   seeqClose(sqfile);
 
    return EXIT_SUCCESS;
 }
@@ -204,16 +221,36 @@ seeqOpen
    // Set error to 0.
    seeqerr = 0;
 
-   seeqfile_t * sqfile = malloc(sizeof(seeqfile_t));
-   if (sqfile == NULL) return NULL;
+   seeqfile_t * sqfile = calloc(1, sizeof(seeqfile_t));
+   if (sqfile == NULL) {
+      seeqerr = errno;
+      return NULL;
+   }
 
    // Open file or set to stdin
    FILE * fdi = stdin;
    if (file != NULL) fdi = fopen(file, "r");
-   if (fdi  == NULL) return NULL;
+   if (fdi  == NULL) {
+      seeqerr = errno;
+      free(sqfile);
+      return NULL;
+   }
 
    sqfile->line = 0;
    sqfile->fdi = fdi;
+
+   // Check if file is fasta.
+   char c = getc(fdi);
+   if (c == '>') {
+      sqfile->flags = 1;
+      sqfile->info = calloc(32, sizeof(char));
+      if (sqfile->info == NULL) {
+         seeqerr = errno;
+         free(sqfile);
+         return NULL;
+      }
+   }
+   ungetc(c, fdi);
 
    return sqfile;
 }
@@ -237,10 +274,19 @@ seeqClose
 {
    // Set error to 0.
    seeqerr = 0;
-   // Close file.
-   if (sqfile->fdi != stdin && sqfile->fdi != NULL) if (fclose(sqfile->fdi) != 0) return -1;
-   // Free structure.
+   FILE * fdi = sqfile->fdi;
+
+   // Free and clean.
+   free(sqfile->info);
+   sqfile->info = NULL;
    free(sqfile);
+   // Close file if not stdin.
+   if (fdi != stdin && fdi != NULL) {
+      if (fclose(fdi) != 0) {
+         seeqerr = errno;
+         return -1;
+      }
+   }
    return 0;
 }
 
@@ -295,6 +341,9 @@ seeqFileMatch
    // Set error to 0.
    seeqerr = 0;
 
+   // Check format.
+   const int format_is_fasta = sqfile->flags & 0x1;
+
    // Replace match options.
    if (file_opt == SQ_COUNTMATCH) match_opt = (match_opt & ~MASK_MATCH) | SQ_ALL;
    else if (file_opt == SQ_COUNTLINES) match_opt = (match_opt & ~MASK_MATCH) | SQ_FIRST;
@@ -310,10 +359,22 @@ seeqFileMatch
    ssize_t readsz;
 
    while ((readsz = getline(&(sq->string), &(sq->bufsz), sqfile->fdi)) > 0) {
-      sqfile->line++;
       // Remove newline.
       char * data = sq->string;
       if (data[readsz-1] == '\n') data[--readsz] = 0;
+
+      // If fasta format, keep the header in buffer.
+      if (format_is_fasta && data[0] == '>') {
+         sqfile->info = strdup(data);
+         if (sqfile->info == NULL) {
+            seeqerr = 666;
+            return -1;
+         }
+         continue;
+      }
+
+      // Dicount headers from line count.
+      sqfile->line++;
 
       // Call String Match
       long rval = seeqStringMatch(data, sq, match_opt);

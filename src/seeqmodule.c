@@ -384,7 +384,10 @@ SeeqMatch_tokenize
       if (mstart - tstart > 0) {
          int tokenlen = mstart - tstart;
          char * token = malloc(tokenlen + 1);
-         if (token == NULL) return PyErr_NoMemory();
+         if (token == NULL) {
+            free(tokens);
+            return PyErr_NoMemory();
+         }
          memcpy(token, string + tstart, tokenlen);
          token[tokenlen] = 0;
          tokens[ntokens++] = token;
@@ -394,7 +397,10 @@ SeeqMatch_tokenize
       if (mend - mstart > 0) {
          int tokenlen = mend - mstart;
          char * token = malloc(tokenlen + 1);
-         if (token == NULL) return PyErr_NoMemory();
+         if (token == NULL) {
+            free(tokens);
+            return PyErr_NoMemory();
+         }
          memcpy(token, string + mstart, tokenlen);
          token[tokenlen] = 0;
          tokens[ntokens++] = token;
@@ -407,7 +413,10 @@ SeeqMatch_tokenize
    if (slen - tstart > 0) {
          int tokenlen = slen - tstart;
          char * token = malloc(tokenlen + 1);
-         if (token == NULL) return PyErr_NoMemory();
+         if (token == NULL) {
+            free(tokens);
+            return PyErr_NoMemory();
+         }
          memcpy(token, string + tstart, tokenlen);
          token[tokenlen] = 0;
          tokens[ntokens++] = token;
@@ -472,7 +481,10 @@ SeeqMatch_split
       if (mstart - tstart > 0) {
          int tokenlen = mstart - tstart;
          char * token = malloc(tokenlen + 1);
-         if (token == NULL) return PyErr_NoMemory();
+         if (token == NULL) {
+            free(tokens);
+            return PyErr_NoMemory();
+         }
          memcpy(token, string + tstart, tokenlen);
          token[tokenlen] = 0;
          tokens[ntokens++] = token;
@@ -486,7 +498,10 @@ SeeqMatch_split
    if (slen - tstart > 0) {
          int tokenlen = slen - tstart;
          char * token = malloc(tokenlen + 1);
-         if (token == NULL) return PyErr_NoMemory();
+         if (token == NULL) {
+            free(tokens);
+            return PyErr_NoMemory();
+         }
          memcpy(token, string + tstart, tokenlen);
          token[tokenlen] = 0;
          tokens[ntokens++] = token;
@@ -550,7 +565,10 @@ SeeqMatch_matches
       if (mend - mstart > 0) {
          int tokenlen = mend - mstart;
          char * token = malloc(tokenlen + 1);
-         if (token == NULL) return PyErr_NoMemory();
+         if (token == NULL) {
+            free(tokens);
+            return PyErr_NoMemory();
+         }
          memcpy(token, string + mstart, tokenlen);
          token[tokenlen] = 0;
          tokens[ntokens++] = token;

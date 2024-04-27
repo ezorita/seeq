@@ -119,7 +119,7 @@ int         dfa_newstate  (dfa_t **, uint8_t *, int, size_t);
 int         dfa_step      (uint32_t, int, int, int, dfa_t **, char *, uint32_t *);
 void        dfa_free      (dfa_t *);
 trie_t    * trie_new      (size_t, size_t);
-int         trie_search   (dfa_t *, uint8_t *, uint32_t*);
+int         trie_search   (dfa_t *, uint8_t *, uint32_t*, size_t);
 int         trie_insert   (dfa_t *, uint8_t *, uint32_t);
 uint32_t    trie_newnode  (trie_t **);
 void        path_to_align (const unsigned char *, int *, size_t);

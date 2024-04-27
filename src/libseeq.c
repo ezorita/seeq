@@ -429,7 +429,7 @@ seeqAddMatch
 )
 {
    if (sq->hits >= sq->stacksize) {
-      size_t newsize = sq->stacksize * 2;
+      size_t newsize = sq->stacksize > 0 ? sq->stacksize * 2 : 1;
       sq->match = realloc(sq->match, newsize * sizeof(match_t));
       if (sq->match == NULL) return -1;
       sq->stacksize = newsize;
@@ -554,13 +554,14 @@ parse
    // Set error to 0.
    seeqerr = 0;
    // Initialize keys to 0.
-   for (size_t i = 0; i < strlen(expr); i++) keys[i] = 0;
+   const int lmax = strlen(expr);
+   for (int l = 0; l < lmax; l++) keys[l] = 0;
 
    int i = 0;
    int l = 0;
    int add = 0;
    char c, lc = 0;
-   while((c = expr[i]) != 0) {
+   while((c = expr[i]) != 0 && l < lmax) {
       if      (c == 'A' || c == 'a') keys[l] |= 0x01;
       else if (c == 'C' || c == 'c') keys[l] |= 0x02;
       else if (c == 'G' || c == 'g') keys[l] |= 0x04;
@@ -742,8 +743,8 @@ dfa_step
    }
    
    // Get the current alignment from the DFA state.
-   int      * align  = dfa->align_cache;
-   uint8_t  * path   = malloc((size_t)plen * sizeof(char));
+   int      * align = dfa->align_cache;
+   uint8_t  * path  = calloc(plen, sizeof(uint8_t));
    if (path == NULL) return -1;
 
    // Restore alignment if not running in cached mode.
@@ -790,7 +791,7 @@ dfa_step
    // UPDATE:
    // The entire DFA should be passed to find the remaining path stored
    // in the DFA node (using path_compare).
-   int exists = trie_search(dfa, path, &dfalink);
+   int exists = trie_search(dfa, path, &dfalink, plen);
 
    if (exists == 1) {
       // If exists, just link with the existing state.
@@ -804,6 +805,9 @@ dfa_step
    } else if (exists == 0) {
       int retval = dfa_newstate(dfap, path, base, state);
       dfa = *dfap;
+      if (dfa == NULL) {
+         goto dfa_step_abort;
+      }
       vertex = (vertex_t *) (dfa->states + state * dfa->state_size);
       if (retval == 0) {
          // Update edge in dfa.
@@ -818,18 +822,20 @@ dfa_step
          s0->match = match;
       }
       else {
-         free(path);
-         return -1;
+         goto dfa_step_abort;
       }
    }
    else if (exists == -1) {
-      free(path);
-      return -1;
+      goto dfa_step_abort;
    }
 
    free(path);
-
    return 0;
+
+dfa_step_abort:
+   free(path);
+   return -1;
+
 }
 
 
@@ -1004,7 +1010,8 @@ trie_search
 (
  dfa_t    * dfa,
  uint8_t  * path,
- uint32_t * dfastate
+ uint32_t * dfastate,
+ size_t     plen
  )
 // SYNOPSIS:                                                              
 //   Searches the trie following a specified path and returns the values stored
@@ -1028,8 +1035,8 @@ trie_search
    trie_t * trie = dfa->trie;
 
    size_t id = 0;
-   size_t i;
-   for (i = 0; i < trie->height; i++) {
+   size_t i = 0;
+   for ( ; i < trie->height && i < plen; i++) {
       if (path[i] >= TRIE_CHILDREN || path[i] < 0) {
          seeqerr = 6;
          return -1;
