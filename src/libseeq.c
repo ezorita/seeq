@@ -339,7 +339,7 @@ seeqStringMatch
    //   for (int i = 0; i <= sq->tau; i++) free(mstack[i]);
    //   free(mstack);
    // Swap matches (to compensate for recursive_merge).
-   for (int i = 0; i < sq->hits/2; i++) {
+   for (unsigned long i = 0; i < sq->hits/2; i++) {
       match_t tmp = sq->match[i];
       sq->match[i] = sq->match[sq->hits-i-1];
       sq->match[sq->hits-i-1] = tmp;

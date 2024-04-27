@@ -221,7 +221,7 @@ static PyMethodDef SeeqIter_methods[] = {
 };
 
 static PyTypeObject SeeqIterType = {
-    PyObject_HEAD_INIT(&PyType_Type)
+    {PyObject_HEAD_INIT(&PyType_Type)},
     "seeq.SeeqIter",           /*tp_name*/
     sizeof(SeeqIter),         /*tp_basicsize*/
     0,                         /*tp_itemsize*/
@@ -326,7 +326,7 @@ SeeqMatch_add
 )
 // This functions add a new match to the SeeqMatch list of matches.
 {
-   int slen = strlen(self->string);
+   size_t slen = strlen(self->string);
    size_t start = match->start;
    size_t end   = match->end;
    size_t dist  = match->dist;
@@ -601,7 +601,7 @@ static PyMethodDef SeeqMatch_methods[] = {
 };
 
 static PyTypeObject SeeqMatchType = {
-    PyObject_HEAD_INIT(&PyType_Type)
+    {PyObject_HEAD_INIT(&PyType_Type)},
     "seeq.SeeqMatch",          /*tp_name*/
     sizeof(SeeqMatch),         /*tp_basicsize*/
     0,                         /*tp_itemsize*/
@@ -990,7 +990,7 @@ included in the string if the second argument is set to 'False'.\nReturns: Strin
 };
 
 static PyTypeObject SeeqObjectType = {
-   PyObject_HEAD_INIT(&PyType_Type)
+   {PyObject_HEAD_INIT(&PyType_Type)},
     "seeq.SeeqObject",         /*tp_name*/
     sizeof(SeeqObject),        /*tp_basicsize*/
     0,                         /*tp_itemsize*/
