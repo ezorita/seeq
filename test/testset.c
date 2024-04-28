@@ -39,7 +39,7 @@ int isatty(int fd);
 int
 isatty
 (
-int fd
+   int fd
 )
 {
    return tty_value;
@@ -378,16 +378,16 @@ test_trie_search
    // Search paths.
    uint32_t dfastate;
    for (int i = 0; i < 7; i++) {
-      g_assert_cmpint(trie_search(dfa, test_path[i], &dfastate), ==, 1);
+      g_assert_cmpint(trie_search(dfa, test_path[i], &dfastate, 10), ==, 1);
       g_assert_cmpint(dfastate, ==, i+2);
    }
 
    for (int i = 0; i < 10; i++) {
-      g_assert_cmpint(trie_search(dfa, search_path[i], &dfastate), ==, 0);
+      g_assert_cmpint(trie_search(dfa, search_path[i], &dfastate, 10), ==, 0);
    }
 
    // Wrong path.
-   g_assert_cmpint(trie_search(dfa,search_path[10], NULL), ==, -1);
+   g_assert_cmpint(trie_search(dfa,search_path[10], NULL, 1), ==, -1);
    g_assert_cmpint(seeqerr, ==, 6);
 
    dfa_free(dfa);
@@ -409,7 +409,7 @@ test_dfa_new
    g_assert_cmpint(dfa->trie->size, ==, 1);
    uint32_t dfa_root;
    uint8_t path[10] = {2,2,2,2,1,1,1,1,1,1};
-   g_assert_cmpint(trie_search(dfa, path, &dfa_root), ==, 1);
+   g_assert_cmpint(trie_search(dfa, path, &dfa_root, 10), ==, 1);
    g_assert_cmpint(dfa_root, ==, DFA_ROOT_STATE);
    dfa_free(dfa);
 
@@ -1066,6 +1066,7 @@ test_seeq
       .verbose   = 0,
       .endline   = 0,
       .prefix    = 0,
+      .split     = 0,
       .invert    = 0,
       .best      = 0,
       .non_dna   = 0,
@@ -1218,7 +1219,7 @@ test_seeq
    // Test 12: file does not exist.
    args.dist = 0;
    g_assert(seeq(pattern, "invented.txt", args) == EXIT_FAILURE);
-   g_assert_cmpint(seeqerr, ==, 0);
+   g_assert_cmpint(seeqerr, ==, 2);
 
    // Test 13: invalid distance.
    args.dist = -1;
@@ -1257,6 +1258,7 @@ main(
    BACKUP_STDOUT = dup(STDOUT_FILENO);
 
    g_test_init(&argc, &argv, NULL);
+
    g_test_add_func("/libseeq/core/trie_new", test_trie_new);
    g_test_add_func("/libseeq/core/trie_insert", test_trie_insert);
    g_test_add_func("/libseeq/core/trie_search", test_trie_search);
@@ -1269,5 +1271,6 @@ main(
    g_test_add_func("/libseeq/lib/seeqFileMatch", test_seeqFileMatch);
    g_test_add_func("/libseeq/lib/seeqClose", test_seeqClose);
    g_test_add_func("/seeq", test_seeq);
+
    return g_test_run();
 }

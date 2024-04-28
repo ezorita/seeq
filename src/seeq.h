@@ -23,7 +23,7 @@
 #ifndef _SEEQ_H_
 #define _SEEQ_H_
 
-#define SEEQ_VERSION "seeq-1.1"
+#define SEEQ_VERSION "seeq-1.2"
 
 #include "libseeq.h"
 #include <stdlib.h>
@@ -44,6 +44,7 @@ struct seeqarg_t {
    int verbose;
    int endline;
    int prefix;
+   int split;
    int invert;
    int best;
    int non_dna;
@@ -52,7 +53,9 @@ struct seeqarg_t {
 };
 
 struct seeqfile_t {
+   int     flags;
    size_t  line;
+   char  * info;
    FILE  * fdi;
 };
 
