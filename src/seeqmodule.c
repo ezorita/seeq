@@ -365,7 +365,7 @@ SeeqMatch_tokenize
       return Py_None;
    }
 
-   int     maxtokens = 2*nmatches + 1;
+   int maxtokens = 2*nmatches + 1;
    char ** tokens  = malloc(maxtokens * sizeof(char *));
    if (tokens == NULL) return PyErr_NoMemory();
 
@@ -380,8 +380,8 @@ SeeqMatch_tokenize
       long mstart = PyLong_AsLong(PyTuple_GetItem(tuple, 0));
       long mend   = PyLong_AsLong(PyTuple_GetItem(tuple, 1));
 
-      // Prefix.
-      if (mstart - tstart > 0) {
+      // Prefix (can be an empty string).
+      if (mstart - tstart >= 0) {
          int tokenlen = mstart - tstart;
          char * token = malloc(tokenlen + 1);
          if (token == NULL) {
@@ -410,7 +410,7 @@ SeeqMatch_tokenize
 
    // String suffix.
    int slen = strlen(string);
-   if (slen - tstart > 0) {
+   if (slen - tstart >= 0) {
          int tokenlen = slen - tstart;
          char * token = malloc(tokenlen + 1);
          if (token == NULL) {
@@ -946,6 +946,8 @@ SeeqObject_matchIter
    // Return a seeq Iterator with match_iter = 1.
    return (PyObject *)SeeqIter_new(self, stringObj, 1);
 }
+
+// FIXME: The function is buggy and should be fixed before being used.
 
 // static PyObject *
 // SeeqObject_splitIter
