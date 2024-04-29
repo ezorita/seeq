@@ -141,9 +141,9 @@ SeeqIter_iternext
  PyObject * s
 )
 {
-   SeeqIter * self = (SeeqIter *) s;
-   seeq_t   * sq   = self->sqObj->sq;
-   match_t * match = seeqMatchIter(sq);
+   SeeqIter * self  = (SeeqIter *) s;
+   seeq_t   * sq    = self->sqObj->sq;
+   match_t  * match = seeqMatchIter(sq);
 
    // StopIteration exception
 
@@ -947,25 +947,25 @@ SeeqObject_matchIter
    return (PyObject *)SeeqIter_new(self, stringObj, 1);
 }
 
-static PyObject *
-SeeqObject_splitIter
-(
- SeeqObject * self,
- PyObject   * args
-)
-// SeeqObject_splitIter will be a method of the SeeqObject class.
-// This function (...)
-{
-   PyObject   * stringObj;      
+// static PyObject *
+// SeeqObject_splitIter
+// (
+//  SeeqObject * self,
+//  PyObject   * args
+// )
+// // SeeqObject_splitIter will be a method of the SeeqObject class.
+// // This function (...)
+// {
+//    PyObject   * stringObj;      
 
-   if (!PyArg_ParseTuple(args,"O:splitIter", &stringObj))
-      return NULL;
-   if (!PyUnicode_Check(stringObj))
-      return NULL;
+//    if (!PyArg_ParseTuple(args,"O:splitIter", &stringObj))
+//       return NULL;
+//    if (!PyUnicode_Check(stringObj))
+//       return NULL;
 
-   // Return a seeq Iterator with match_iter = 0.
-   return (PyObject *)SeeqIter_new(self, stringObj, 0);
-}
+//    // Return a seeq Iterator with match_iter = 0.
+//    return (PyObject *)SeeqIter_new(self, stringObj, 0);
+// }
 
 // Attributes and methods
 
@@ -993,9 +993,9 @@ static PyMethodDef SeeqObject_methods[] = {
    {"matchIter", (PyCFunction)SeeqObject_matchIter, METH_VARARGS,
     "matchIter(String)\nIteratively returns the matching parts of the string.\nReturns: String iterator."
    },
-   {"splitIter", (PyCFunction)SeeqObject_splitIter, METH_VARARGS,
-    "splitIter(String)\nIteratively returns the non-matching parts of the string\nReturns: String iterator."
-   },
+   // {"splitIter", (PyCFunction)SeeqObject_splitIter, METH_VARARGS,
+   //  "splitIter(String)\nIteratively returns the non-matching parts of the string\nReturns: String iterator."
+   // },
    {"matchPrefix", (PyCFunction)SeeqObject_matchPrefix, METH_VARARGS,
     "trimPrefix(String,[match=True])\nReturns the prefix before the best match. The match is not \
 included in the string if the second argument is set to 'False'.\nReturns: String."

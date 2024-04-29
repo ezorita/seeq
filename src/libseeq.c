@@ -239,19 +239,19 @@ seeqStringMatch
    // Reset search variables
    int best_d = sq->tau + 1;
    // Search variables
-   int streak_dist = sq->tau+1;
+   int streak_dist = sq->tau + 1;
    int match = 0;
    uint32_t current_node = DFA_ROOT_STATE;
-   size_t slen = strlen(data);
+   int slen = strlen(data);
    size_t state_size = ((dfa_t *) sq->dfa)->state_size;
    int end = 0;
    
    // DFA state.
-   for (size_t i = 0; i <= slen; i++) {
+   for (int i = 0; i <= slen; i++) {
       // Update DFA.
       int cin = (int)translate[(int)data[i]];
-      int current_dist = sq->tau+1;
-      size_t min_to_match = 0;
+      int current_dist = sq->tau + 1;
+      int min_to_match = 0;
       if (cin < NBASES) {
          vertex_t * vertex = (vertex_t *) (((dfa_t *)sq->dfa)->states + current_node * state_size);
          uint32_t next = vertex->next[cin];
@@ -269,7 +269,7 @@ seeqStringMatch
          end = 1;
       }
 
-      if (slen - i - 1 < (size_t) min_to_match) {
+      if (slen - i - 1 < min_to_match) {
          current_dist = sq->tau + 1;
          end = 1;
       }
@@ -285,16 +285,16 @@ seeqStringMatch
       // (this may add extra mismatches to a perfect match though)
       if (streak_dist <= sq->tau && streak_dist < current_dist && !match && (!opt_best || streak_dist < best_d)) {
          match = 1;
-         size_t j = 0;
+         int j = 0;
          uint32_t rnode = DFA_ROOT_STATE;
          int d = sq->tau + 1;
-	 int last_d, ignores = 0;
+	      int last_d, ignores = 0;
          // Find match start with RDFA.
          do {
             int c = (int)translate[(int)data[i-++j]];
-	    last_d = d;
+	         last_d = d;
             if (c < NBASES) {
-	       ignores = 0;
+	            ignores = 0;
                vertex_t * vertex = (vertex_t *) (((dfa_t *)sq->rdfa)->states + rnode * state_size);
                uint32_t next = vertex->next[c];
                if (next == DFA_COMPUTE)
@@ -303,12 +303,12 @@ seeqStringMatch
                vertex = (vertex_t *) (((dfa_t *)sq->rdfa)->states + rnode * state_size);
                d = get_match(vertex->match);
             } else {
-	       ignores++;
-	       continue;
-	    }
-	    //         } while (d > streak_dist && j < i);
-	 } while (d <= last_d && j < i);
-	 j = (last_d < d ? j-1 : j) - ignores;
+	            ignores++;
+	            continue;
+	         }
+         } while (d > streak_dist && j < i);
+//	      } while (d <= last_d && j <= i);
+	      j = (last_d < d ? j-1 : j) - ignores;
          size_t match_start = i-j;
          size_t match_end   = i;
          int match_dist  = streak_dist;
