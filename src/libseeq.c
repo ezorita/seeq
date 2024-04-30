@@ -240,6 +240,7 @@ seeqStringMatch
    int best_d = sq->tau + 1;
    // Search variables
    int streak_dist = sq->tau + 1;
+   int earliest_min = 0;
    int match = 0;
    uint32_t current_node = DFA_ROOT_STATE;
    int slen = strlen(data);
@@ -291,7 +292,8 @@ seeqStringMatch
 	      int last_d, ignores = 0;
          // Find match start with RDFA.
          do {
-            int c = (int)translate[(int)data[i-++j]];
+//            int c = (int)translate[(int)data[i-++j]];
+            int c = (int)translate[(int)data[earliest_min+1 - ++j]];
 	         last_d = d;
             if (c < NBASES) {
 	            ignores = 0;
@@ -306,11 +308,11 @@ seeqStringMatch
 	            ignores++;
 	            continue;
 	         }
-         } while (d > streak_dist && j < i);
-//	      } while (d <= last_d && j <= i);
+//         } while (d > streak_dist && j < i);
+	      } while (d <= last_d && j <= earliest_min+1);
 	      j = (last_d < d ? j-1 : j) - ignores;
-         size_t match_start = i-j;
-         size_t match_end   = i;
+         size_t match_start = earliest_min+1 - j;
+         size_t match_end   = earliest_min+1;
          int match_dist  = streak_dist;
          match_t hit = (match_t) {match_start, match_end, (size_t) match_dist};
          // Save non-overlapping matches.
@@ -326,11 +328,11 @@ seeqStringMatch
          if (!all_match) end = 1;
       }
 
-
       // Check end value.
       if (end) break;
 
-      // Track distance.
+      // Track distance and position of earliest min.
+      earliest_min = current_dist < streak_dist ? i : earliest_min;
       streak_dist = current_dist;
    }
    // Merge matches.
@@ -339,10 +341,10 @@ seeqStringMatch
    //   for (int i = 0; i <= sq->tau; i++) free(mstack[i]);
    //   free(mstack);
    // Swap matches (to compensate for recursive_merge).
-   for (unsigned long i = 0; i < sq->hits/2; i++) {
-      match_t tmp = sq->match[i];
-      sq->match[i] = sq->match[sq->hits-i-1];
-      sq->match[sq->hits-i-1] = tmp;
+   for (unsigned long j = 0; j < sq->hits/2; j++) {
+      match_t tmp = sq->match[j];
+      sq->match[j] = sq->match[sq->hits-j-1];
+      sq->match[sq->hits-j-1] = tmp;
    }
    // Return.
    return (long)sq->hits;
