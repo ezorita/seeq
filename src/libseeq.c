@@ -240,7 +240,6 @@ seeqStringMatch
    int best_d = sq->tau + 1;
    // Search variables
    int streak_dist = sq->tau + 1;
-   int earliest_min = 0;
    int match = 0;
    uint32_t current_node = DFA_ROOT_STATE;
    int slen = strlen(data);
@@ -284,7 +283,9 @@ seeqStringMatch
       // Note:
       // set streak_dist <= current_dist to find all non-overlapping matches.
       // (this may add extra mismatches to a perfect match though)
-      if (streak_dist <= sq->tau && streak_dist < current_dist && !match && (!opt_best || streak_dist < best_d)) {
+      int perfect = streak_dist == 0;
+      int stop = streak_dist <= sq->tau && streak_dist < current_dist;
+      if ((perfect || stop) && !match && (!opt_best || streak_dist < best_d)) {
          match = 1;
          int j = 0;
          uint32_t rnode = DFA_ROOT_STATE;
@@ -293,7 +294,7 @@ seeqStringMatch
          // Find match start with RDFA.
          do {
 //            int c = (int)translate[(int)data[i-++j]];
-            int c = (int)translate[(int)data[earliest_min+1 - ++j]];
+            int c = (int)translate[(int)data[i - ++j]];
 	         last_d = d;
             if (c < NBASES) {
 	            ignores = 0;
@@ -308,11 +309,12 @@ seeqStringMatch
 	            ignores++;
 	            continue;
 	         }
-//         } while (d > streak_dist && j < i);
-	      } while (d <= last_d && j <= earliest_min+1);
+           // Stop when hitting the low point.
+         } while (d > streak_dist && j < i);
+//         } while (d <= last_d && j <= i);
 	      j = (last_d < d ? j-1 : j) - ignores;
-         size_t match_start = earliest_min+1 - j;
-         size_t match_end   = earliest_min+1;
+         size_t match_start = i - j;
+         size_t match_end   = i;
          int match_dist  = streak_dist;
          match_t hit = (match_t) {match_start, match_end, (size_t) match_dist};
          // Save non-overlapping matches.
@@ -332,7 +334,6 @@ seeqStringMatch
       if (end) break;
 
       // Track distance and position of earliest min.
-      earliest_min = current_dist < streak_dist ? i : earliest_min;
       streak_dist = current_dist;
    }
    // Merge matches.
