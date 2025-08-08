@@ -58,3 +58,93 @@ clean:
 	rm -rf build
 	rm -f  seeq-dev
 	rm -rf build-dev
+
+# -------------------------
+# Python packaging helpers
+# -------------------------
+
+.PHONY: sdist wheel dist wheels build-tools build-tools-cibw clean-dist release-create release-upload pypi-upload
+
+PYTHON ?= python3
+
+# Defaults for cibuildwheel. Override at invocation time if needed.
+CIBW_BUILD ?= cp38-* cp39-* cp310-* cp311-* cp312-*
+CIBW_SKIP ?= pp* *-musllinux*
+CIBW_TEST_COMMAND ?= python -c 'import seeq; print(seeq.__version__)'
+
+# Select Linux architectures:
+# - Locally, default to the host's native arch to avoid Docker emulation issues
+#   (which cause "exec format error" without QEMU/binfmt set up).
+# - On CI (where `CI=true`), build both x86_64 and aarch64.
+HOST_ARCH := $(shell uname -m)
+ifeq ($(CI),true)
+CIBW_ARCHS_LINUX ?= x86_64 aarch64
+else
+ifeq ($(HOST_ARCH),x86_64)
+CIBW_ARCHS_LINUX ?= x86_64
+else ifeq ($(HOST_ARCH),aarch64)
+CIBW_ARCHS_LINUX ?= aarch64
+else
+CIBW_ARCHS_LINUX ?= auto
+endif
+endif
+
+CIBW_ARCHS_MACOS ?= x86_64 arm64
+CIBW_BEFORE_BUILD ?= pip install build
+
+build-tools:
+	$(PYTHON) -m pip install --upgrade pip setuptools wheel build
+
+build-tools-cibw:
+	$(PYTHON) -m pip install --upgrade cibuildwheel
+
+sdist: build-tools
+	$(PYTHON) -m build --sdist
+
+wheel: build-tools
+	$(PYTHON) -m build --wheel
+
+dist: sdist wheel
+
+wheels: build-tools-cibw
+	CIBW_BUILD="$(CIBW_BUILD)" \
+	CIBW_SKIP="$(CIBW_SKIP)" \
+	CIBW_TEST_COMMAND="$(CIBW_TEST_COMMAND)" \
+	CIBW_ARCHS_LINUX="$(CIBW_ARCHS_LINUX)" \
+	CIBW_ARCHS_MACOS="$(CIBW_ARCHS_MACOS)" \
+	CIBW_BEFORE_BUILD="$(CIBW_BEFORE_BUILD)" \
+	$(PYTHON) -m cibuildwheel --output-dir wheelhouse
+
+clean-dist:
+	rm -rf dist wheelhouse
+
+# -------------------------
+# GitHub Releases helpers
+# Requires GitHub CLI (`gh`) and authenticated user
+# Usage:
+#   make release-create TAG=v1.2          # creates release and uploads artifacts
+#   make release-upload TAG=v1.2          # uploads artifacts to existing release
+# -------------------------
+
+TAG ?=
+
+release-create:
+	@command -v gh >/dev/null 2>&1 || { echo "Error: 'gh' (GitHub CLI) is required."; exit 1; }
+	@test -n "$(TAG)" || { echo "Error: TAG is required. Example: make release-create TAG=v1.2"; exit 1; }
+	@echo "Creating GitHub Release $(TAG) and uploading artifacts..."
+	gh release create "$(TAG)" dist/*.tar.gz wheelhouse/*.whl -t "$(TAG)" -n "Seeq $(TAG)"
+
+release-upload:
+	@command -v gh >/dev/null 2>&1 || { echo "Error: 'gh' (GitHub CLI) is required."; exit 1; }
+	@test -n "$(TAG)" || { echo "Error: TAG is required. Example: make release-upload TAG=v1.2"; exit 1; }
+	@echo "Uploading artifacts to GitHub Release $(TAG)..."
+	gh release upload "$(TAG)" dist/*.tar.gz wheelhouse/*.whl --clobber
+
+# -------------------------
+# PyPI upload helper (optional)
+# Requires twine and configured credentials
+# -------------------------
+
+pypi-upload:
+	$(PYTHON) -m pip install --upgrade twine
+	$(PYTHON) -m twine upload dist/*.tar.gz wheelhouse/*.whl

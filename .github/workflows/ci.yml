@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python build tools
+        run: python -m pip install --upgrade pip setuptools wheel
+
+      - name: Build C code
+        run: make && make lib
+
+      - name: Run C tests
+        run: make -C test test
+
+      - name: Build and install Python extension
+        run: pip install .
+
+      - name: Python smoke test
+        run: |
+          python -c "import seeq; print(seeq.__version__); assert hasattr(seeq, 'compile')"
