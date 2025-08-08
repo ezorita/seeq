@@ -25,6 +25,10 @@
 #include "libseeq.h"
 #include <string.h>
 
+// Helpers to stringify macro values
+#define SEEQ_STR_HELPER(x) #x
+#define SEEQ_STR(x) SEEQ_STR_HELPER(x)
+
 /** Declarations **/
 
 static PyObject * SeeqException;
@@ -1129,6 +1133,10 @@ PyInit_seeq
    PyObject * m = PyModule_Create2(&moduledef, PYTHON_API_VERSION);
    if (m == NULL)
       return NULL;
+
+    // Expose module version from MAJOR_VERSION/MINOR_VERSION macros
+    // These macros are provided via setup.py's define_macros
+    PyModule_AddStringConstant(m, "__version__", SEEQ_STR(MAJOR_VERSION) "." SEEQ_STR(MINOR_VERSION));
 
    // Add Seeq Exception objects.
    SeeqException = PyErr_NewException("seeq.exception", NULL, NULL);

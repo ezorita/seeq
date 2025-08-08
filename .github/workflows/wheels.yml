@@ -1,0 +1,84 @@
+name: Build wheels and attach to GitHub Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-wheels:
+    name: Build wheels
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            cibw_os: linux
+          - os: macos-13
+            cibw_os: macos
+
+    env:
+      CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-*"
+      CIBW_SKIP: "pp* *-musllinux*"
+      CIBW_TEST_COMMAND: "python -c \"import seeq; print(seeq.__version__)\""
+      CIBW_ARCHS_LINUX: "x86_64 aarch64"
+      CIBW_ARCHS_MACOS: "x86_64 arm64"
+      # CIBW_BEFORE_BUILD: "pip install build"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build backend
+        run: python -m pip install --upgrade build
+
+      - name: Install cibuildwheel
+        run: pip install cibuildwheel==2.19.2
+
+      - name: Build sdist
+        run: python -m build --sdist
+
+      - name: Build wheels
+        run: python -m cibuildwheel --output-dir wheelhouse
+        env:
+          CIBW_PLATFORM: ${{ matrix.cibw_os }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: |
+            dist/*.tar.gz
+            wheelhouse/*.whl
+
+  release:
+    name: Create/Update GitHub Release with wheels
+    needs: build-wheels
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: release_assets
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          files: |
+            release_assets/*.whl
+            release_assets/*.tar.gz
